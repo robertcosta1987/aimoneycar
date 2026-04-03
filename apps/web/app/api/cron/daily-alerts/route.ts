@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
       }
 
       // Save alerts to DB
-      await supabase.from('ai_alerts').insert(alerts)
+      await supabase.from('ai_alerts').insert(alerts as any)
 
       // Send WhatsApp if configured
       let whatsappSent = false

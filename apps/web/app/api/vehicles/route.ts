@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json()
   const { data, error } = await supabase
     .from('vehicles')
-    .insert({ ...body, dealership_id: dealershipId })
+    .insert({ ...body, dealership_id: dealershipId } as any)
     .select()
     .single()
 

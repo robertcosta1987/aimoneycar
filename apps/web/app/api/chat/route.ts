@@ -60,9 +60,9 @@ export async function POST(req: NextRequest) {
       await supabase.from('ai_conversations').insert({
         dealership_id: dealershipId,
         user_id: user.id,
-        messages: newMessages as any,
+        messages: newMessages,
         context: {},
-      })
+      } as any)
     }
 
     return NextResponse.json({ reply })

@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
       records_imported: 0,
       errors: [],
       created_by: user.id,
-    })
+    } as any)
     .select()
     .single()
 
