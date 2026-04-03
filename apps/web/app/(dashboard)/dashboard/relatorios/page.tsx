@@ -1,15 +1,22 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { BarChart3, TrendingUp, DollarSign } from 'lucide-react'
+import { BarChart3, TrendingUp, DollarSign, Car, Receipt, Download, Calendar } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Progress } from '@/components/ui/progress'
 import { formatCurrency, formatPercent } from '@/lib/utils'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts'
+import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
 export default function RelatoriosPage() {
   const [period, setPeriod] = useState('30')
   const [sales, setSales] = useState<any[]>([])
+  const [vehicles, setVehicles] = useState<any[]>([])
+  const [expenses, setExpenses] = useState<any[]>([])
+  const [stats, setStats] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const supabase = createClient()
 
@@ -17,100 +24,421 @@ export default function RelatoriosPage() {
     const load = async () => {
       setLoading(true)
       const { data: userData } = await supabase.from('users').select('dealership_id').single()
-      const cutoff = new Date(Date.now() - parseInt(period) * 24 * 60 * 60 * 1000).toISOString()
+      const did = userData?.dealership_id
+      const cutoff = new Date(Date.now() - parseInt(period) * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
-      const { data } = await supabase.from('sales').select('*')
-        .eq('dealership_id', userData?.dealership_id)
-        .gte('sale_date', cutoff.split('T')[0])
-        .order('sale_date', { ascending: true })
+      const [
+        { data: salesData },
+        { data: vehiclesData },
+        { data: expensesData },
+        { data: statsData },
+      ] = await Promise.all([
+        supabase.from('sales').select('*')
+          .eq('dealership_id', did)
+          .gte('sale_date', cutoff)
+          .order('sale_date', { ascending: true }),
+        supabase.from('vehicles').select('id, brand, model, plate, year_fab, year_model, color, mileage, fuel, purchase_price, sale_price, days_in_stock, status, purchase_date')
+          .eq('dealership_id', did)
+          .neq('status', 'sold')
+          .order('days_in_stock', { ascending: false }),
+        supabase.from('expenses').select('category, amount, date')
+          .eq('dealership_id', did)
+          .gte('date', cutoff),
+        supabase.rpc('get_dashboard_stats', { d_id: did }),
+      ])
 
-      setSales(data || [])
+      setSales(salesData || [])
+      setVehicles(vehiclesData || [])
+      setExpenses(expensesData || [])
+      setStats(statsData || {})
       setLoading(false)
     }
     load()
   }, [period])
 
-  const totals = {
-    revenue: sales.reduce((s, sale) => s + sale.sale_price, 0),
-    profit: sales.reduce((s, sale) => s + (sale.profit || 0), 0),
+  // ── Vendas ──
+  const salesTotals = {
+    revenue: sales.reduce((s, x) => s + x.sale_price, 0),
+    profit: sales.reduce((s, x) => s + (x.profit || 0), 0),
     count: sales.length,
-    avgMargin: sales.length ? sales.reduce((s, sale) => s + (sale.profit_percent || 0), 0) / sales.length : 0,
+    avgMargin: sales.length ? sales.reduce((s, x) => s + (x.profit_percent || 0), 0) / sales.length : 0,
   }
 
-  // Sales by day for chart
-  const byDay = sales.reduce((acc: Record<string, { revenue: number; profit: number; count: number }>, sale) => {
-    const day = sale.sale_date.slice(5) // MM-DD
-    if (!acc[day]) acc[day] = { revenue: 0, profit: 0, count: 0 }
-    acc[day].revenue += sale.sale_price
-    acc[day].profit += sale.profit || 0
-    acc[day].count += 1
+  const salesByDay = sales.reduce((acc: Record<string, { revenue: number; profit: number }>, s) => {
+    const day = s.sale_date?.slice(5) ?? ''
+    if (!acc[day]) acc[day] = { revenue: 0, profit: 0 }
+    acc[day].revenue += s.sale_price
+    acc[day].profit += s.profit || 0
     return acc
   }, {})
+  const salesChartData = Object.entries(salesByDay).map(([day, d]) => ({ day, ...d }))
 
-  const chartData = Object.entries(byDay).map(([day, data]) => ({ day, ...data }))
+  // ── Estoque ──
+  const available = vehicles.filter(v => v.status === 'available')
+  const stockBuckets = [
+    { range: '0-15 dias', count: available.filter(v => v.days_in_stock <= 15).length, color: '#00E676' },
+    { range: '16-30 dias', count: available.filter(v => v.days_in_stock > 15 && v.days_in_stock <= 30).length, color: '#00D9FF' },
+    { range: '31-60 dias', count: available.filter(v => v.days_in_stock > 30 && v.days_in_stock <= 60).length, color: '#FFB800' },
+    { range: '+60 dias', count: available.filter(v => v.days_in_stock > 60).length, color: '#FF5252' },
+  ]
+  const healthy = available.filter(v => v.days_in_stock <= 30).length
+  const warning = available.filter(v => v.days_in_stock > 30 && v.days_in_stock <= 60).length
+  const critical = available.filter(v => v.days_in_stock > 60).length
+  const avgDays = available.length ? Math.round(available.reduce((s, v) => s + v.days_in_stock, 0) / available.length) : 0
 
-  const paymentMethods = sales.reduce((acc: Record<string, number>, sale) => {
-    acc[sale.payment_method] = (acc[sale.payment_method] || 0) + 1
-    return acc
-  }, {})
+  // ── Despesas ──
+  const expTotal = expenses.reduce((s, e) => s + e.amount, 0)
+  const expByCategory = Object.entries(
+    expenses.reduce((acc: Record<string, { total: number; count: number }>, e) => {
+      const cat = e.category || 'Outros'
+      if (!acc[cat]) acc[cat] = { total: 0, count: 0 }
+      acc[cat].total += e.amount
+      acc[cat].count += 1
+      return acc
+    }, {})
+  )
+    .map(([cat, d]) => ({ cat, ...d, pct: expTotal > 0 ? Math.round((d.total / expTotal) * 100) : 0 }))
+    .sort((a, b) => b.total - a.total)
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="h-8 w-48 bg-background-elevated animate-pulse rounded" />
+        <div className="grid grid-cols-4 gap-4">
+          {[0,1,2,3].map(i => <div key={i} className="h-24 bg-background-elevated animate-pulse rounded-2xl" />)}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      {/* Header */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold">Relatórios</h1>
           <p className="text-foreground-muted text-sm mt-1">Análise de performance da revenda</p>
         </div>
-        <Select value={period} onValueChange={setPeriod}>
-          <SelectTrigger className="w-36">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="7">7 dias</SelectItem>
-            <SelectItem value="30">30 dias</SelectItem>
-            <SelectItem value="90">90 dias</SelectItem>
-            <SelectItem value="365">1 ano</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex gap-2">
+          <Select value={period} onValueChange={setPeriod}>
+            <SelectTrigger className="w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="7">7 dias</SelectItem>
+              <SelectItem value="30">30 dias</SelectItem>
+              <SelectItem value="90">90 dias</SelectItem>
+              <SelectItem value="365">1 ano</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
-      {/* KPI Cards */}
+      {/* Quick stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: 'Vendas', value: totals.count, icon: TrendingUp, color: 'text-primary' },
-          { label: 'Faturamento', value: formatCurrency(totals.revenue), icon: DollarSign, color: 'text-success' },
-          { label: 'Lucro', value: formatCurrency(totals.profit), icon: BarChart3, color: 'text-secondary' },
-          { label: 'Margem Média', value: formatPercent(totals.avgMargin), icon: TrendingUp, color: 'text-warning' },
-        ].map(k => (
-          <Card key={k.label}>
+          { label: 'Faturamento', value: formatCurrency(salesTotals.revenue), icon: DollarSign, color: 'text-success' },
+          { label: 'Lucro Líquido', value: formatCurrency(salesTotals.profit), icon: TrendingUp, color: 'text-secondary' },
+          { label: 'Veículos Vendidos', value: salesTotals.count, icon: Car, color: 'text-primary' },
+          { label: 'Tempo Médio Estoque', value: `${avgDays} dias`, icon: BarChart3, color: 'text-warning' },
+        ].map(s => (
+          <Card key={s.label}>
             <CardContent className="p-4">
-              <p className="text-xs text-foreground-muted">{k.label}</p>
-              <p className={`text-xl font-bold mt-1 ${k.color}`}>{k.value}</p>
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs text-foreground-muted">{s.label}</p>
+                  <p className={`text-xl font-bold mt-1 ${s.color}`}>{s.value}</p>
+                </div>
+                <s.icon className={`w-4 h-4 ${s.color} opacity-60 mt-1`} />
+              </div>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      {/* Revenue chart */}
-      {chartData.length > 0 && (
-        <Card>
-          <CardHeader><CardTitle className="text-base">Faturamento por Dia</CardTitle></CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={chartData}>
-                <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#8B9EB3' }} />
-                <YAxis tick={{ fontSize: 11, fill: '#8B9EB3' }} tickFormatter={(v) => `R$${(v/1000).toFixed(0)}k`} />
-                <Tooltip
-                  contentStyle={{ background: '#111820', border: '1px solid #1E2A3A', borderRadius: 12 }}
-                  formatter={(v: any) => formatCurrency(v)}
-                />
-                <Bar dataKey="revenue" fill="#00D9FF" radius={[4,4,0,0]} />
-                <Bar dataKey="profit" fill="#00E676" radius={[4,4,0,0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      )}
+      {/* Tabs */}
+      <Tabs defaultValue="estoque" className="w-full">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="vendas">Vendas</TabsTrigger>
+          <TabsTrigger value="estoque">Estoque</TabsTrigger>
+          <TabsTrigger value="despesas">Despesas</TabsTrigger>
+          <TabsTrigger value="performance">Performance</TabsTrigger>
+        </TabsList>
+
+        {/* ── VENDAS ── */}
+        <TabsContent value="vendas" className="mt-6 space-y-6">
+          {salesChartData.length > 0 ? (
+            <Card>
+              <CardHeader><CardTitle className="text-base">Faturamento por Dia</CardTitle></CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={240}>
+                  <BarChart data={salesChartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                    <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#8B9EB3' }} />
+                    <YAxis tick={{ fontSize: 11, fill: '#8B9EB3' }} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
+                    <Tooltip
+                      contentStyle={{ background: '#111820', border: '1px solid #1E2A3A', borderRadius: 12 }}
+                      formatter={(v: any) => formatCurrency(v)}
+                    />
+                    <Bar dataKey="revenue" fill="#00D9FF" name="Receita" radius={[4,4,0,0]} />
+                    <Bar dataKey="profit" fill="#00E676" name="Lucro" radius={[4,4,0,0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardContent className="py-12 text-center text-foreground-muted text-sm">
+                Nenhuma venda registrada no período
+              </CardContent>
+            </Card>
+          )}
+
+          {sales.length > 0 && (
+            <Card>
+              <CardHeader><CardTitle className="text-base">Vendas do Período</CardTitle></CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {sales.slice().reverse().map(sale => (
+                    <div key={sale.id} className="flex items-center justify-between p-3 rounded-xl bg-background-elevated">
+                      <div>
+                        <p className="font-medium text-sm text-foreground">{sale.customer_name}</p>
+                        <p className="text-xs text-foreground-muted">
+                          {new Date(sale.sale_date).toLocaleDateString('pt-BR')} · {sale.payment_method}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-semibold text-sm text-foreground">{formatCurrency(sale.sale_price)}</p>
+                        {sale.profit > 0 && (
+                          <p className="text-xs text-success">+{formatCurrency(sale.profit)} ({formatPercent(sale.profit_percent)})</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* ── ESTOQUE ── */}
+        <TabsContent value="estoque" className="mt-6 space-y-6">
+          <Card>
+            <CardHeader><CardTitle className="text-base">Distribuição por Tempo em Estoque</CardTitle></CardHeader>
+            <CardContent>
+              {available.length > 0 ? (
+                <ResponsiveContainer width="100%" height={240}>
+                  <BarChart data={stockBuckets}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                    <XAxis dataKey="range" tick={{ fontSize: 12, fill: '#8B9EB3' }} />
+                    <YAxis tick={{ fontSize: 12, fill: '#8B9EB3' }} allowDecimals={false} />
+                    <Tooltip
+                      contentStyle={{ background: '#111820', border: '1px solid #1E2A3A', borderRadius: 12 }}
+                    />
+                    <Bar dataKey="count" name="Veículos" radius={[4,4,0,0]}>
+                      {stockBuckets.map((b, i) => (
+                        <Cell key={i} fill={b.color} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <p className="text-center py-8 text-foreground-muted text-sm">Nenhum veículo disponível</p>
+              )}
+            </CardContent>
+          </Card>
+
+          <div className="grid grid-cols-3 gap-4">
+            <Card className="border-success/30">
+              <CardContent className="p-4 text-center">
+                <p className="text-3xl font-bold text-success">{healthy}</p>
+                <p className="text-sm text-foreground-muted mt-1">Saudável</p>
+                <p className="text-xs text-foreground-subtle">0–30 dias</p>
+              </CardContent>
+            </Card>
+            <Card className="border-warning/30">
+              <CardContent className="p-4 text-center">
+                <p className="text-3xl font-bold text-warning">{warning}</p>
+                <p className="text-sm text-foreground-muted mt-1">Atenção</p>
+                <p className="text-xs text-foreground-subtle">31–60 dias</p>
+              </CardContent>
+            </Card>
+            <Card className="border-danger/30">
+              <CardContent className="p-4 text-center">
+                <p className="text-3xl font-bold text-danger">{critical}</p>
+                <p className="text-sm text-foreground-muted mt-1">Crítico</p>
+                <p className="text-xs text-foreground-subtle">+60 dias</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {available.length > 0 && (
+            <Card>
+              <CardHeader><CardTitle className="text-base">Veículos com Maior Tempo em Estoque</CardTitle></CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {available.slice(0, 8).map(v => {
+                    const pct = Math.min(100, Math.round((v.days_in_stock / 90) * 100))
+                    const color = v.days_in_stock > 60 ? 'text-danger' : v.days_in_stock > 30 ? 'text-warning' : 'text-success'
+                    return (
+                      <div key={v.id} className="space-y-1">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="font-medium text-foreground">{v.brand} {v.model}</span>
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs text-foreground-muted">{v.plate || '—'}</span>
+                            <span className={`font-semibold ${color}`}>{v.days_in_stock}d</span>
+                          </div>
+                        </div>
+                        <Progress value={pct} className="h-1.5" />
+                        <p className="text-xs text-foreground-subtle">
+                          {v.year_model}/{v.year_fab} · {v.color || '—'} · {formatCurrency(v.sale_price || 0)}
+                        </p>
+                      </div>
+                    )
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* ── DESPESAS ── */}
+        <TabsContent value="despesas" className="mt-6 space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader><CardTitle className="text-base flex items-center gap-2"><Receipt className="w-4 h-4 text-primary" />Por Categoria</CardTitle></CardHeader>
+              <CardContent className="space-y-3">
+                {expByCategory.length > 0 ? expByCategory.map(({ cat, total, count, pct }) => (
+                  <div key={cat}>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="font-medium text-foreground">{cat}</span>
+                      <span className="text-foreground-muted">{formatCurrency(total)} ({pct}%)</span>
+                    </div>
+                    <Progress value={pct} className="h-1.5" />
+                    <p className="text-xs text-foreground-subtle mt-0.5">{count} lançamento{count !== 1 ? 's' : ''}</p>
+                  </div>
+                )) : (
+                  <p className="text-sm text-foreground-muted py-4 text-center">Sem despesas no período</p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader><CardTitle className="text-base">Resumo</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-foreground-muted">Total de Despesas</span>
+                  <span className="font-bold text-danger">{formatCurrency(expTotal)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-foreground-muted">Média por Veículo</span>
+                  <span className="font-medium text-foreground">
+                    {available.length > 0 ? formatCurrency(expTotal / available.length) : '—'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-foreground-muted">Total de Lançamentos</span>
+                  <span className="font-medium text-foreground">{expenses.length}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-foreground-muted">Veículos com Despesas</span>
+                  <span className="font-medium text-foreground">
+                    {expByCategory.reduce((s, c) => s + c.count, 0)} lançamentos
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* ── PERFORMANCE ── */}
+        <TabsContent value="performance" className="mt-6 space-y-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card>
+              <CardContent className="p-4 text-center">
+                <p className={`text-4xl font-bold ${salesTotals.avgMargin > 10 ? 'text-success' : 'text-warning'}`}>
+                  {formatPercent(salesTotals.avgMargin)}
+                </p>
+                <p className="text-sm text-foreground-muted mt-1">Margem Média</p>
+                <Badge variant={salesTotals.avgMargin > 12 ? 'success' : 'warning'} className="mt-2">
+                  {salesTotals.avgMargin > 12 ? 'Acima da meta' : 'Abaixo da meta'}
+                </Badge>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4 text-center">
+                <p className={`text-4xl font-bold ${avgDays <= 30 ? 'text-success' : avgDays <= 60 ? 'text-warning' : 'text-danger'}`}>
+                  {avgDays}
+                </p>
+                <p className="text-sm text-foreground-muted mt-1">Dias em Estoque</p>
+                <Badge variant="secondary" className="mt-2">Meta: 30 dias</Badge>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4 text-center">
+                <p className="text-4xl font-bold text-primary">{available.length}</p>
+                <p className="text-sm text-foreground-muted mt-1">Em Estoque</p>
+                <Badge variant={critical > 0 ? 'destructive' : 'success'} className="mt-2">
+                  {critical} crítico{critical !== 1 ? 's' : ''}
+                </Badge>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4 text-center">
+                <p className="text-4xl font-bold text-secondary">{salesTotals.count}</p>
+                <p className="text-sm text-foreground-muted mt-1">Vendas no Período</p>
+                <Badge variant="secondary" className="mt-2">{formatCurrency(salesTotals.revenue)}</Badge>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
+            <CardHeader><CardTitle className="text-base">Recomendações da IA</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              {critical > 0 && (
+                <div className="p-4 rounded-xl bg-danger/5 border border-danger/20">
+                  <p className="font-semibold text-sm text-danger">⚠️ {critical} veículo{critical !== 1 ? 's' : ''} em situação crítica</p>
+                  <p className="text-sm text-foreground-muted mt-1">
+                    Há mais de 60 dias no estoque. Considere reduzir o preço em 5% para acelerar a venda.
+                  </p>
+                </div>
+              )}
+              {warning > 0 && (
+                <div className="p-4 rounded-xl bg-warning/5 border border-warning/20">
+                  <p className="font-semibold text-sm text-warning">🔔 {warning} veículo{warning !== 1 ? 's' : ''} precisam de atenção</p>
+                  <p className="text-sm text-foreground-muted mt-1">
+                    Entre 31–60 dias. Invista em fotos melhores ou polimento para acelerar as vendas.
+                  </p>
+                </div>
+              )}
+              {salesTotals.avgMargin > 0 && salesTotals.avgMargin < 10 && (
+                <div className="p-4 rounded-xl bg-warning/5 border border-warning/20">
+                  <p className="font-semibold text-sm text-warning">📊 Margem abaixo do ideal</p>
+                  <p className="text-sm text-foreground-muted mt-1">
+                    Margem média de {formatPercent(salesTotals.avgMargin)} abaixo da referência de mercado (12%). Revise preços de compra.
+                  </p>
+                </div>
+              )}
+              {salesTotals.avgMargin >= 12 && (
+                <div className="p-4 rounded-xl bg-success/5 border border-success/20">
+                  <p className="font-semibold text-sm text-success">📈 Margem acima do mercado</p>
+                  <p className="text-sm text-foreground-muted mt-1">
+                    {formatPercent(salesTotals.avgMargin)} está acima da média do mercado (12%). Continue priorizando qualidade.
+                  </p>
+                </div>
+              )}
+              {available.length === 0 && salesTotals.count === 0 && (
+                <div className="p-4 rounded-xl bg-primary/5 border border-primary/20">
+                  <p className="font-semibold text-sm text-primary">💡 Importe seus dados para ver recomendações</p>
+                  <p className="text-sm text-foreground-muted mt-1">
+                    Vá em Importar e carregue seu arquivo .mdb ou .csv para começar.
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

@@ -1,13 +1,13 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { Search, Filter, Car, Plus } from 'lucide-react'
+import { Search, Car, Plus, AlertTriangle, Clock, TrendingUp } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { formatCurrency, getStockStatusColor, getStockStatusLabel } from '@/lib/utils'
+import { formatCurrency, getStockStatusColor } from '@/lib/utils'
 
 export default function VeiculosPage() {
   const [vehicles, setVehicles] = useState<any[]>([])
@@ -50,21 +50,56 @@ export default function VeiculosPage() {
   const stats = {
     total: vehicles.length,
     critical: vehicles.filter(v => v.days_in_stock > 60).length,
+    warning: vehicles.filter(v => v.days_in_stock > 30 && v.days_in_stock <= 60).length,
     avgDays: vehicles.length ? Math.round(vehicles.reduce((s, v) => s + v.days_in_stock, 0) / vehicles.length) : 0,
+    totalValue: vehicles.reduce((s, v) => s + (v.sale_price || 0), 0),
   }
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Veículos</h1>
-          <p className="text-foreground-muted text-sm mt-1">{stats.total} veículos · {stats.critical} críticos · {stats.avgDays} dias médios</p>
+          <p className="text-foreground-muted text-sm mt-1">
+            {stats.total} veículos · {stats.critical} críticos · {stats.avgDays} dias médios
+          </p>
         </div>
         <Button className="gap-2">
           <Plus className="w-4 h-4" />
           Adicionar
         </Button>
       </div>
+
+      {/* Summary cards */}
+      {vehicles.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <Card>
+            <CardContent className="p-3 text-center">
+              <p className="text-2xl font-bold text-primary">{stats.total}</p>
+              <p className="text-xs text-foreground-muted mt-0.5">Em Estoque</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-3 text-center">
+              <p className="text-2xl font-bold text-warning">{stats.avgDays}d</p>
+              <p className="text-xs text-foreground-muted mt-0.5">Média Estoque</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-3 text-center">
+              <p className="text-2xl font-bold text-danger">{stats.critical}</p>
+              <p className="text-xs text-foreground-muted mt-0.5">Críticos +60d</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-3 text-center">
+              <p className="text-xl font-bold text-success">{formatCurrency(stats.totalValue)}</p>
+              <p className="text-xs text-foreground-muted mt-0.5">Valor Total</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3">
@@ -89,37 +124,60 @@ export default function VeiculosPage() {
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="h-48 rounded-2xl bg-background-elevated animate-pulse" />
+            <div key={i} className="h-52 rounded-2xl bg-background-elevated animate-pulse" />
           ))}
         </div>
+      ) : vehicles.length === 0 ? (
+        <Card>
+          <CardContent className="py-16 text-center">
+            <Car className="w-10 h-10 text-foreground-subtle mx-auto mb-3" />
+            <p className="text-foreground-muted font-medium">Nenhum veículo encontrado</p>
+            <p className="text-xs text-foreground-subtle mt-1">
+              {statusFilter !== 'all' ? 'Tente mudar o filtro de status.' : 'Importe seus dados ou adicione um veículo.'}
+            </p>
+          </CardContent>
+        </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {vehicles.map((v) => {
             const statusColor = getStockStatusColor(v.days_in_stock)
             const badgeVar = statusColor === 'success' ? 'success' : statusColor === 'warning' ? 'warning' : 'destructive'
-            const marginColor = v.margin > 0 ? 'text-success' : 'text-danger'
+            const marginColor = v.margin > 0 ? 'text-success' : v.margin < 0 ? 'text-danger' : 'text-foreground-muted'
+            const stockIcon = v.days_in_stock > 60 ? AlertTriangle : v.days_in_stock > 30 ? Clock : TrendingUp
 
             return (
               <Card key={v.id} className="hover:border-border-hover transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card-hover">
                 <CardContent className="p-5">
+                  {/* Top row */}
                   <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <p className="font-semibold text-foreground">{v.brand} {v.model}</p>
-                      <p className="text-xs text-foreground-muted">{v.version} · {v.year_model}/{v.year_fab}</p>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-foreground truncate">{v.brand} {v.model}</p>
+                      <p className="text-xs text-foreground-muted">
+                        {v.version ? `${v.version} · ` : ''}{v.year_model}/{v.year_fab}
+                      </p>
                     </div>
-                    <Badge variant={badgeVar as any}>
+                    <Badge variant={badgeVar as any} className="ml-2 flex-shrink-0 gap-1">
                       {v.days_in_stock}d
                     </Badge>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                  {/* Details grid */}
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm mb-3">
                     <div>
                       <p className="text-xs text-foreground-subtle">Placa</p>
                       <p className="font-medium text-foreground">{v.plate || '—'}</p>
                     </div>
                     <div>
                       <p className="text-xs text-foreground-subtle">KM</p>
-                      <p className="font-medium text-foreground">{v.mileage?.toLocaleString('pt-BR')} km</p>
+                      <p className="font-medium text-foreground">{v.mileage?.toLocaleString('pt-BR') ?? '—'} km</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-foreground-subtle">Cor</p>
+                      <p className="font-medium text-foreground">{v.color || '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-foreground-subtle">Combustível</p>
+                      <p className="font-medium text-foreground">{v.fuel || '—'}</p>
                     </div>
                     <div>
                       <p className="text-xs text-foreground-subtle">Compra</p>
@@ -127,18 +185,21 @@ export default function VeiculosPage() {
                     </div>
                     <div>
                       <p className="text-xs text-foreground-subtle">Venda</p>
-                      <p className="font-medium text-foreground">{formatCurrency(v.sale_price || 0)}</p>
+                      <p className="font-medium text-foreground">{v.sale_price ? formatCurrency(v.sale_price) : '—'}</p>
                     </div>
                   </div>
 
-                  <div className="mt-3 pt-3 border-t border-border flex items-center justify-between">
+                  {/* Bottom row */}
+                  <div className="pt-3 border-t border-border flex items-center justify-between">
                     <div>
                       <p className="text-xs text-foreground-subtle">Despesas</p>
                       <p className="text-sm font-medium text-warning">{formatCurrency(v.totalExpenses)}</p>
                     </div>
                     <div className="text-right">
                       <p className="text-xs text-foreground-subtle">Margem</p>
-                      <p className={`text-sm font-semibold ${marginColor}`}>{formatCurrency(v.margin)}</p>
+                      <p className={`text-sm font-semibold ${marginColor}`}>
+                        {v.sale_price ? formatCurrency(v.margin) : '—'}
+                      </p>
                     </div>
                   </div>
                 </CardContent>
