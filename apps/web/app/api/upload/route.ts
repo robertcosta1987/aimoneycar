@@ -289,9 +289,7 @@ export async function POST(req: NextRequest) {
 
       // Refresh days_in_stock for all vehicles in this dealership after import
       // (handles upsert cases where trigger may not recalculate on updates)
-      await svc.rpc('refresh_days_in_stock', { d_id: dealershipId }).catch(() => {
-        // Function may not exist yet; trigger handles insert case
-      })
+      try { await svc.rpc('refresh_days_in_stock', { d_id: dealershipId }) } catch { /* function may not exist yet */ }
     } else {
       errors.push(`Parsed ${rawRows.length} rows but none matched expected columns. Tables: ${tableNames.join(', ')}. First row keys: ${Object.keys(rawRows[0] ?? {}).join(', ')}`)
     }
