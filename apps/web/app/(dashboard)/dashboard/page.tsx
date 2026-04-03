@@ -36,8 +36,9 @@ export default async function DashboardPage() {
     supabase.from('ai_alerts').select('*')
       .eq('dealership_id', dealId).eq('is_dismissed', false).eq('is_read', false)
       .order('created_at', { ascending: false }).limit(5),
-    supabase.from('sales').select('id, customer_name, sale_price, profit, sale_date, vehicle:vehicles(brand, model)')
+    supabase.from('vehicles').select('id, brand, model, plate, purchase_price, sale_price, sale_date, expenses:expenses(amount)')
       .eq('dealership_id', dealId)
+      .eq('status', 'sold')
       .order('sale_date', { ascending: false }).limit(5),
   ])
 
@@ -214,20 +215,19 @@ export default async function DashboardPage() {
             <p className="text-center py-6 text-foreground-muted text-sm">Nenhuma venda registrada</p>
           ) : (
             <div className="space-y-3">
-              {sales.map((sale) => {
-                const vehicle = sale.vehicle as any
+              {(sales as any[]).map((v) => {
+                const totalExp = (v.expenses || []).reduce((s: number, e: any) => s + e.amount, 0)
+                const profit = (v.sale_price || 0) - v.purchase_price - totalExp
                 return (
-                  <div key={sale.id} className="flex items-center justify-between">
+                  <div key={v.id} className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium text-foreground">
-                        {vehicle?.brand} {vehicle?.model}
-                      </p>
-                      <p className="text-xs text-foreground-muted">{sale.customer_name} · {new Date(sale.sale_date).toLocaleDateString('pt-BR')}</p>
+                      <p className="text-sm font-medium text-foreground">{v.brand} {v.model}</p>
+                      <p className="text-xs text-foreground-muted">{v.plate || '—'} · {v.sale_date ? new Date(v.sale_date).toLocaleDateString('pt-BR') : '—'}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm font-semibold text-foreground">{formatCurrency(sale.sale_price)}</p>
-                      {sale.profit && (
-                        <p className="text-xs text-success">+{formatCurrency(sale.profit)}</p>
+                      <p className="text-sm font-semibold text-foreground">{formatCurrency(v.sale_price || 0)}</p>
+                      {profit > 0 && (
+                        <p className="text-xs text-success">+{formatCurrency(profit)}</p>
                       )}
                     </div>
                   </div>

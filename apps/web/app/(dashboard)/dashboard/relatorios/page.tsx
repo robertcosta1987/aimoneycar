@@ -33,8 +33,9 @@ export default function RelatoriosPage() {
         { data: expensesData },
         { data: statsData },
       ] = await Promise.all([
-        supabase.from('sales').select('*')
+        supabase.from('vehicles').select('id, brand, model, plate, year_fab, year_model, purchase_price, sale_price, purchase_date, sale_date, days_in_stock, expenses:expenses(amount)')
           .eq('dealership_id', did)
+          .eq('status', 'sold')
           .gte('sale_date', cutoff)
           .order('sale_date', { ascending: true }),
         supabase.from('vehicles').select('id, brand, model, plate, year_fab, year_model, color, mileage, fuel, purchase_price, sale_price, days_in_stock, status, purchase_date')
@@ -56,19 +57,26 @@ export default function RelatoriosPage() {
     load()
   }, [period])
 
-  // ── Vendas ──
+  // ── Vendas (from vehicles with status=sold) ──
+  const salesEnriched = sales.map((v: any) => {
+    const totalExp = (v.expenses || []).reduce((s: number, e: any) => s + e.amount, 0)
+    const profit = (v.sale_price || 0) - v.purchase_price - totalExp
+    const profitPct = v.sale_price > 0 ? (profit / v.sale_price) * 100 : 0
+    return { ...v, totalExp, profit, profitPct }
+  })
+
   const salesTotals = {
-    revenue: sales.reduce((s, x) => s + x.sale_price, 0),
-    profit: sales.reduce((s, x) => s + (x.profit || 0), 0),
-    count: sales.length,
-    avgMargin: sales.length ? sales.reduce((s, x) => s + (x.profit_percent || 0), 0) / sales.length : 0,
+    revenue: salesEnriched.reduce((s, x) => s + (x.sale_price || 0), 0),
+    profit: salesEnriched.reduce((s, x) => s + x.profit, 0),
+    count: salesEnriched.length,
+    avgMargin: salesEnriched.length ? salesEnriched.reduce((s, x) => s + x.profitPct, 0) / salesEnriched.length : 0,
   }
 
-  const salesByDay = sales.reduce((acc: Record<string, { revenue: number; profit: number }>, s) => {
+  const salesByDay = salesEnriched.reduce((acc: Record<string, { revenue: number; profit: number }>, s) => {
     const day = s.sale_date?.slice(5) ?? ''
     if (!acc[day]) acc[day] = { revenue: 0, profit: 0 }
-    acc[day].revenue += s.sale_price
-    acc[day].profit += s.profit || 0
+    acc[day].revenue += s.sale_price || 0
+    acc[day].profit += s.profit
     return acc
   }, {})
   const salesChartData = Object.entries(salesByDay).map(([day, d]) => ({ day, ...d }))
@@ -194,23 +202,23 @@ export default function RelatoriosPage() {
             </Card>
           )}
 
-          {sales.length > 0 && (
+          {salesEnriched.length > 0 && (
             <Card>
               <CardHeader><CardTitle className="text-base">Vendas do Período</CardTitle></CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {sales.slice().reverse().map(sale => (
+                  {salesEnriched.slice().reverse().map(sale => (
                     <div key={sale.id} className="flex items-center justify-between p-3 rounded-xl bg-background-elevated">
                       <div>
-                        <p className="font-medium text-sm text-foreground">{sale.customer_name}</p>
+                        <p className="font-medium text-sm text-foreground">{sale.brand} {sale.model}</p>
                         <p className="text-xs text-foreground-muted">
-                          {new Date(sale.sale_date).toLocaleDateString('pt-BR')} · {sale.payment_method}
+                          {sale.plate || '—'} · {sale.sale_date ? new Date(sale.sale_date).toLocaleDateString('pt-BR') : '—'} · {sale.days_in_stock}d em estoque
                         </p>
                       </div>
                       <div className="text-right">
                         <p className="font-semibold text-sm text-foreground">{formatCurrency(sale.sale_price)}</p>
                         {sale.profit > 0 && (
-                          <p className="text-xs text-success">+{formatCurrency(sale.profit)} ({formatPercent(sale.profit_percent)})</p>
+                          <p className="text-xs text-success">+{formatCurrency(sale.profit)} ({formatPercent(sale.profitPct)})</p>
                         )}
                       </div>
                     </div>
