@@ -54,7 +54,13 @@ export default function ImportarPage() {
       const data = await res.json()
 
       if (res.ok) {
-        setResult({ imported: data.records_imported || 0, parsed: data.total_rows_parsed || 0, errors: data.errors || [], sample: data.sample, debug: data.debug })
+        setResult({
+          imported: data.vehicles_imported || data.records_imported || 0,
+          parsed: data.total_rows_parsed || 0,
+          errors: data.errors || [],
+          sample: data.sample,
+          debug: { ...data.debug, expenses_imported: data.expenses_imported || 0 },
+        })
         setState('done')
         setProgress(100)
       } else {
@@ -140,13 +146,13 @@ export default function ImportarPage() {
             </div>
             <p className="text-sm text-foreground-muted">
               {result.imported} veículos importados de {result.parsed} linhas lidas.
+              {result.debug?.expenses_imported > 0 && ` · ${result.debug.expenses_imported} despesas importadas.`}
             </p>
             {result.debug && (
               <p className="text-xs text-foreground-muted mt-2">
-                Tabela: <span className="font-medium">{result.debug.targetTable}</span> ·
-                Marcas: {result.debug.brandMapSize} ·
-                Modelos: {result.debug.modelMapSize} ·
-                Combustíveis: {result.debug.fuelMapSize}
+                Tabela: <span className="font-medium">{result.debug.targetTable}</span>
+                {result.debug.expenseTable && <> · Despesas: <span className="font-medium">{result.debug.expenseTable}</span></>}
+                {result.debug.brandMapSize > 0 && <> · Marcas: {result.debug.brandMapSize}</>}
               </p>
             )}
             {result.errors.length > 0 && (
