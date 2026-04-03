@@ -13,7 +13,7 @@ export default function ImportarPage() {
   const [file, setFile] = useState<File | null>(null)
   const [state, setState] = useState<UploadState>('idle')
   const [progress, setProgress] = useState(0)
-  const [result, setResult] = useState<{ imported: number; errors: string[] } | null>(null)
+  const [result, setResult] = useState<{ imported: number; parsed: number; errors: string[] } | null>(null)
   const [dragOver, setDragOver] = useState(false)
 
   const handleFile = (f: File) => {
@@ -46,7 +46,7 @@ export default function ImportarPage() {
       const data = await res.json()
 
       if (res.ok) {
-        setResult({ imported: data.records_imported || 0, errors: data.errors || [] })
+        setResult({ imported: data.records_imported || 0, parsed: data.total_rows_parsed || 0, errors: data.errors || [] })
         setState('done')
         setProgress(100)
       } else {
@@ -131,7 +131,7 @@ export default function ImportarPage() {
               <p className="font-semibold text-success">Importação concluída!</p>
             </div>
             <p className="text-sm text-foreground-muted">
-              {result.imported} registros importados com sucesso.
+              {result.imported} veículos importados de {result.parsed} linhas lidas.
             </p>
             {result.errors.length > 0 && (
               <div className="mt-3 space-y-1">
