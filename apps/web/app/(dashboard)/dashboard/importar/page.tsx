@@ -1,6 +1,6 @@
 'use client'
 import { useState, useCallback } from 'react'
-import { Upload, FileText, CheckCircle, AlertCircle, Loader2 } from 'lucide-react'
+import { Upload, FileText, CheckCircle, AlertCircle, Loader2, Search } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
@@ -23,6 +23,8 @@ export default function ImportarPage() {
   const [progress, setProgress] = useState(0)
   const [result, setResult] = useState<ImportResult | null>(null)
   const [dragOver, setDragOver] = useState(false)
+  const [inspecting, setInspecting] = useState(false)
+  const [inspection, setInspection] = useState<any>(null)
 
   const handleFile = (f: File) => {
     if (!f) return
@@ -72,8 +74,24 @@ export default function ImportarPage() {
     }
   }
 
+  const inspect = async () => {
+    if (!file) return
+    setInspecting(true)
+    setInspection(null)
+    const formData = new FormData()
+    formData.append('file', file)
+    try {
+      const res = await fetch('/api/mdb-inspect', { method: 'POST', body: formData })
+      const data = await res.json()
+      setInspection(data)
+    } catch (e: any) {
+      setInspection({ error: e.message })
+    }
+    setInspecting(false)
+  }
+
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-6 max-w-4xl">
       <div>
         <h1 className="text-2xl font-bold">Importar Dados</h1>
         <p className="text-foreground-muted text-sm mt-1">Importe dados do Moneycar (.mdb), Excel (.xlsx) ou CSV</p>
@@ -113,12 +131,18 @@ export default function ImportarPage() {
         </CardContent>
       </Card>
 
-      {/* Upload button */}
+      {/* Buttons */}
       {file && state === 'idle' && (
-        <Button onClick={upload} className="gap-2 w-full">
-          <Upload className="w-4 h-4" />
-          Importar {file.name}
-        </Button>
+        <div className="flex gap-3">
+          <Button onClick={upload} className="gap-2 flex-1">
+            <Upload className="w-4 h-4" />
+            Importar {file.name}
+          </Button>
+          <Button onClick={inspect} variant="outline" className="gap-2" disabled={inspecting}>
+            {inspecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+            Inspecionar
+          </Button>
+        </div>
       )}
 
       {/* Progress */}
@@ -193,6 +217,63 @@ export default function ImportarPage() {
                 {result.errors.map((e, i) => <p key={i} className="text-sm text-foreground-muted mt-1">{e}</p>)}
               </div>
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Inspection results */}
+      {inspection && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Search className="w-4 h-4 text-primary" />
+              Estrutura do Arquivo MDB
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {inspection.error && (
+              <p className="text-sm text-danger">{inspection.error}</p>
+            )}
+            <p className="text-xs text-foreground-muted">
+              Tabelas encontradas: <span className="font-medium text-foreground">{inspection.tables?.join(', ')}</span>
+            </p>
+            {Object.entries(inspection.samples ?? {}).map(([table, info]: [string, any]) => (
+              <div key={table}>
+                <p className="text-sm font-semibold text-foreground mb-2">
+                  📋 {table}
+                  <span className="ml-2 text-xs font-normal text-foreground-muted">({info.count} registros)</span>
+                </p>
+                {info.error ? (
+                  <p className="text-xs text-danger">{info.error}</p>
+                ) : info.columns ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs border-collapse">
+                      <thead>
+                        <tr className="border-b border-border">
+                          <th className="text-left py-1 px-2 text-foreground-muted font-medium">Coluna</th>
+                          <th className="text-left py-1 px-2 text-foreground-muted font-medium">Tipo</th>
+                          <th className="text-left py-1 px-2 text-foreground-muted font-medium">1º Valor</th>
+                          <th className="text-left py-1 px-2 text-foreground-muted font-medium">2º Valor</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {info.columns.map((col: any, i: number) => {
+                          const second = info.secondRow?.find((r: any) => r.col === col.col)
+                          return (
+                            <tr key={i} className="border-b border-border/50 hover:bg-background-elevated">
+                              <td className="py-1 px-2 font-mono text-primary font-medium">{col.col}</td>
+                              <td className="py-1 px-2 text-foreground-subtle">{col.type}</td>
+                              <td className="py-1 px-2 text-foreground max-w-[200px] truncate">{col.value}</td>
+                              <td className="py-1 px-2 text-foreground-muted max-w-[200px] truncate">{second?.value ?? '—'}</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : null}
+              </div>
+            ))}
           </CardContent>
         </Card>
       )}
