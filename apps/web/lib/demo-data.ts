@@ -621,3 +621,26 @@ export const expenseCategories = [
   'Laudo',
   'Combustível',
 ];
+
+// Aliases for backward compatibility with demo pages
+export const demoVehicles = vehicles
+
+export const expensesByCategory = getExpenseAnalysis()
+
+export interface DemoSale {
+  id: string
+  vehicle: string
+  customerName: string
+  salesperson: string
+  salePrice: number
+  profit: number
+  profitPercent: number
+  date: string
+}
+
+export const demoSales: DemoSale[] = [
+  { id: '1', vehicle: 'Toyota Corolla 2022', customerName: 'Carlos Mendes', salesperson: 'João Silva', salePrice: 115000, profit: 13700, profitPercent: 13.5, date: '2024-03-28' },
+  { id: '2', vehicle: 'Honda Civic 2021', customerName: 'Ana Paula Souza', salesperson: 'Maria Costa', salePrice: 98000, profit: 11200, profitPercent: 12.9, date: '2024-03-25' },
+  { id: '3', vehicle: 'VW Gol 2020', customerName: 'Roberto Lima', salesperson: 'João Silva', salePrice: 52000, profit: 5800, profitPercent: 12.6, date: '2024-03-22' },
+  { id: '4', vehicle: 'Chevrolet Onix 2023', customerName: 'Fernanda Castro', salesperson: 'Pedro Alves', salePrice: 87000, profit: 9500, profitPercent: 12.2, date: '2024-03-18' },
+]
