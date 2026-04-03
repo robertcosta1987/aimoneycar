@@ -28,23 +28,35 @@ export default function ConfigPage() {
     setLoading(true)
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    if (!user) { setLoading(false); return }
 
+    // Step 1: read user row — always readable via id = auth.uid() RLS policy
     const { data: userData } = await supabase
       .from('users')
-      .select('name, dealership_id, dealership:dealerships(id, name, phone, whatsapp, city, state)')
+      .select('name, dealership_id')
       .eq('id', user.id)
       .single()
 
-    const dealership = userData?.dealership as any
+    const dealershipId = userData?.dealership_id ?? null
+
+    // Step 2: fetch dealership separately if id is known
+    let dealership: any = null
+    if (dealershipId) {
+      const { data } = await supabase
+        .from('dealerships')
+        .select('id, name, phone, whatsapp, city, state')
+        .eq('id', dealershipId)
+        .single()
+      dealership = data
+    }
 
     setStatus({
       userId: user.id,
       userEmail: user.email ?? '',
       userName: userData?.name ?? '',
-      dealershipId: dealership?.id ?? null,
+      dealershipId,
       dealershipName: dealership?.name ?? null,
-      dealershipLinked: !!dealership?.id,
+      dealershipLinked: !!dealershipId,   // based on users.dealership_id, not join
     })
 
     if (dealership) {
