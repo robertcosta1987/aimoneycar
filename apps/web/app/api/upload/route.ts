@@ -12,8 +12,8 @@ function mapRow(row: Record<string, any>, dealershipId: string): Record<string, 
     return undefined
   }
 
-  const brand = get('marca', 'brand', 'MARCA', 'fabricante', 'FABRICANTE')
-  const model = get('modelo', 'model', 'MODELO')
+  const brand = get('marca', 'Marca', 'brand', 'MARCA', 'fabricante', 'Fabricante', 'FABRICANTE', 'NomeFabricante', 'nomefabricante')
+  const model = get('modelo', 'Modelo', 'model', 'MODELO', 'NomeModelo', 'nomemodelo')
   if (!brand && !model) return null
 
   const parseYear = (v: any) => {
@@ -40,29 +40,29 @@ function mapRow(row: Record<string, any>, dealershipId: string): Record<string, 
     return new Date().toISOString().split('T')[0]
   }
 
-  const yearRaw = get('ano', 'year', 'ANO', 'ano_fab', 'ano fabricacao', 'ANO_FAB')
-  const yearModelRaw = get('ano_modelo', 'ano modelo', 'ANO_MODELO', 'year_model', 'modelo_ano')
+  const yearRaw = get('ano', 'Ano', 'AnoFab', 'anofab', 'ANO', 'ano_fab', 'AnoFabricacao', 'anofabricacao')
+  const yearModelRaw = get('anomodelo', 'AnoModelo', 'ano_modelo', 'ANO_MODELO', 'year_model')
   const year = parseYear(yearRaw)
   const yearModel = parseYear(yearModelRaw ?? yearRaw)
 
-  const plate = get('placa', 'plate', 'PLACA')
-  const externalId = get('id', 'codigo', 'CODIGO', 'cod', 'COD', 'external_id', 'ID')
+  const plate = get('placa', 'Placa', 'plate', 'PLACA')
+  const externalId = get('carid', 'CarId', 'IDCarro', 'idcarro', 'id', 'ID', 'codigo', 'Codigo', 'CODIGO', 'external_id')
 
   return {
     dealership_id: dealershipId,
     plate: plate ? String(plate).toUpperCase().trim() : null,
     brand: String(brand || 'Desconhecido').trim(),
     model: String(model || 'Desconhecido').trim(),
-    version: get('versao', 'version', 'VERSAO', 'VERSÃO', 'versão', 'complemento') ?? null,
+    version: get('versao', 'Versao', 'Versão', 'version', 'VERSAO', 'complemento', 'Complemento', 'descricao', 'Descricao') ?? null,
     year_fab: year,
     year_model: yearModel,
-    color: get('cor', 'color', 'COR') ?? null,
-    mileage: parseNum(get('km', 'quilometragem', 'KM', 'QUILOMETRAGEM', 'odometro', 'ODOMETRO', 'mileage')),
-    fuel: get('combustivel', 'combustível', 'fuel', 'COMBUSTIVEL') ?? null,
-    transmission: get('cambio', 'câmbio', 'transmissao', 'transmission', 'CAMBIO') ?? null,
-    purchase_price: parseNum(get('valor_compra', 'preco_compra', 'custo', 'purchase_price', 'VALOR_COMPRA', 'PRECO_COMPRA', 'custo_total', 'CUSTO')),
-    sale_price: parseNum(get('valor_venda', 'preco_venda', 'sale_price', 'VALOR_VENDA', 'PRECO_VENDA', 'preco')) || null,
-    purchase_date: parseDate(get('data_compra', 'purchase_date', 'DATA_COMPRA', 'data entrada', 'DATA_ENTRADA')),
+    color: get('cor', 'Cor', 'color', 'COR', 'Cores') ?? null,
+    mileage: parseNum(get('km', 'Km', 'KM', 'quilometragem', 'Quilometragem', 'odometro', 'Odometro', 'mileage')),
+    fuel: get('combustivel', 'Combustivel', 'Combustível', 'fuel', 'COMBUSTIVEL', 'TipoCombustivel') ?? null,
+    transmission: get('cambio', 'Cambio', 'Câmbio', 'transmissao', 'Transmissao', 'transmission', 'CAMBIO', 'TipoCambio') ?? null,
+    purchase_price: parseNum(get('valorcompra', 'ValorCompra', 'valor_compra', 'custocompra', 'CustoCompra', 'custo', 'Custo', 'CUSTO', 'purchase_price', 'precoCusto', 'PrecoCusto')),
+    sale_price: parseNum(get('valorvenda', 'ValorVenda', 'valor_venda', 'precovenda', 'PrecoVenda', 'sale_price', 'VALORVENDA', 'preco', 'Preco')) || null,
+    purchase_date: parseDate(get('datacompra', 'DataCompra', 'data_compra', 'dataentrada', 'DataEntrada', 'purchase_date', 'DATA_COMPRA')),
     status: 'available' as const,
     source: 'import',
     photos: [],
@@ -88,21 +88,24 @@ function parseCSV(text: string): Record<string, any>[] {
   }).filter(row => Object.values(row).some(v => v !== ''))
 }
 
-function parseMDB(buffer: Buffer): { rows: Record<string, any>[]; tableNames: string[] } {
+function parseMDB(buffer: Buffer): { rows: Record<string, any>[]; tableNames: string[]; targetTable: string } {
   const reader = new MDBReader(buffer)
   const tableNames = reader.getTableNames()
 
-  // Look for the most likely vehicle table
-  const vehicleKeywords = ['veiculo', 'veiculo', 'veículos', 'carro', 'estoque', 'stock', 'vehicle', 'auto']
-  let targetTable = tableNames.find(t =>
-    vehicleKeywords.some(k => t.toLowerCase().includes(k))
-  ) ?? tableNames.find(t => !t.startsWith('MSys')) ?? tableNames[0]
+  // Priority list — exact matches first, then partial
+  const priority = ['tbVeiculo', 'tbVeiculos', 'Veiculo', 'Veiculos', 'tblVeiculo']
+  const keywords = ['veiculo', 'carro', 'estoque', 'vehicle', 'auto', 'stock']
 
-  if (!targetTable) return { rows: [], tableNames }
+  const targetTable =
+    priority.find(p => tableNames.includes(p)) ??
+    tableNames.find(t => keywords.some(k => t.toLowerCase().includes(k))) ??
+    tableNames.find(t => !t.startsWith('MSys')) ??
+    tableNames[0]
 
-  const table = reader.getTable(targetTable)
-  const rows = table.getData() as Record<string, any>[]
-  return { rows, tableNames }
+  if (!targetTable) return { rows: [], tableNames, targetTable: '' }
+
+  const rows = reader.getTable(targetTable).getData() as Record<string, any>[]
+  return { rows, tableNames, targetTable }
 }
 
 export async function POST(req: NextRequest) {
@@ -149,6 +152,7 @@ export async function POST(req: NextRequest) {
       const result = parseMDB(buffer)
       rawRows = result.rows
       tableNames = result.tableNames
+      if (result.targetTable) tableNames = [`target: ${result.targetTable}`, ...tableNames]
     } else if (name.endsWith('.csv')) {
       rawRows = parseCSV(buffer.toString('utf-8'))
     } else if (name.endsWith('.json')) {
