@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import type { Vehicle } from '@/types'
 
 export async function POST(req: NextRequest) {
+  // Use regular client for auth check (needs session cookies)
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data: profile } = await supabase
+  // Use service role to read user profile — avoids RLS recursion in my_dealership_id()
+  const svc = createServiceClient()
+  const { data: profile } = await svc
     .from('users').select('dealership_id').eq('id', user.id).single()
   if (!profile?.dealership_id) return NextResponse.json({ error: 'No dealership' }, { status: 400 })
 

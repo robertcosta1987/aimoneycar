@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { chatWithClaude } from '@/lib/ai/claude'
 import type { ChatMessage, DashboardStats, Vehicle } from '@/types'
 
@@ -14,8 +14,8 @@ export async function POST(req: NextRequest) {
       conversation_id?: string
     }
 
-    // Fetch dealership context
-    const { data: profile } = await supabase
+    // Fetch dealership context via service role to avoid RLS recursion
+    const { data: profile } = await createServiceClient()
       .from('users')
       .select('dealership_id')
       .eq('id', user.id)

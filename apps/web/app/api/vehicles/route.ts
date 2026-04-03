@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 
-async function getDealershipId(supabase: ReturnType<typeof createClient>, userId: string) {
-  const { data } = await supabase
+async function getDealershipId(userId: string) {
+  const { data } = await createServiceClient()
     .from('users')
     .select('dealership_id')
     .eq('id', userId)
@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const dealershipId = await getDealershipId(supabase, user.id)
+  const dealershipId = await getDealershipId(user.id)
   if (!dealershipId) return NextResponse.json({ error: 'No dealership' }, { status: 400 })
 
   const { searchParams } = new URL(req.url)
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const dealershipId = await getDealershipId(supabase, user.id)
+  const dealershipId = await getDealershipId(user.id)
   if (!dealershipId) return NextResponse.json({ error: 'No dealership' }, { status: 400 })
 
   const body = await req.json()
