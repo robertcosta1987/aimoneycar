@@ -146,7 +146,7 @@ export default function ImportarPage() {
             </div>
             <p className="text-sm text-foreground-muted">
               {result.imported} veículos importados de {result.parsed} linhas lidas.
-              {result.debug?.expenses_imported > 0 && ` · ${result.debug.expenses_imported} despesas importadas.`}
+              {(result.debug?.expenses_imported ?? 0) > 0 && ` · ${result.debug!.expenses_imported} despesas importadas.`}
             </p>
             {result.debug && (
               <p className="text-xs text-foreground-muted mt-2">
