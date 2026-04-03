@@ -54,44 +54,40 @@ function parseMDB(buffer: Buffer): MDBData {
   const reader = new MDBReader(buffer)
   const tableNames = reader.getTableNames()
 
-  const readTable = (name: string): Record<string, any>[] => {
-    if (!tableNames.includes(name)) return []
-    try { return reader.getTable(name).getData() as Record<string, any>[] } catch { return [] }
-  }
-
-  // Build raw tables map
+  // Build raw tables map — single read per table, reused throughout
   const rawTables: Record<string, Record<string, any>[]> = {}
   for (const name of tableNames) {
     try { rawTables[name] = reader.getTable(name).getData() as Record<string, any>[] } catch { rawTables[name] = [] }
   }
+  const t = (name: string) => rawTables[name] ?? []
 
-  // Lookup maps
+  // Lookup maps (use already-loaded rawTables — no second read)
   const brandMap: Record<number, string> = {}
-  readTable('tbFabricantes').forEach((r: any) => {
+  t('tbFabricantes').forEach((r: any) => {
     if (r.fabID !== undefined && r.fabNome) brandMap[r.fabID] = String(r.fabNome)
   })
 
   const fuelMap: Record<number, string> = {}
-  readTable('tbCombustivel').forEach((r: any) => {
+  t('tbCombustivel').forEach((r: any) => {
     if (r.gazID !== undefined && r.gazDescri) fuelMap[r.gazID] = String(r.gazDescri)
   })
 
   const planMap: Record<number, string> = {}
-  readTable('tbPlanoContas').forEach((r: any) => {
+  t('tbPlanoContas').forEach((r: any) => {
     if (r.plaID !== undefined && r.PlaNome) planMap[r.plaID] = String(r.PlaNome)
   })
 
   const purchaseMap: Record<number, { date: any; km: any; valor: any }> = {}
-  readTable('tbDadosCompra').forEach((r: any) => {
+  t('tbDadosCompra').forEach((r: any) => {
     if (r.carID) purchaseMap[r.carID] = { date: r.cData, km: r.cKM, valor: r.cValor }
   })
 
   const saleMap: Record<number, { date: any; km: any; valor: any; cliID: any }> = {}
-  readTable('tbDadosVenda').forEach((r: any) => {
+  t('tbDadosVenda').forEach((r: any) => {
     if (r.carID) saleMap[r.carID] = { date: r.vData, km: r.vKM, valor: r.vValorVenda, cliID: r.cliID }
   })
 
-  const rawVehicles = readTable('tbVeiculo')
+  const rawVehicles = t('tbVeiculo')
   const vehicleRows = rawVehicles.map(r => ({
     ...r,
     _brand: r.fabID !== undefined ? (brandMap[r.fabID] ?? null) : null,
@@ -101,7 +97,7 @@ function parseMDB(buffer: Buffer): MDBData {
   }))
 
   const EXCLUDE_PLANS = ['VEICULO', 'VEÍCULO', 'COMPRA', 'VENDA']
-  const expenseRows = readTable('tbMovimento')
+  const expenseRows = t('tbMovimento')
     .filter((r: any) => {
       if (!r.carReferencia || r.carReferencia === 0) return false
       if (parseNum(r.movValor) <= 0) return false
@@ -275,9 +271,9 @@ export async function POST(req: NextRequest) {
   const errors: string[] = []
   const counts: Record<string, number> = {}
   const isMdb = file.name.toLowerCase().endsWith('.mdb') || file.name.toLowerCase().endsWith('.accdb')
+  let mdbData: MDBData | null = null
 
   if (isMdb) {
-    let mdbData: MDBData
     try {
       mdbData = parseMDB(buffer)
     } catch (e: any) {
@@ -286,7 +282,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: errors[0] }, { status: 400 })
     }
 
-    const { rawTables } = mdbData
+    const { rawTables } = mdbData!
 
     // ── Step 1: Lookup / reference tables (no FK deps) ────────────────────────
 
@@ -819,6 +815,13 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({
     import_id: (importRecord as any).id,
+    // Legacy fields the import UI reads
+    vehicles_imported: counts.vehicles ?? 0,
+    expenses_imported: counts.expenses ?? 0,
+    records_imported: totalImported,
+    total_rows_parsed: mdbData?.vehicleRows.length ?? 0,
+    vehicles_mapped: counts.vehicles ?? 0,
+    // Full breakdown
     counts,
     total_imported: totalImported,
     errors,
