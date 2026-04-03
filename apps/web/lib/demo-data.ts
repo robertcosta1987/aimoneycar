@@ -527,7 +527,7 @@ export function getExpenseAnalysis(): ExpenseCategory[] {
       total: data.total,
       count: data.count,
       average: Math.round(data.total / data.count),
-      trend: category === 'Despachante' ? 'up' : 'stable' as const,
+      trend: (category === 'Despachante' ? 'up' : 'stable') as 'up' | 'down' | 'stable',
     }))
     .sort((a, b) => b.total - a.total);
 }
