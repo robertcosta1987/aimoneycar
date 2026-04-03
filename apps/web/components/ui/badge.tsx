@@ -14,6 +14,7 @@ const badgeVariants = cva(
         warning: 'bg-warning/20 text-warning border border-warning/30',
         gold: 'bg-secondary/20 text-secondary border border-secondary/30',
         outline: 'border border-border text-foreground-muted',
+        ai: 'bg-violet-500/20 text-violet-400 border border-violet-500/30',
       },
     },
     defaultVariants: {
