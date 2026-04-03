@@ -61,7 +61,7 @@ export default function ImportarPage() {
           parsed: data.total_rows_parsed || 0,
           errors: data.errors || [],
           sample: data.sample,
-          debug: { ...data.debug, expenses_imported: data.expenses_imported || 0 },
+          debug: { ...data.debug, expenses_imported: data.expenses_imported || 0, vehicles_mapped: data.vehicles_mapped || 0 },
         })
         setState('done')
         setProgress(100)
@@ -169,7 +169,8 @@ export default function ImportarPage() {
               <p className="font-semibold text-success">Importação concluída!</p>
             </div>
             <p className="text-sm text-foreground-muted">
-              {result.imported} veículos importados de {result.parsed} linhas lidas.
+              {result.imported} veículos importados de {result.parsed} linhas lidas
+              {(result.debug?.vehicles_mapped ?? 0) > 0 && result.debug!.vehicles_mapped !== result.imported && ` (${result.debug!.vehicles_mapped} mapeados)`}.
               {(result.debug?.expenses_imported ?? 0) > 0 && ` · ${result.debug!.expenses_imported} despesas importadas.`}
             </p>
             {result.debug && (

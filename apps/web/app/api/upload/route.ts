@@ -203,6 +203,7 @@ function mapExpenseRow(
 
   return {
     dealership_id: dealershipId,
+    external_id: String(row.movID ?? ''),
     vehicle_id: vehicleUUID,
     category: String(row._planName ?? 'Outros').toUpperCase().trim(),
     description: row.movDescri ? String(row.movDescri).slice(0, 255) : null,
@@ -283,6 +284,7 @@ export async function POST(req: NextRequest) {
   }
 
   let vehiclesImported = 0
+  let vehiclesMapped = 0
   let expensesImported = 0
   const sampleMapped: Record<string, any>[] = []
 
@@ -292,6 +294,7 @@ export async function POST(req: NextRequest) {
       .map(r => mapVehicleRow(r, dealershipId))
       .filter((r): r is Record<string, any> => r !== null)
 
+    vehiclesMapped = mapped.length
     sampleMapped.push(...mapped.slice(0, 3))
 
     if (mapped.length > 0) {
@@ -302,7 +305,7 @@ export async function POST(req: NextRequest) {
           .upsert(chunk, { onConflict: 'dealership_id,external_id', ignoreDuplicates: false })
           .select('id')
         if (insertErr) errors.push(`Veículos batch ${i / 100 + 1}: ${insertErr.message}`)
-        else vehiclesImported += inserted?.length ?? 0
+        else vehiclesImported += chunk.length
       }
 
       try { await svc.rpc('refresh_days_in_stock', { d_id: dealershipId }) } catch { /* may not exist */ }
@@ -328,21 +331,34 @@ export async function POST(req: NextRequest) {
       .filter((r): r is Record<string, any> => r !== null)
 
     if (mappedExpenses.length > 0) {
-      // Only import if no expenses exist yet for this dealership
-      const { count } = await svc
-        .from('expenses')
-        .select('id', { count: 'exact', head: true })
-        .eq('dealership_id', dealershipId)
+      // Filter to expenses that have an external_id (movID) so we can upsert safely
+      const withId = mappedExpenses.filter(e => e.external_id)
+      const withoutId = mappedExpenses.filter(e => !e.external_id)
 
-      if ((count ?? 0) === 0) {
-        for (let i = 0; i < mappedExpenses.length; i += 100) {
-          const chunk = mappedExpenses.slice(i, i + 100)
-          const { data: inserted, error: expErr } = await svc
-            .from('expenses')
-            .insert(chunk as any)
-            .select('id')
-          if (expErr) errors.push(`Despesas batch ${i / 100 + 1}: ${expErr.message}`)
-          else expensesImported += inserted?.length ?? 0
+      for (let i = 0; i < withId.length; i += 100) {
+        const chunk = withId.slice(i, i + 100)
+        const { error: expErr } = await svc
+          .from('expenses')
+          .upsert(chunk as any, { onConflict: 'dealership_id,external_id', ignoreDuplicates: false })
+        if (expErr) errors.push(`Despesas batch ${i / 100 + 1}: ${expErr.message}`)
+        else expensesImported += chunk.length
+      }
+
+      // For expenses without movID, only insert if none exist yet
+      if (withoutId.length > 0) {
+        const { count } = await svc
+          .from('expenses')
+          .select('id', { count: 'exact', head: true })
+          .eq('dealership_id', dealershipId)
+        if ((count ?? 0) === 0) {
+          for (let i = 0; i < withoutId.length; i += 100) {
+            const chunk = withoutId.slice(i, i + 100)
+            const { error: expErr } = await svc
+              .from('expenses')
+              .insert(chunk as any)
+            if (expErr) errors.push(`Despesas (sem ID) batch ${i / 100 + 1}: ${expErr.message}`)
+            else expensesImported += chunk.length
+          }
         }
       }
     }
@@ -361,6 +377,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     import_id: (importRecord as any).id,
     vehicles_imported: vehiclesImported,
+    vehicles_mapped: vehiclesMapped,
     expenses_imported: expensesImported,
     total_rows_parsed: vehicleRawRows.length,
     errors,
