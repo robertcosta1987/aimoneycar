@@ -35,17 +35,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: dealErr.message }, { status: 400 })
     }
 
-    // Create user record linked to dealership
-    const { error: userErr } = await supabase.from('users').insert({
+    // Upsert user record — handles both new users and existing users missing a dealership
+    const { error: userErr } = await supabase.from('users').upsert({
       id: userId,
       dealership_id: (dealership as any).id,
       name,
       email,
       role: 'owner',
-    } as any)
+    } as any, { onConflict: 'id' })
 
     if (userErr) {
-      console.error('User insert error:', userErr)
+      console.error('User upsert error:', userErr)
       // Roll back dealership
       await supabase.from('dealerships').delete().eq('id', (dealership as any).id)
       return NextResponse.json({ error: userErr.message }, { status: 400 })
