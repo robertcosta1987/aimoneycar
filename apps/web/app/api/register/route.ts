@@ -23,6 +23,7 @@ export async function POST(req: NextRequest) {
       .replace(/[\u0300-\u036f]/g, '')
       .replace(/\s+/g, '-')
       .replace(/[^a-z0-9-]/g, '')
+      + '-' + Date.now().toString(36)  // ensure uniqueness
 
     const { data: dealership, error: dealErr } = await supabase
       .from('dealerships')
@@ -35,23 +36,43 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: dealErr.message }, { status: 400 })
     }
 
-    // Upsert user record — handles both new users and existing users missing a dealership
-    const { error: userErr } = await supabase.from('users').upsert({
-      id: userId,
-      dealership_id: (dealership as any).id,
-      name,
-      email,
-      role: 'owner',
-    } as any, { onConflict: 'id' })
+    const dealershipId = (dealership as any).id
+
+    // Check if user record already exists
+    const { data: existingUser } = await supabase
+      .from('users')
+      .select('id')
+      .eq('id', userId)
+      .single()
+
+    let userErr: any = null
+
+    if (existingUser) {
+      // User exists — just update the dealership_id
+      const { error } = await supabase
+        .from('users')
+        .update({ dealership_id: dealershipId } as any)
+        .eq('id', userId)
+      userErr = error
+    } else {
+      // New user — insert full record
+      const { error } = await supabase.from('users').insert({
+        id: userId,
+        dealership_id: dealershipId,
+        name,
+        email,
+        role: 'owner',
+      } as any)
+      userErr = error
+    }
 
     if (userErr) {
-      console.error('User upsert error:', userErr)
-      // Roll back dealership
-      await supabase.from('dealerships').delete().eq('id', (dealership as any).id)
+      console.error('User write error:', userErr)
+      await supabase.from('dealerships').delete().eq('id', dealershipId)
       return NextResponse.json({ error: userErr.message }, { status: 400 })
     }
 
-    return NextResponse.json({ dealershipId: (dealership as any).id })
+    return NextResponse.json({ dealershipId })
   } catch (err) {
     console.error('Register API error:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
