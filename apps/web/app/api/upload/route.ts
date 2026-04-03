@@ -24,12 +24,23 @@ function parseYear(v: any, fallback = new Date().getFullYear()): number {
 
 function parseDate(v: any): string | null {
   if (!v) return null
-  if (v instanceof Date) return isNaN(v.getTime()) ? null : v.toISOString().split('T')[0]
+  if (v instanceof Date) {
+    // MS Access stores empty dates as 1899-12-30 (day 0). Reject anything before 1990.
+    if (isNaN(v.getTime()) || v.getFullYear() < 1990) return null
+    return v.toISOString().split('T')[0]
+  }
   const s = String(v).trim()
   if (!s || s === 'null') return null
   const br = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
-  if (br) return `${br[3]}-${br[2].padStart(2,'0')}-${br[1].padStart(2,'0')}`
-  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10)
+  if (br) {
+    const year = parseInt(br[3])
+    if (year < 1990) return null
+    return `${br[3]}-${br[2].padStart(2,'0')}-${br[1].padStart(2,'0')}`
+  }
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+    if (parseInt(s.slice(0, 4)) < 1990) return null
+    return s.slice(0, 10)
+  }
   return null
 }
 
@@ -207,8 +218,9 @@ function parseMDB(buffer: Buffer): ParsedMDB {
 
   // Detect date columns in first row for purchase date fallback
   const firstRow = rawVehicles[0] ?? {}
+  // Only include date columns with real dates (reject Access null date 1899-12-30 and pre-1990)
   const dateCols = Object.entries(firstRow)
-    .filter(([, v]) => v instanceof Date && !isNaN((v as Date).getTime()))
+    .filter(([, v]) => v instanceof Date && !isNaN((v as Date).getTime()) && (v as Date).getFullYear() >= 1990)
     .map(([k]) => k)
 
   // Enrich vehicle rows with resolved lookups
@@ -219,13 +231,14 @@ function parseMDB(buffer: Buffer): ParsedMDB {
       return d instanceof Date && !isNaN(d.getTime()) ? d : null
     }, null)
 
+    const isValidDate = (d: any) => d instanceof Date && !isNaN(d.getTime()) && d.getFullYear() >= 1990
     return {
       ...r,
       _brandName: r['fabID'] !== undefined ? (brandMap[r['fabID']] ?? null) : null,
       _modelName: r['modID'] !== undefined ? (modelMap[r['modID']] ?? null) : null,
       _fuelName: r['gazID'] !== undefined ? (fuelMap[r['gazID']] ?? null) : null,
-      _purchaseDate: r['DATA_COMPRA'] instanceof Date ? r['DATA_COMPRA']
-        : r['carCertificadoData'] instanceof Date ? r['carCertificadoData']
+      _purchaseDate: isValidDate(r['DATA_COMPRA']) ? r['DATA_COMPRA']
+        : isValidDate(r['carCertificadoData']) ? r['carCertificadoData']
         : purchaseDateHint,
     }
   })
