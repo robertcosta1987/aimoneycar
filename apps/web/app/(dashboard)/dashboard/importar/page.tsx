@@ -54,7 +54,7 @@ export default function ImportarPage() {
       }
     } catch (err: any) {
       setState('error')
-      setResult({ imported: 0, errors: [err.message] })
+      setResult({ imported: 0, parsed: 0, errors: [err.message] })
     }
   }
 
