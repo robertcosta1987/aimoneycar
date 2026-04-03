@@ -34,28 +34,24 @@ export default function RegisterPage() {
       return
     }
 
-    // Create dealership
-    const slug = form.dealershipName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
-    const { data: dealership, error: dealErr } = await supabase
-      .from('dealerships')
-      .insert({ name: form.dealershipName, slug } as any)
-      .select()
-      .single()
+    // Create dealership + user record via server API (bypasses RLS)
+    const res = await fetch('/api/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: authData.user.id,
+        name: form.name,
+        email: form.email,
+        dealershipName: form.dealershipName,
+      }),
+    })
 
-    if (dealErr) {
-      setError('Erro ao criar revenda. Tente outro nome.')
+    if (!res.ok) {
+      const { error } = await res.json()
+      setError(error || 'Erro ao criar revenda. Tente outro nome.')
       setLoading(false)
       return
     }
-
-    // Create user record
-    await supabase.from('users').insert({
-      id: authData.user.id,
-      dealership_id: (dealership as any).id,
-      name: form.name,
-      email: form.email,
-      role: 'owner',
-    } as any)
 
     router.push('/dashboard')
   }

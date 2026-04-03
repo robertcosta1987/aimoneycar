@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { Save, Bell, MessageSquare, User, Building } from 'lucide-react'
+import { Save, Building } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -9,14 +9,25 @@ import { Label } from '@/components/ui/label'
 
 export default function ConfigPage() {
   const [form, setForm] = useState({ name: '', phone: '', whatsapp: '', city: '', state: '' })
+  const [dealershipId, setDealershipId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  const supabase = createClient()
+  const [status, setStatus] = useState('')
 
   useEffect(() => {
     const load = async () => {
-      const { data: userData } = await supabase.from('users').select('dealership:dealerships(*)').single()
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { data: userData } = await supabase
+        .from('users')
+        .select('dealership_id, dealership:dealerships(id, name, phone, whatsapp, city, state)')
+        .eq('id', user.id)
+        .single()
+
       const dealership = userData?.dealership as any
       if (dealership) {
+        setDealershipId(dealership.id)
         setForm({
           name: dealership.name || '',
           phone: dealership.phone || '',
@@ -30,10 +41,14 @@ export default function ConfigPage() {
   }, [])
 
   const save = async () => {
+    if (!dealershipId) return
     setSaving(true)
-    const { data: userData } = await supabase.from('users').select('dealership_id').single()
-    await supabase.from('dealerships').update(form).eq('id', userData?.dealership_id)
+    setStatus('')
+    const supabase = createClient()
+    const { error } = await supabase.from('dealerships').update(form).eq('id', dealershipId)
     setSaving(false)
+    setStatus(error ? 'Erro ao salvar.' : 'Salvo com sucesso!')
+    setTimeout(() => setStatus(''), 3000)
   }
 
   return (
@@ -44,7 +59,12 @@ export default function ConfigPage() {
       </div>
 
       <Card>
-        <CardHeader><CardTitle className="text-base flex items-center gap-2"><Building className="w-4 h-4 text-primary" />Dados da Revenda</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Building className="w-4 h-4 text-primary" />
+            Dados da Revenda
+          </CardTitle>
+        </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label>Nome da Revenda</Label>
@@ -67,10 +87,11 @@ export default function ConfigPage() {
             </div>
             <div className="space-y-2">
               <Label>Estado</Label>
-              <Input value={form.state} onChange={e => setForm(f => ({ ...f, state: e.target.value }))} maxLength={2} />
+              <Input value={form.state} onChange={e => setForm(f => ({ ...f, state: e.target.value }))} maxLength={2} placeholder="SP" />
             </div>
           </div>
-          <Button onClick={save} disabled={saving} className="gap-2">
+          {status && <p className={`text-sm ${status.includes('Erro') ? 'text-danger' : 'text-success'}`}>{status}</p>}
+          <Button onClick={save} disabled={saving || !dealershipId} className="gap-2">
             <Save className="w-4 h-4" />
             {saving ? 'Salvando...' : 'Salvar'}
           </Button>
