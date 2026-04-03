@@ -17,8 +17,7 @@ import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { formatCurrency, formatPercent } from '@/lib/utils'
 import { getDashboardStats, demoSales, demoVehicles, expensesByCategory } from '@/lib/demo-data'
-import { SalesChart } from '@/components/dashboard/sales-chart'
-import { StockChart } from '@/components/dashboard/stock-chart'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
 export default function RelatoriosPage() {
   const stats = getDashboardStats()
@@ -123,7 +122,16 @@ export default function RelatoriosPage() {
               <CardTitle>Evolução de Vendas</CardTitle>
             </CardHeader>
             <CardContent>
-              <SalesChart />
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={demoSales.map(s => ({ name: s.vehicle.split(' ').slice(0,2).join(' '), lucro: s.profit, receita: s.salePrice }))}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
+                  <Tooltip formatter={(v: number) => formatCurrency(v)} />
+                  <Bar dataKey="receita" fill="#00D9FF" name="Receita" radius={[4,4,0,0]} />
+                  <Bar dataKey="lucro" fill="#FFB800" name="Lucro" radius={[4,4,0,0]} />
+                </BarChart>
+              </ResponsiveContainer>
             </CardContent>
           </Card>
 
@@ -163,7 +171,20 @@ export default function RelatoriosPage() {
               <CardTitle>Distribuição por Tempo em Estoque</CardTitle>
             </CardHeader>
             <CardContent>
-              <StockChart />
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={[
+                  { range: '0-15 dias', count: demoVehicles.filter(v => v.daysInStock <= 15 && v.status === 'available').length },
+                  { range: '16-30 dias', count: demoVehicles.filter(v => v.daysInStock > 15 && v.daysInStock <= 30 && v.status === 'available').length },
+                  { range: '31-60 dias', count: demoVehicles.filter(v => v.daysInStock > 30 && v.daysInStock <= 60 && v.status === 'available').length },
+                  { range: '+60 dias', count: demoVehicles.filter(v => v.daysInStock > 60 && v.status === 'available').length },
+                ]}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                  <XAxis dataKey="range" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} allowDecimals={false} />
+                  <Tooltip />
+                  <Bar dataKey="count" fill="#00D9FF" name="Veículos" radius={[4,4,0,0]} />
+                </BarChart>
+              </ResponsiveContainer>
             </CardContent>
           </Card>
 
