@@ -36,14 +36,14 @@ function getAIResponse(question: string): string {
   }
 
   if (q.includes('lucro') || q.includes('margem') || q.includes('ganho')) {
-    return `📊 **Resumo Financeiro do Mês**\n\n• Faturamento: ${formatCurrency(stats.monthlyRevenue)}\n• Lucro líquido: ${formatCurrency(stats.monthlyProfit)}\n• Margem média: ${formatPercent(stats.avgMargin)}\n• Total em despesas: ${formatCurrency(stats.totalExpenses)}\n\n**Por veículo vendido:**\n• Lucro médio: ${formatCurrency(stats.monthlyProfit / stats.soldThisMonth)}\n\n💡 Sua margem está saudável! Para melhorar, foque em veículos populares que giram rápido.`
+    return `📊 **Resumo Financeiro do Mês**\n\n• Faturamento: ${formatCurrency(stats.monthlyRevenue)}\n• Lucro líquido: ${formatCurrency(stats.monthlyProfit)}\n• Margem média: ${formatPercent(stats.averageMargin)}\n• Total em despesas: ${formatCurrency(stats.totalInventoryValue)}\n\n**Por veículo vendido:**\n• Lucro médio: ${formatCurrency(stats.monthlyProfit / stats.soldThisMonth)}\n\n💡 Sua margem está saudável! Para melhorar, foque em veículos populares que giram rápido.`
   }
 
   if (q.includes('parado') || q.includes('tempo') || q.includes('estoque')) {
     const available = demoVehicles.filter((v) => v.status === 'available')
     const critical = available.filter((v) => v.daysInStock > 60)
 
-    return `📦 **Análise de Tempo em Estoque**\n\n• Total em estoque: ${available.length} veículos\n• Tempo médio: ${stats.avgDaysInStock} dias\n\n🔴 **Críticos (+60 dias):** ${critical.length} veículos\n${critical.map((v) => `   • ${v.brand} ${v.model} - ${v.daysInStock} dias`).join('\n')}\n\n💡 Esses veículos estão custando ~${formatCurrency(critical.length * 50 * 30)}/mês em custo de oportunidade.`
+    return `📦 **Análise de Tempo em Estoque**\n\n• Total em estoque: ${available.length} veículos\n• Tempo médio: ${stats.averageDaysInStock} dias\n\n🔴 **Críticos (+60 dias):** ${critical.length} veículos\n${critical.map((v) => `   • ${v.brand} ${v.model} - ${v.daysInStock} dias`).join('\n')}\n\n💡 Esses veículos estão custando ~${formatCurrency(critical.length * 50 * 30)}/mês em custo de oportunidade.`
   }
 
   if (q.includes('despesa') || q.includes('gasto') || q.includes('despachante')) {
@@ -60,7 +60,7 @@ function getAIResponse(question: string): string {
   }
 
   if (q.includes('resumo') || q.includes('como') || q.includes('está')) {
-    return `📊 **Resumo da Sua Revenda**\n\n**Estoque:**\n• ${stats.availableVehicles} veículos disponíveis\n• ${stats.criticalVehicles} precisam de atenção\n• Tempo médio: ${stats.avgDaysInStock} dias\n\n**Financeiro (mês):**\n• Vendas: ${stats.soldThisMonth} veículos\n• Faturamento: ${formatCurrency(stats.monthlyRevenue)}\n• Lucro: ${formatCurrency(stats.monthlyProfit)}\n• Margem: ${formatPercent(stats.avgMargin)}\n\n💡 Performance boa! Foque nos ${stats.criticalVehicles} veículos críticos.`
+    return `📊 **Resumo da Sua Revenda**\n\n**Estoque:**\n• ${stats.availableVehicles} veículos disponíveis\n• ${demoVehicles.filter(v => v.daysInStock > 60 && v.status === 'available').length} precisam de atenção\n• Tempo médio: ${stats.averageDaysInStock} dias\n\n**Financeiro (mês):**\n• Vendas: ${stats.soldThisMonth} veículos\n• Faturamento: ${formatCurrency(stats.monthlyRevenue)}\n• Lucro: ${formatCurrency(stats.monthlyProfit)}\n• Margem: ${formatPercent(stats.averageMargin)}\n\n💡 Performance boa! Foque nos ${demoVehicles.filter(v => v.daysInStock > 60 && v.status === 'available').length} veículos críticos.`
   }
 
   return `Entendi sua pergunta! Posso te ajudar com:\n\n• **"Quais carros devo baixar o preço?"**\n• **"Qual foi meu lucro esse mês?"**\n• **"Quanto gastei com despachante?"**\n• **"Quais veículos estão parados?"**\n• **"O que devo comprar?"**\n• **"Como está minha revenda?"**\n\nTente uma dessas!`

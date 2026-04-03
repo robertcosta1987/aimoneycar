@@ -101,7 +101,7 @@ export default function RelatoriosPage() {
         <Card>
           <CardContent className="p-4">
             <p className="text-sm text-muted-foreground">Tempo Médio Estoque</p>
-            <p className="text-2xl font-bold">{stats.avgDaysInStock} dias</p>
+            <p className="text-2xl font-bold">{stats.averageDaysInStock} dias</p>
             <Badge variant="warning" className="mt-1">Meta: 30 dias</Badge>
           </CardContent>
         </Card>
@@ -264,14 +264,14 @@ export default function RelatoriosPage() {
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <Card>
               <CardContent className="p-4 text-center">
-                <p className="text-4xl font-bold text-green-600">{formatPercent(stats.avgMargin)}</p>
+                <p className="text-4xl font-bold text-green-600">{formatPercent(stats.averageMargin)}</p>
                 <p className="text-sm text-muted-foreground mt-1">Margem Média</p>
                 <Badge variant="success" className="mt-2">Acima da meta</Badge>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4 text-center">
-                <p className="text-4xl font-bold">{stats.avgDaysInStock}</p>
+                <p className="text-4xl font-bold">{stats.averageDaysInStock}</p>
                 <p className="text-sm text-muted-foreground mt-1">Dias em Estoque</p>
                 <Badge variant="warning" className="mt-2">Meta: 30 dias</Badge>
               </CardContent>
@@ -300,14 +300,14 @@ export default function RelatoriosPage() {
               <div className="p-4 rounded-lg bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800">
                 <p className="font-medium">💡 Foque nos veículos críticos</p>
                 <p className="text-sm text-muted-foreground mt-1">
-                  {stats.criticalVehicles} veículos estão há mais de 60 dias. 
+                  {demoVehicles.filter(v => v.daysInStock > 60 && v.status === 'available').length} veículos estão há mais de 60 dias. 
                   Baixar 5% no preço pode acelerar as vendas e liberar capital.
                 </p>
               </div>
               <div className="p-4 rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800">
                 <p className="font-medium">📈 Sua margem está ótima</p>
                 <p className="text-sm text-muted-foreground mt-1">
-                  {formatPercent(stats.avgMargin)} está acima da média do mercado (12%). 
+                  {formatPercent(stats.averageMargin)} está acima da média do mercado (12%). 
                   Continue priorizando qualidade sobre volume.
                 </p>
               </div>
