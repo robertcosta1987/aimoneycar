@@ -220,7 +220,7 @@ export default function DespesasPage() {
                   </div>
                   <div className="text-right">
                     <p className="font-medium text-red-600">
-                      -{formatCurrency(expense.amount)}
+                      -{formatCurrency(expense.value)}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {expense.vendor}
