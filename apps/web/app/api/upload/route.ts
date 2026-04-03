@@ -12,7 +12,7 @@ function mapRow(row: Record<string, any>, dealershipId: string): Record<string, 
     return undefined
   }
 
-  // _brandName/_modelName are injected by parseMDB after joining lookup tables
+  // _brandName/_modelName/_fuelName are injected by parseMDB after joining lookup tables
   const brand = get('_brandName', 'marca', 'Marca', 'brand', 'MARCA', 'fabricante', 'Fabricante', 'FABRICANTE', 'NomeFabricante', 'nomefabricante')
   // carDescri holds the model/version description in tbVeiculo
   const model = get('_modelName', 'carDescri', 'modelo', 'Modelo', 'model', 'MODELO', 'NomeModelo', 'nomemodelo')
@@ -30,16 +30,20 @@ function mapRow(row: Record<string, any>, dealershipId: string): Record<string, 
     return isNaN(n) ? 0 : n
   }
 
-  const parseDate = (v: any): string => {
-    if (!v) return new Date().toISOString().split('T')[0]
-    if (v instanceof Date) return v.toISOString().split('T')[0]
-    const s = String(v)
+  const parseDate = (v: any): string | null => {
+    if (!v) return null
+    if (v instanceof Date) {
+      if (isNaN(v.getTime())) return null
+      return v.toISOString().split('T')[0]
+    }
+    const s = String(v).trim()
+    if (!s || s === 'null' || s === 'undefined') return null
     // Try dd/mm/yyyy
     const br = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
     if (br) return `${br[3]}-${br[2].padStart(2,'0')}-${br[1].padStart(2,'0')}`
     // Try yyyy-mm-dd
     if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10)
-    return new Date().toISOString().split('T')[0]
+    return null
   }
 
   // tbVeiculo uses carAno/carAnoModelo; fallback to generic names for CSV
@@ -51,8 +55,14 @@ function mapRow(row: Record<string, any>, dealershipId: string): Record<string, 
   const plate = get('carPlaca', 'placa', 'Placa', 'plate', 'PLACA')
   const externalId = get('carID', 'carid', 'CarId', 'IDCarro', 'idcarro', 'id', 'ID', 'codigo', 'Codigo', 'CODIGO', 'external_id')
 
-  // version: for CSV use versao; for MDB carDescri is already used as model, so skip double-assigning
+  // version: for CSV use versao; for MDB carDescri is the model so skip re-assigning
   const version = get('versao', 'Versao', 'Versão', 'version', 'VERSAO', 'complemento', 'Complemento', 'descricao', 'Descricao') ?? null
+
+  // Purchase date: try all date fields. carCertificadoData = DUT/CRV transfer date (best proxy)
+  // Fallback: Jan of car's year_fab — at least gives different ages per car rather than all = today
+  const rawDate = get('_purchaseDate', 'carCertificadoData', 'carDataEntrada', 'datacompra',
+    'DataCompra', 'data_compra', 'dataentrada', 'DataEntrada', 'purchase_date', 'DATA_COMPRA')
+  const purchaseDate = parseDate(rawDate) ?? `${year}-01-01`
 
   return {
     dealership_id: dealershipId,
@@ -63,12 +73,12 @@ function mapRow(row: Record<string, any>, dealershipId: string): Record<string, 
     year_fab: year,
     year_model: yearModel,
     color: get('carCor', 'cor', 'Cor', 'color', 'COR', 'Cores') ?? null,
-    mileage: parseNum(get('carKm', 'km', 'Km', 'KM', 'quilometragem', 'Quilometragem', 'odometro', 'Odometro', 'mileage')),
+    mileage: parseNum(get('carKm', 'carQuilometragem', 'km', 'Km', 'KM', 'quilometragem', 'Quilometragem', 'odometro', 'Odometro', 'mileage')),
     fuel: get('_fuelName', 'combustivel', 'Combustivel', 'Combustível', 'fuel', 'COMBUSTIVEL', 'TipoCombustivel') ?? null,
     transmission: get('carCambio', 'cambio', 'Cambio', 'Câmbio', 'transmissao', 'Transmissao', 'transmission', 'CAMBIO', 'TipoCambio') ?? null,
     purchase_price: parseNum(get('carValorCompra', 'valorcompra', 'ValorCompra', 'valor_compra', 'custocompra', 'CustoCompra', 'custo', 'Custo', 'CUSTO', 'purchase_price', 'precoCusto', 'PrecoCusto')),
     sale_price: parseNum(get('carValorWeb', 'carValorTabela', 'valorvenda', 'ValorVenda', 'valor_venda', 'precovenda', 'PrecoVenda', 'sale_price', 'VALORVENDA', 'preco', 'Preco')) || null,
-    purchase_date: parseDate(get('carCertificadoData', 'datacompra', 'DataCompra', 'data_compra', 'dataentrada', 'DataEntrada', 'purchase_date', 'DATA_COMPRA')),
+    purchase_date: purchaseDate,
     status: 'available' as const,
     source: 'import',
     photos: [],
@@ -94,7 +104,14 @@ function parseCSV(text: string): Record<string, any>[] {
   }).filter(row => Object.values(row).some(v => v !== ''))
 }
 
-function parseMDB(buffer: Buffer): { rows: Record<string, any>[]; tableNames: string[]; targetTable: string } {
+function parseMDB(buffer: Buffer): {
+  rows: Record<string, any>[]
+  tableNames: string[]
+  targetTable: string
+  brandMapSize: number
+  modelMapSize: number
+  fuelMapSize: number
+} {
   const reader = new MDBReader(buffer)
   const tableNames = reader.getTableNames()
 
@@ -107,54 +124,80 @@ function parseMDB(buffer: Buffer): { rows: Record<string, any>[]; tableNames: st
     tableNames.find(t => !t.startsWith('MSys')) ??
     tableNames[0]
 
-  if (!targetTable) return { rows: [], tableNames, targetTable: '' }
+  if (!targetTable) return { rows: [], tableNames, targetTable: '', brandMapSize: 0, modelMapSize: 0, fuelMapSize: 0 }
 
   const rows = reader.getTable(targetTable).getData() as Record<string, any>[]
 
-  // Build brand lookup from tbFabricantes: { fabID -> fabNome }
+  // Build brand lookup: try both tbFabricante and tbFabricantes
   const brandMap: Record<string | number, string> = {}
-  if (tableNames.includes('tbFabricantes')) {
-    const fabRows = reader.getTable('tbFabricantes').getData() as Record<string, any>[]
+  const brandTable = tableNames.find(t => /^tbFabricante/i.test(t))
+  if (brandTable) {
+    const fabRows = reader.getTable(brandTable).getData() as Record<string, any>[]
     fabRows.forEach(r => {
       const id = r['fabID'] ?? r['id']
-      const name = r['fabNome'] ?? r['fabDescri'] ?? r['Nome'] ?? r['Descri']
-      if (id !== undefined && name) brandMap[id] = String(name)
+      const name = r['fabNome'] ?? r['fabDescri'] ?? r['Nome'] ?? r['Descri'] ?? r['nome'] ?? r['descri']
+      if (id !== undefined && id !== null && name) brandMap[id] = String(name)
     })
   }
 
-  // Build model lookup from tbModelos if it exists
+  // Build model lookup from tbModelo(s) if it exists
   const modelMap: Record<string | number, string> = {}
-  const modelTable = tableNames.find(t => t.toLowerCase().includes('modelo'))
+  const modelTable = tableNames.find(t => /modelo/i.test(t))
   if (modelTable) {
     const modRows = reader.getTable(modelTable).getData() as Record<string, any>[]
     modRows.forEach(r => {
       const id = r['modID'] ?? r['id']
-      const name = r['modNome'] ?? r['modDescri'] ?? r['Nome'] ?? r['Descri']
-      if (id !== undefined && name) modelMap[id] = String(name)
+      const name = r['modNome'] ?? r['modDescri'] ?? r['Nome'] ?? r['Descri'] ?? r['nome'] ?? r['descri']
+      if (id !== undefined && id !== null && name) modelMap[id] = String(name)
     })
   }
 
-  // Build fuel lookup from tbCombustivel or similar: { gazID -> gazNome }
+  // Build fuel lookup from tbCombustivel / tbGasolina / tbGaz
   const fuelMap: Record<string | number, string> = {}
-  const fuelTable = tableNames.find(t => /combustivel|combust|gaz/i.test(t))
+  const fuelTable = tableNames.find(t => /combustivel|combust|gasolina|tbgaz/i.test(t))
   if (fuelTable) {
     const fuelRows = reader.getTable(fuelTable).getData() as Record<string, any>[]
     fuelRows.forEach(r => {
       const id = r['gazID'] ?? r['combID'] ?? r['id']
-      const name = r['gazNome'] ?? r['combNome'] ?? r['gazDescri'] ?? r['Nome'] ?? r['Descri']
-      if (id !== undefined && name) fuelMap[id] = String(name)
+      const name = r['gazNome'] ?? r['combNome'] ?? r['gazDescri'] ?? r['Nome'] ?? r['Descri'] ?? r['nome'] ?? r['descri']
+      if (id !== undefined && id !== null && name) fuelMap[id] = String(name)
     })
   }
 
-  // Enrich each vehicle row with resolved brand/model/fuel names
-  const enriched = rows.map(r => ({
-    ...r,
-    _brandName: r['fabID'] !== undefined ? (brandMap[r['fabID']] ?? null) : null,
-    _modelName: r['modID'] !== undefined ? (modelMap[r['modID']] ?? null) : null,
-    _fuelName: r['gazID'] !== undefined ? (fuelMap[r['gazID']] ?? null) : null,
-  }))
+  // Find the best available date field across all rows (scan first row's keys for Date objects)
+  const firstRow = rows[0] ?? {}
+  const dateCols = Object.entries(firstRow)
+    .filter(([, v]) => v instanceof Date && !isNaN((v as Date).getTime()))
+    .map(([k]) => k)
 
-  return { rows: enriched, tableNames, targetTable }
+  // Enrich each vehicle row
+  const enriched = rows.map(r => {
+    // Pick first available real date as purchase date hint
+    const purchaseDateHint = dateCols.reduce<Date | null>((found, col) => {
+      if (found) return found
+      const d = r[col]
+      if (d instanceof Date && !isNaN(d.getTime())) return d
+      return null
+    }, null)
+
+    return {
+      ...r,
+      _brandName: r['fabID'] !== undefined ? (brandMap[r['fabID']] ?? null) : null,
+      _modelName: r['modID'] !== undefined ? (modelMap[r['modID']] ?? null) : null,
+      _fuelName: r['gazID'] !== undefined ? (fuelMap[r['gazID']] ?? null) : null,
+      _purchaseDate: r['carCertificadoData'] instanceof Date ? r['carCertificadoData']
+        : purchaseDateHint,
+    }
+  })
+
+  return {
+    rows: enriched,
+    tableNames,
+    targetTable,
+    brandMapSize: Object.keys(brandMap).length,
+    modelMapSize: Object.keys(modelMap).length,
+    fuelMapSize: Object.keys(fuelMap).length,
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -194,6 +237,7 @@ export async function POST(req: NextRequest) {
   let rawRows: Record<string, any>[] = []
   const errors: string[] = []
   let tableNames: string[] = []
+  let debugInfo: Record<string, any> = {}
 
   try {
     const name = file.name.toLowerCase()
@@ -201,13 +245,19 @@ export async function POST(req: NextRequest) {
       const result = parseMDB(buffer)
       rawRows = result.rows
       tableNames = result.tableNames
+      debugInfo = {
+        targetTable: result.targetTable,
+        allTables: result.tableNames,
+        brandMapSize: result.brandMapSize,
+        modelMapSize: result.modelMapSize,
+        fuelMapSize: result.fuelMapSize,
+      }
       if (result.targetTable) tableNames = [`target: ${result.targetTable}`, ...tableNames]
     } else if (name.endsWith('.csv')) {
       rawRows = parseCSV(buffer.toString('utf-8'))
     } else if (name.endsWith('.json')) {
       rawRows = JSON.parse(buffer.toString('utf-8'))
     } else {
-      // Try CSV as fallback
       rawRows = parseCSV(buffer.toString('utf-8'))
     }
   } catch (e: any) {
@@ -215,11 +265,14 @@ export async function POST(req: NextRequest) {
   }
 
   let recordsImported = 0
+  let sampleMapped: Record<string, any>[] = []
 
   if (rawRows.length > 0) {
     const mapped = rawRows
       .map(r => mapRow(r, dealershipId))
       .filter((r): r is Record<string, any> => r !== null)
+
+    sampleMapped = mapped.slice(0, 3)
 
     if (mapped.length > 0) {
       // Batch upsert in chunks of 100
@@ -233,8 +286,14 @@ export async function POST(req: NextRequest) {
         if (insertErr) errors.push(`Batch ${i / 100 + 1}: ${insertErr.message}`)
         else recordsImported += inserted?.length ?? 0
       }
+
+      // Refresh days_in_stock for all vehicles in this dealership after import
+      // (handles upsert cases where trigger may not recalculate on updates)
+      await svc.rpc('refresh_days_in_stock', { d_id: dealershipId }).catch(() => {
+        // Function may not exist yet; trigger handles insert case
+      })
     } else {
-      errors.push(`Parsed ${rawRows.length} rows but none matched expected columns. Tables found: ${tableNames.join(', ')}. First row keys: ${Object.keys(rawRows[0] ?? {}).join(', ')}`)
+      errors.push(`Parsed ${rawRows.length} rows but none matched expected columns. Tables: ${tableNames.join(', ')}. First row keys: ${Object.keys(rawRows[0] ?? {}).join(', ')}`)
     }
   }
 
@@ -253,5 +312,7 @@ export async function POST(req: NextRequest) {
     records_imported: recordsImported,
     total_rows_parsed: rawRows.length,
     errors,
+    debug: debugInfo,
+    sample: sampleMapped,
   })
 }

@@ -9,11 +9,19 @@ import { cn } from '@/lib/utils'
 
 type UploadState = 'idle' | 'uploading' | 'processing' | 'done' | 'error'
 
+type ImportResult = {
+  imported: number
+  parsed: number
+  errors: string[]
+  sample?: Record<string, any>[]
+  debug?: Record<string, any>
+}
+
 export default function ImportarPage() {
   const [file, setFile] = useState<File | null>(null)
   const [state, setState] = useState<UploadState>('idle')
   const [progress, setProgress] = useState(0)
-  const [result, setResult] = useState<{ imported: number; parsed: number; errors: string[] } | null>(null)
+  const [result, setResult] = useState<ImportResult | null>(null)
   const [dragOver, setDragOver] = useState(false)
 
   const handleFile = (f: File) => {
@@ -46,7 +54,7 @@ export default function ImportarPage() {
       const data = await res.json()
 
       if (res.ok) {
-        setResult({ imported: data.records_imported || 0, parsed: data.total_rows_parsed || 0, errors: data.errors || [] })
+        setResult({ imported: data.records_imported || 0, parsed: data.total_rows_parsed || 0, errors: data.errors || [], sample: data.sample, debug: data.debug })
         setState('done')
         setProgress(100)
       } else {
@@ -133,11 +141,36 @@ export default function ImportarPage() {
             <p className="text-sm text-foreground-muted">
               {result.imported} veículos importados de {result.parsed} linhas lidas.
             </p>
+            {result.debug && (
+              <p className="text-xs text-foreground-muted mt-2">
+                Tabela: <span className="font-medium">{result.debug.targetTable}</span> ·
+                Marcas: {result.debug.brandMapSize} ·
+                Modelos: {result.debug.modelMapSize} ·
+                Combustíveis: {result.debug.fuelMapSize}
+              </p>
+            )}
             {result.errors.length > 0 && (
               <div className="mt-3 space-y-1">
                 {result.errors.map((e, i) => (
                   <p key={i} className="text-xs text-warning">⚠️ {e}</p>
                 ))}
+              </div>
+            )}
+            {result.sample && result.sample.length > 0 && (
+              <div className="mt-4">
+                <p className="text-xs font-medium text-foreground-muted mb-2">Amostra dos primeiros registros importados:</p>
+                <div className="space-y-2">
+                  {result.sample.map((s, i) => (
+                    <div key={i} className="text-xs bg-background rounded-lg p-3 font-mono text-foreground-muted">
+                      <span className="text-foreground font-medium">{s.brand} {s.model}</span>
+                      {' · '}{s.year_model}/{s.year_fab}
+                      {' · '}{s.plate || 'sem placa'}
+                      {' · '}compra: {s.purchase_date}
+                      {' · '}R$ {s.purchase_price?.toLocaleString('pt-BR')}
+                      {s.fuel ? ` · ${s.fuel}` : ''}
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </CardContent>
