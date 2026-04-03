@@ -51,7 +51,7 @@ export default function ChatPage() {
         body: JSON.stringify({ messages: [...messages, userMsg].map(m => ({ role: m.role, content: m.content })) }),
       })
       const data = await res.json()
-      setMessages(prev => [...prev, { id: (Date.now() + 1).toString(), role: 'assistant', content: data.message || 'Erro ao processar.' }])
+      setMessages(prev => [...prev, { id: (Date.now() + 1).toString(), role: 'assistant', content: data.reply || data.error || 'Erro ao processar.' }])
     } catch {
       setMessages(prev => [...prev, { id: (Date.now() + 1).toString(), role: 'assistant', content: '❌ Erro de conexão. Tente novamente.' }])
     } finally {

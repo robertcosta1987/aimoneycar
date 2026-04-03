@@ -59,7 +59,7 @@ export async function chatWithClaude(
   const systemPrompt = buildSystemPrompt(context)
 
   const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-opus-4-5',
     max_tokens: 1024,
     system: systemPrompt,
     messages: messages.map(m => ({
