@@ -95,12 +95,16 @@ export default function ConfigPage() {
         }),
       })
       setSaving(false)
+      const body = await res.json()
       if (res.ok) {
-        setMsg('Revenda criada com sucesso!')
+        if (body.verified) {
+          setMsg('Revenda criada e vinculada com sucesso!')
+        } else {
+          setMsg(`Revenda criada (ID: ${body.dealershipId}) mas user.dealership_id=${body.userDealershipId} — vínculo falhou`)
+        }
         await load()
       } else {
-        const { error } = await res.json()
-        setMsg(`Erro: ${error}`)
+        setMsg(`Erro: ${body.error}`)
       }
     }
     setTimeout(() => setMsg(''), 5000)

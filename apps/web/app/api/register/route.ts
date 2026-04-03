@@ -72,7 +72,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: userErr.message }, { status: 400 })
     }
 
-    return NextResponse.json({ dealershipId })
+    // Verify the write actually persisted
+    const { data: verify } = await supabase
+      .from('users')
+      .select('id, dealership_id')
+      .eq('id', userId)
+      .single()
+
+    return NextResponse.json({
+      dealershipId,
+      userDealershipId: (verify as any)?.dealership_id,
+      verified: (verify as any)?.dealership_id === dealershipId,
+    })
   } catch (err) {
     console.error('Register API error:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
