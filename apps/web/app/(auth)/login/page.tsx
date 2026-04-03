@@ -11,7 +11,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 
 export default function LoginPage() {
   const router = useRouter()
-  const supabase = createClient()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPass, setShowPass] = useState(false)
@@ -23,6 +22,7 @@ export default function LoginPage() {
     setError('')
     setLoading(true)
 
+    const supabase = createClient()
     const { error: err } = await supabase.auth.signInWithPassword({ email, password })
 
     if (err) {

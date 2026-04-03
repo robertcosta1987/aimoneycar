@@ -11,7 +11,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 
 export default function RegisterPage() {
   const router = useRouter()
-  const supabase = createClient()
   const [form, setForm] = useState({ name: '', email: '', password: '', dealershipName: '' })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -21,6 +20,7 @@ export default function RegisterPage() {
     setError('')
     setLoading(true)
 
+    const supabase = createClient()
     // Sign up with Supabase Auth
     const { data: authData, error: authErr } = await supabase.auth.signUp({
       email: form.email,
