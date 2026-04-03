@@ -57,12 +57,7 @@ create table if not exists vehicles (
   status          text not null default 'available' check (status in ('available', 'reserved', 'sold', 'consigned')),
   purchase_date   date not null default current_date,
   sale_date       date,
-  days_in_stock   int not null generated always as (
-    case
-      when sale_date is not null then (sale_date - purchase_date)
-      else (current_date - purchase_date)
-    end
-  ) stored,
+  days_in_stock   int not null default 0,
   supplier_name   text,
   customer_id     text,
   photos          text[] not null default '{}',
@@ -73,6 +68,23 @@ create table if not exists vehicles (
   updated_at      timestamptz not null default now(),
   unique (dealership_id, external_id)
 );
+
+-- Trigger: keep days_in_stock current on every insert/update
+create or replace function set_days_in_stock()
+returns trigger language plpgsql as $$
+begin
+  new.days_in_stock := case
+    when new.sale_date is not null then (new.sale_date - new.purchase_date)
+    else (current_date - new.purchase_date)
+  end;
+  return new;
+end;
+$$;
+
+create trigger trg_days_in_stock
+  before insert or update of purchase_date, sale_date, status
+  on vehicles
+  for each row execute function set_days_in_stock();
 
 -- ─── Expenses ────────────────────────────────────────────────────────────────
 create table if not exists expenses (
