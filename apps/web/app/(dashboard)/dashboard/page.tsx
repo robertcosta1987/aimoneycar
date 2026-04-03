@@ -64,7 +64,7 @@ export default async function DashboardPage() {
       subColor: 'text-foreground-muted',
     },
     {
-      label: 'Vendas no Mês',
+      label: 'Vendas (30 dias)',
       value: stats.monthly_sales || 0,
       icon: TrendingUp,
       color: 'text-success',
@@ -73,7 +73,7 @@ export default async function DashboardPage() {
       subColor: 'text-foreground-muted',
     },
     {
-      label: 'Lucro do Mês',
+      label: 'Lucro (30 dias)',
       value: formatCurrency(stats.monthly_profit || 0),
       icon: DollarSign,
       color: 'text-secondary',

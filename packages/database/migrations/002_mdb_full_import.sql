@@ -1151,10 +1151,9 @@ AS $$
     'critical_vehicles',  count(*) FILTER (WHERE status = 'available' AND days_in_stock > 60),
     'avg_days_in_stock',  COALESCE(ROUND(AVG(days_in_stock) FILTER (WHERE status = 'available')), 0),
     'total_expenses',     COALESCE((SELECT SUM(amount) FROM expenses WHERE dealership_id = d_id), 0),
-    -- Monthly sales derived from vehicles.sale_date (populated by import)
-    'monthly_sales',      COUNT(*) FILTER (WHERE status = 'sold' AND sale_date >= DATE_TRUNC('month', CURRENT_DATE)),
-    'monthly_revenue',    COALESCE(SUM(sale_price) FILTER (WHERE status = 'sold' AND sale_date >= DATE_TRUNC('month', CURRENT_DATE)), 0),
-    -- Monthly profit = sale_price - purchase_price - expenses per vehicle
+    -- "Mês" = last 30 days so historical imports always show real data
+    'monthly_sales',      COUNT(*) FILTER (WHERE status = 'sold' AND sale_date >= CURRENT_DATE - INTERVAL '30 days'),
+    'monthly_revenue',    COALESCE(SUM(sale_price) FILTER (WHERE status = 'sold' AND sale_date >= CURRENT_DATE - INTERVAL '30 days'), 0),
     'monthly_profit',     COALESCE((
       SELECT SUM(v.sale_price - v.purchase_price - COALESCE(e.total_exp, 0))
       FROM vehicles v
@@ -1166,7 +1165,7 @@ AS $$
       ) e ON e.vehicle_id = v.id
       WHERE v.dealership_id = d_id
         AND v.status = 'sold'
-        AND v.sale_date >= DATE_TRUNC('month', CURRENT_DATE)
+        AND v.sale_date >= CURRENT_DATE - INTERVAL '30 days'
     ), 0)
   )
   FROM vehicles
