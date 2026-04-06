@@ -152,8 +152,24 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ reply })
-  } catch (err) {
-    console.error('Chat error:', err)
+  } catch (err: any) {
+    // Detailed error breakdown for easier debugging
+    const isAnthropicError = err?.status !== undefined || err?.error !== undefined
+    if (isAnthropicError) {
+      console.error('[Chat] Anthropic API error:', {
+        status: err.status,
+        type: err.error?.type,
+        message: err.error?.message ?? err.message,
+      })
+      // Surface billing/auth errors clearly to the client (non-sensitive)
+      const msg = err.error?.message ?? err.message ?? 'Anthropic API error'
+      if (err.status === 401) return NextResponse.json({ error: `Anthropic: invalid API key` }, { status: 502 })
+      if (err.status === 403 || msg.includes('credit balance')) return NextResponse.json({ error: `Anthropic: créditos insuficientes — adicione créditos em console.anthropic.com` }, { status: 502 })
+      if (err.status === 429) return NextResponse.json({ error: `Anthropic: rate limit atingido` }, { status: 502 })
+      return NextResponse.json({ error: `Anthropic: ${msg}` }, { status: 502 })
+    }
+
+    console.error('[Chat] Unexpected error:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
