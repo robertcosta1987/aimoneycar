@@ -264,7 +264,7 @@ export async function chatWithClaude(
   // Agentic loop: keep calling Claude until it stops using tools
   while (true) {
     const response = await anthropic.messages.create({
-      model: 'claude-opus-4-6',
+      model: 'claude-sonnet-4-6',
       max_tokens: 2048,
       system: systemPrompt,
       tools: FIPE_TOOLS,
