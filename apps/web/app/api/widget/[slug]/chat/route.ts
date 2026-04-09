@@ -8,6 +8,80 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+// ── Slot logic ────────────────────────────────────────────────────────────────
+// 9:00 – 18:00 BRT, 30 min appointments, 15 min gap between = 45 min cycle
+// Max 2 concurrent appointments (2 salespeople)
+const SLOT_STARTS_LOCAL = (() => {
+  const slots: string[] = []
+  let h = 9, m = 0
+  while (h < 18) {
+    slots.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`)
+    m += 45
+    if (m >= 60) { h += Math.floor(m / 60); m = m % 60 }
+    if (h === 17 && m > 15) break  // last slot must end by 18:00 (17:15 + 30 = 17:45)
+  }
+  return slots
+})()
+
+// Returns slots with availability for a given date (YYYY-MM-DD)
+async function getSlotsForDate(dealershipId: string, dateISO: string): Promise<{ time: string; available: boolean }[]> {
+  // Fetch all non-cancelled appointments for that day (stored as timestamptz)
+  // BRT = UTC-3, so 9:00 BRT = 12:00 UTC
+  const dayStart = `${dateISO}T00:00:00-03:00`
+  const dayEnd   = `${dateISO}T23:59:59-03:00`
+
+  const { data: existing } = await supabase
+    .from('agendamentos')
+    .select('data_inicio, data_fim')
+    .eq('dealership_id', dealershipId)
+    .neq('status', 'cancelado')
+    .gte('data_inicio', dayStart)
+    .lte('data_inicio', dayEnd)
+
+  const booked = existing || []
+
+  return SLOT_STARTS_LOCAL.map(slotTime => {
+    const [sh, sm] = slotTime.split(':').map(Number)
+    const slotStartMs = Date.UTC(
+      Number(dateISO.slice(0, 4)),
+      Number(dateISO.slice(5, 7)) - 1,
+      Number(dateISO.slice(8, 10)),
+      sh + 3, sm   // BRT+3 = UTC
+    )
+    const slotEndMs = slotStartMs + 30 * 60 * 1000
+
+    const count = booked.filter(a => {
+      const aStart = new Date(a.data_inicio).getTime()
+      const aEnd   = new Date(a.data_fim).getTime()
+      return aStart < slotEndMs && aEnd > slotStartMs  // overlaps
+    }).length
+
+    return { time: slotTime, available: count < 2 }
+  })
+}
+
+// Returns grouped slots for multiple days (for system prompt)
+async function getSlotsNextDays(dealershipId: string, days = 7): Promise<Record<string, string[]>> {
+  const now = new Date()
+  const result: Record<string, string[]> = {}
+
+  await Promise.all(
+    Array.from({ length: days }, (_, i) => {
+      const d = new Date(now)
+      d.setDate(d.getDate() + i)
+      const iso = d.toISOString().split('T')[0]
+      return getSlotsForDate(dealershipId, iso).then(slots => {
+        const available = slots.filter(s => s.available).map(s => s.time)
+        if (available.length > 0) result[iso] = available
+      })
+    })
+  )
+
+  return result
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function POST(
   req: NextRequest,
   { params }: { params: { slug: string } }
@@ -15,7 +89,6 @@ export async function POST(
   try {
     const { messages, visitorId, conversationId } = await req.json()
 
-    // Get dealership by slug
     const { data: dealership } = await supabase
       .from('dealerships')
       .select('id, name, city, state, address, phone, whatsapp')
@@ -24,33 +97,6 @@ export async function POST(
 
     if (!dealership) {
       return NextResponse.json({ error: 'Revenda não encontrada' }, { status: 404 })
-    }
-
-    // Get calendar config (seed if missing)
-    let { data: config } = await supabase
-      .from('calendario_config')
-      .select('*')
-      .eq('dealership_id', dealership.id)
-      .single()
-
-    if (!config) {
-      await supabase.from('calendario_config').insert({ dealership_id: dealership.id })
-      const { data: newConfig } = await supabase
-        .from('calendario_config')
-        .select('*')
-        .eq('dealership_id', dealership.id)
-        .single()
-      config = newConfig
-    }
-
-    // Seed business hours if table is empty for this dealership
-    const { count: hoursCount } = await supabase
-      .from('horarios_funcionamento')
-      .select('id', { count: 'exact', head: true })
-      .eq('dealership_id', dealership.id)
-
-    if (!hoursCount || hoursCount === 0) {
-      await supabase.rpc('seed_horarios_funcionamento', { p_dealership_id: dealership.id })
     }
 
     // Get available vehicles
@@ -63,17 +109,9 @@ export async function POST(
       .limit(30)
 
     // Get available slots for next 7 days
-    const today = new Date().toISOString().split('T')[0]
-    const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    const slotsByDate = await getSlotsNextDays(dealership.id, 7)
 
-    const { data: availableSlots } = await supabase.rpc('get_slots_disponiveis', {
-      p_dealership_id: dealership.id,
-      p_data_inicio: today,
-      p_data_fim: nextWeek,
-      p_salesperson_id: null,
-    })
-
-    const systemPrompt = buildSystemPrompt(dealership, config, vehicles || [], availableSlots || [])
+    const systemPrompt = buildSystemPrompt(dealership, vehicles || [], slotsByDate)
 
     const tools: Anthropic.Tool[] = [
       {
@@ -110,7 +148,7 @@ export async function POST(
             nome: { type: 'string', description: 'Nome completo do cliente' },
             telefone: { type: 'string', description: 'Telefone com DDD' },
             email: { type: 'string', description: 'Email do cliente (opcional)' },
-            data_hora: { type: 'string', description: 'Data e hora ISO (ex: 2024-04-15T14:00:00)' },
+            data_hora: { type: 'string', description: 'Data e hora no formato YYYY-MM-DDTHH:MM (ex: 2024-04-15T14:00)' },
             tipo: { type: 'string', enum: ['visita', 'test_drive'], description: 'Tipo de agendamento' },
             veiculo_id: { type: 'string', description: 'ID do veículo específico (opcional)' },
             veiculo_interesse: { type: 'string', description: 'Descrição do veículo de interesse' },
@@ -180,7 +218,6 @@ export async function POST(
     const textBlock = response.content.find(b => b.type === 'text')
     const replyText = textBlock?.type === 'text' ? textBlock.text : 'Desculpe, não consegui processar sua mensagem.'
 
-    // Save conversation
     await saveConversation(dealership.id, conversationId, visitorId, messages, replyText)
 
     return NextResponse.json({ message: replyText, conversationId })
@@ -190,19 +227,18 @@ export async function POST(
   }
 }
 
-function buildSystemPrompt(dealership: any, config: any, vehicles: any[], slots: any[]): string {
-  const slotsByDate: Record<string, string[]> = {}
-  for (const slot of slots.filter((s: any) => s.disponivel)) {
-    const d = slot.data
-    if (!slotsByDate[d]) slotsByDate[d] = []
-    slotsByDate[d].push((slot.horario as string).slice(0, 5))
-  }
-
+function buildSystemPrompt(dealership: any, vehicles: any[], slotsByDate: Record<string, string[]>): string {
   const now = new Date()
   const todayStr = now.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
   const todayISO = now.toISOString().split('T')[0]
   const tomorrowISO = new Date(now.getTime() + 86400000).toISOString().split('T')[0]
   const afterTomorrowISO = new Date(now.getTime() + 2 * 86400000).toISOString().split('T')[0]
+
+  const slotsText = Object.entries(slotsByDate).slice(0, 7).map(([date, times]) => {
+    const d = new Date(date + 'T12:00:00')
+    const label = d.toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'short' })
+    return `• ${label} (${date}): ${times.slice(0, 8).join(', ')}`
+  }).join('\n') || 'Sem horários disponíveis no momento.'
 
   return `Você é o assistente virtual da ${dealership.name}, uma revenda de veículos seminovos${dealership.city ? ` em ${dealership.city}/${dealership.state || 'BR'}` : ''}.
 
@@ -218,24 +254,23 @@ REGRAS:
 - Use 1-2 emojis por mensagem
 - Nunca invente informações sobre veículos
 - SEMPRE colete nome e telefone ANTES de confirmar agendamento
-- Se o horário não estiver disponível, sugira alternativas
+- Se o horário não estiver disponível, sugira alternativas da lista abaixo
+- Ao agendar, use o formato exato: YYYY-MM-DDTHH:MM (ex: ${todayISO}T09:00)
+
+HORÁRIO DE FUNCIONAMENTO: Segunda a Sábado, 09:00 – 18:00
+DURAÇÃO DA VISITA: 30 minutos
+
+HORÁRIOS DISPONÍVEIS (próximos 7 dias):
+${slotsText}
 
 VEÍCULOS DISPONÍVEIS (${vehicles.length} unidades):
 ${vehicles.slice(0, 15).map(v =>
-  `• ${v.brand} ${v.model}${v.version ? ' ' + v.version : ''} ${v.year_model} - ${v.color || '?'} - ${v.mileage?.toLocaleString('pt-BR') ?? '?'} km - R$ ${v.sale_price?.toLocaleString('pt-BR') ?? '?'} - ${v.transmission || ''}`
+  `• ${v.brand} ${v.model}${v.version ? ' ' + v.version : ''} ${v.year_model} - ${v.color || '?'} - ${v.mileage?.toLocaleString('pt-BR') ?? '?'} km - R$ ${v.sale_price?.toLocaleString('pt-BR') ?? '?'}`
 ).join('\n')}${vehicles.length > 15 ? `\n... e mais ${vehicles.length - 15} veículos` : ''}
-
-HORÁRIOS DISPONÍVEIS (próximos 7 dias):
-${Object.entries(slotsByDate).slice(0, 5).map(([date, times]) => {
-  const d = new Date(date + 'T12:00:00')
-  const label = d.toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'short' })
-  return `• ${label}: ${(times as string[]).slice(0, 6).join(', ')}`
-}).join('\n') || 'Consulte disponibilidade pelo telefone.'}
 
 INFORMAÇÕES:
 - Endereço: ${dealership.address || 'Consulte nosso site'}
 - Telefone: ${dealership.phone || dealership.whatsapp || 'Não informado'}
-- Duração da visita: ${config?.duracao_padrao_minutos || 30} minutos
 
 Fluxo ideal: cumprimentar → mostrar opções → qualificar → oferecer agendamento → confirmar nome/telefone → criar agendamento.`
 }
@@ -260,48 +295,92 @@ async function executeTool(dealershipId: string, toolName: string, input: any, c
     }
 
     case 'verificar_disponibilidade': {
-      const { data: slots } = await supabase.rpc('get_slots_disponiveis', {
-        p_dealership_id: dealershipId,
-        p_data_inicio: input.data,
-        p_data_fim: input.data,
-        p_salesperson_id: null,
-      })
-      const available = (slots || []).filter((s: any) => s.disponivel)
+      const slots = await getSlotsForDate(dealershipId, input.data)
+      const available = slots.filter(s => s.available).map(s => s.time)
       return {
         data: input.data,
-        horarios_disponiveis: available.map((s: any) => (s.horario as string).slice(0, 5)),
+        horarios_disponiveis: available,
         total: available.length,
       }
     }
 
     case 'agendar_visita': {
-      const dataInicio = new Date(input.data_hora)
-      const dataFim = new Date(dataInicio.getTime() + 30 * 60 * 1000)
+      // Parse as BRT (UTC-3)
+      const localStr = input.data_hora.includes('T') ? input.data_hora : input.data_hora.replace(' ', 'T')
+      const [datePart, timePart] = localStr.split('T')
+      const [hh, mm] = (timePart || '09:00').split(':').map(Number)
 
-      const { data: result } = await supabase.rpc('criar_agendamento', {
-        p_dealership_id: dealershipId,
-        p_data_inicio: dataInicio.toISOString(),
-        p_data_fim: dataFim.toISOString(),
-        p_lead_nome: input.nome,
-        p_lead_telefone: input.telefone,
-        p_lead_email: input.email || null,
-        p_tipo: input.tipo,
-        p_vehicle_id: input.veiculo_id || null,
-        p_veiculo_interesse: input.veiculo_interesse || null,
-        p_salesperson_id: null,
-        p_origem: 'widget',
-        p_dados_qualificacao: '{}',
-        p_conversa_id: conversationId || null,
-      })
+      // Validate slot time
+      const slotKey = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`
+      if (!SLOT_STARTS_LOCAL.includes(slotKey)) {
+        return {
+          success: false,
+          error: `Horário ${slotKey} não é um horário válido. Horários disponíveis: ${SLOT_STARTS_LOCAL.join(', ')}`,
+        }
+      }
 
-      if (result?.success && conversationId) {
+      // Check availability
+      const slots = await getSlotsForDate(dealershipId, datePart)
+      const slot = slots.find(s => s.time === slotKey)
+      if (!slot?.available) {
+        const others = slots.filter(s => s.available).map(s => s.time)
+        return {
+          success: false,
+          error: `Horário ${slotKey} em ${datePart} não está disponível.`,
+          alternativas: others,
+        }
+      }
+
+      // Build UTC timestamps (BRT = UTC-3)
+      const startUTC = new Date(Date.UTC(
+        Number(datePart.slice(0, 4)),
+        Number(datePart.slice(5, 7)) - 1,
+        Number(datePart.slice(8, 10)),
+        hh + 3, mm
+      ))
+      const endUTC = new Date(startUTC.getTime() + 30 * 60 * 1000)
+
+      const { data: inserted, error } = await supabase
+        .from('agendamentos')
+        .insert({
+          dealership_id: dealershipId,
+          data_inicio: startUTC.toISOString(),
+          data_fim: endUTC.toISOString(),
+          lead_nome: input.nome,
+          lead_telefone: input.telefone,
+          lead_email: input.email || null,
+          tipo: input.tipo,
+          vehicle_id: input.veiculo_id || null,
+          veiculo_interesse: input.veiculo_interesse || null,
+          origem: 'widget',
+          dados_qualificacao: {},
+          conversa_id: conversationId || null,
+          status: 'agendado',
+        })
+        .select('id, data_inicio, data_fim, tipo, status')
+        .single()
+
+      if (error) {
+        console.error('[agendar_visita] insert error:', error)
+        return { success: false, error: 'Erro ao salvar agendamento.' }
+      }
+
+      if (conversationId) {
         await supabase
           .from('widget_conversas')
-          .update({ agendamento_id: result.agendamento.id, convertido: true })
+          .update({ agendamento_id: inserted.id, convertido: true })
           .eq('id', conversationId)
       }
 
-      return result
+      return {
+        success: true,
+        agendamento: {
+          id: inserted.id,
+          data: datePart,
+          horario: slotKey,
+          tipo: inserted.tipo,
+        },
+      }
     }
 
     case 'qualificar_lead': {
