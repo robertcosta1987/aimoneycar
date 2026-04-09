@@ -1,6 +1,14 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import type { ChatMessage } from '@/types'
 import * as fipe from '@/lib/fipe/client'
+
+function svc() {
+  return createSupabaseClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+}
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
@@ -10,6 +18,7 @@ const brl = (n: number) =>
 const pct = (n: number) => `${n.toFixed(1)}%`
 
 export interface FullDealershipContext {
+  dealershipId: string
   dealershipName: string
   dealershipCity?: string | null
   summary: {
@@ -116,9 +125,68 @@ const FIPE_TOOLS: Anthropic.Tool[] = [
   },
 ]
 
+// ─── Calendar Tool definitions ──────────────────────────────────────────────────
+
+const CALENDAR_TOOLS: Anthropic.Tool[] = [
+  {
+    name: 'calendar_get_slots',
+    description: 'Busca horários disponíveis para agendamento em uma data ou período. Use sempre que precisar saber quando há horário livre para marcar uma visita ou test drive.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        data_inicio: { type: 'string', description: 'Data início no formato YYYY-MM-DD (ex: 2024-04-15)' },
+        data_fim: { type: 'string', description: 'Data fim no formato YYYY-MM-DD. Se omitido, usa data_inicio.' },
+      },
+      required: ['data_inicio'],
+    },
+  },
+  {
+    name: 'calendar_list_appointments',
+    description: 'Lista agendamentos da revenda em um período. Use para responder perguntas sobre agenda, quem está marcado, quantos agendamentos há, etc.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        data_inicio: { type: 'string', description: 'Data início no formato YYYY-MM-DD' },
+        data_fim: { type: 'string', description: 'Data fim no formato YYYY-MM-DD' },
+        status: { type: 'string', description: 'Filtrar por status: agendado, confirmado, em_atendimento, concluido, cancelado, no_show' },
+      },
+      required: ['data_inicio'],
+    },
+  },
+  {
+    name: 'calendar_create_appointment',
+    description: 'Cria um novo agendamento para um cliente. Use quando o usuário quiser marcar uma visita ou test drive.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        lead_nome: { type: 'string', description: 'Nome completo do cliente' },
+        lead_telefone: { type: 'string', description: 'Telefone do cliente com DDD' },
+        lead_email: { type: 'string', description: 'Email do cliente (opcional)' },
+        data_hora: { type: 'string', description: 'Data e hora no formato ISO (ex: 2024-04-15T14:00:00)' },
+        tipo: { type: 'string', enum: ['visita', 'test_drive', 'avaliacao_troca', 'entrega'], description: 'Tipo de agendamento' },
+        veiculo_interesse: { type: 'string', description: 'Veículo de interesse (ex: Gol 2020 branco)' },
+      },
+      required: ['lead_nome', 'lead_telefone', 'data_hora', 'tipo'],
+    },
+  },
+  {
+    name: 'calendar_update_status',
+    description: 'Atualiza o status de um agendamento existente.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        agendamento_id: { type: 'string', description: 'ID do agendamento' },
+        status: { type: 'string', enum: ['confirmado', 'em_atendimento', 'concluido', 'no_show', 'cancelado'], description: 'Novo status' },
+        motivo: { type: 'string', description: 'Motivo (obrigatório para cancelado)' },
+      },
+      required: ['agendamento_id', 'status'],
+    },
+  },
+]
+
 // ─── Tool executor ─────────────────────────────────────────────────────────────
 
-async function executeTool(name: string, input: Record<string, any>): Promise<string> {
+async function executeTool(name: string, input: Record<string, any>, dealershipId: string): Promise<string> {
   try {
     let result: any
     const type = input.type ?? 'carros'
@@ -144,6 +212,96 @@ async function executeTool(name: string, input: Record<string, any>): Promise<st
           ? await fipe.lookupFipeCodeYear(input.fipe_code, input.model_year_id)
           : await fipe.lookupByFipeCode(input.fipe_code)
         break
+      // ── Calendar tools ──────────────────────────────────────────────────
+      case 'calendar_get_slots': {
+        const endDate = input.data_fim || input.data_inicio
+        const { data, error } = await svc().rpc('get_slots_disponiveis', {
+          p_dealership_id: dealershipId,
+          p_data_inicio: input.data_inicio,
+          p_data_fim: endDate,
+          p_salesperson_id: null,
+        })
+        if (error) { result = { error: error.message }; break }
+        // Group by date, return only available slots
+        const grouped: Record<string, any> = {}
+        for (const slot of (data || []).filter((s: any) => s.disponivel)) {
+          if (!grouped[slot.data]) grouped[slot.data] = { data: slot.data, dia_nome: slot.dia_nome, horarios: [] }
+          grouped[slot.data].horarios.push((slot.horario as string).slice(0, 5))
+        }
+        result = {
+          dias_disponiveis: Object.values(grouped),
+          total_slots: (data || []).filter((s: any) => s.disponivel).length,
+        }
+        break
+      }
+
+      case 'calendar_list_appointments': {
+        const endDate = input.data_fim || input.data_inicio
+        const { data, error } = await svc().rpc('get_calendario_dashboard', {
+          p_dealership_id: dealershipId,
+          p_data_inicio: input.data_inicio,
+          p_data_fim: endDate,
+          p_salesperson_id: null,
+        })
+        if (error) { result = { error: error.message }; break }
+        let appts = data || []
+        if (input.status) appts = appts.filter((a: any) => a.status === input.status)
+        result = {
+          total: appts.length,
+          agendamentos: appts.map((a: any) => ({
+            id: a.id,
+            cliente: a.lead_nome,
+            telefone: a.lead_telefone,
+            data_hora: a.data_inicio,
+            tipo: a.tipo,
+            veiculo: a.veiculo_interesse,
+            status: a.status,
+            vendedor: a.salesperson_name,
+          })),
+        }
+        break
+      }
+
+      case 'calendar_create_appointment': {
+        const dataInicio = new Date(input.data_hora)
+        const dataFim = new Date(dataInicio.getTime() + 30 * 60 * 1000)
+        const { data, error } = await svc().rpc('criar_agendamento', {
+          p_dealership_id: dealershipId,
+          p_data_inicio: dataInicio.toISOString(),
+          p_data_fim: dataFim.toISOString(),
+          p_lead_nome: input.lead_nome,
+          p_lead_telefone: input.lead_telefone,
+          p_lead_email: input.lead_email || null,
+          p_tipo: input.tipo,
+          p_vehicle_id: null,
+          p_veiculo_interesse: input.veiculo_interesse || null,
+          p_salesperson_id: null,
+          p_origem: 'chat_interno',
+          p_dados_qualificacao: '{}',
+          p_conversa_id: null,
+        })
+        if (error) { result = { error: error.message }; break }
+        result = data
+        break
+      }
+
+      case 'calendar_update_status': {
+        if (input.status === 'cancelado') {
+          const { data } = await svc().rpc('cancelar_agendamento', {
+            p_agendamento_id: input.agendamento_id,
+            p_motivo: input.motivo || null,
+          })
+          result = data
+        } else {
+          const { error } = await svc()
+            .from('agendamentos')
+            .update({ status: input.status, updated_at: new Date().toISOString() })
+            .eq('id', input.agendamento_id)
+          result = error ? { error: error.message } : { success: true }
+        }
+        break
+      }
+
       default:
         result = { error: `Ferramenta desconhecida: ${name}` }
     }
@@ -163,8 +321,11 @@ function buildSystemPrompt(ctx: FullDealershipContext): string {
   lines.push(`Você é o assistente de inteligência artificial da **${ctx.dealershipName}**${ctx.dealershipCity ? ` (${ctx.dealershipCity})` : ''}, uma revenda de veículos usados.`)
   lines.push(`Você se chama **Moneycar AI**. Especialista em gestão de estoque, vendas e finanças de revendas.`)
   lines.push(`Responda sempre em português brasileiro. Seja direto e prático. Formate valores em R$. Use markdown quando útil.`)
+  lines.push(`Data de hoje: **${new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}**`)
   lines.push(`Você tem acesso COMPLETO a todos os dados da revenda listados abaixo. Nunca diga que não tem acesso a dados — eles estão todos aqui.`)
-  lines.push(`Você também tem acesso à **Tabela FIPE em tempo real** via ferramentas (tools). Use-as sempre que precisar consultar preço de mercado de qualquer veículo.`)
+  lines.push(`Você também tem acesso via ferramentas (tools) a:`)
+  lines.push(`- **Tabela FIPE em tempo real** — use sempre que precisar do valor de mercado de um veículo`)
+  lines.push(`- **Agenda e agendamentos** — consulte horários disponíveis, liste agendamentos, crie e atualize visitas/test drives`)
 
   lines.push(`\n## Resumo Geral`)
   lines.push(`- Estoque: ${s.availableCount} disponíveis | ${s.soldCount} vendidos | ${s.totalVehicles} total`)
@@ -261,13 +422,15 @@ export async function chatWithClaude(
     content: m.content,
   }))
 
+  const ALL_TOOLS = [...FIPE_TOOLS, ...CALENDAR_TOOLS]
+
   // Agentic loop: keep calling Claude until it stops using tools
   while (true) {
     const response = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 2048,
       system: systemPrompt,
-      tools: FIPE_TOOLS,
+      tools: ALL_TOOLS,
       messages: apiMessages,
     })
 
@@ -289,7 +452,7 @@ export async function chatWithClaude(
       const toolResults = await Promise.all(
         toolUseBlocks.map(async (block) => {
           if (block.type !== 'tool_use') return null
-          const result = await executeTool(block.name, block.input as Record<string, any>)
+          const result = await executeTool(block.name, block.input as Record<string, any>, context.dealershipId)
           return {
             type: 'tool_result' as const,
             tool_use_id: block.id,
