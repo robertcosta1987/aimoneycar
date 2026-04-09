@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   LayoutDashboard, MessageSquare, Car, Bell, Receipt,
-  BarChart3, Upload, Settings, LogOut, Zap, ChevronLeft, ChevronRight, CalendarDays
+  BarChart3, Upload, Settings, LogOut, Zap, ChevronLeft, ChevronRight, CalendarDays, Users
 } from 'lucide-react'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
@@ -12,6 +12,7 @@ import { createClient } from '@/lib/supabase/client'
 const navItems = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { href: '/dashboard/chat', icon: MessageSquare, label: 'Chat IA' },
+  { href: '/dashboard/chat-clientes', icon: Users, label: 'Chat Clientes' },
   { href: '/dashboard/agenda', icon: CalendarDays, label: 'Agenda' },
   { href: '/dashboard/veiculos', icon: Car, label: 'Veículos' },
   { href: '/dashboard/alertas', icon: Bell, label: 'Alertas' },
