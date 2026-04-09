@@ -34,15 +34,23 @@ export async function POST(
       .single()
 
     if (!config) {
-      // Seed config and business hours
       await supabase.from('calendario_config').insert({ dealership_id: dealership.id })
-      await supabase.rpc('seed_horarios_funcionamento', { p_dealership_id: dealership.id })
       const { data: newConfig } = await supabase
         .from('calendario_config')
         .select('*')
         .eq('dealership_id', dealership.id)
         .single()
       config = newConfig
+    }
+
+    // Seed business hours if table is empty for this dealership
+    const { count: hoursCount } = await supabase
+      .from('horarios_funcionamento')
+      .select('id', { count: 'exact', head: true })
+      .eq('dealership_id', dealership.id)
+
+    if (!hoursCount || hoursCount === 0) {
+      await supabase.rpc('seed_horarios_funcionamento', { p_dealership_id: dealership.id })
     }
 
     // Get available vehicles
@@ -190,7 +198,18 @@ function buildSystemPrompt(dealership: any, config: any, vehicles: any[], slots:
     slotsByDate[d].push((slot.horario as string).slice(0, 5))
   }
 
+  const now = new Date()
+  const todayStr = now.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+  const todayISO = now.toISOString().split('T')[0]
+  const tomorrowISO = new Date(now.getTime() + 86400000).toISOString().split('T')[0]
+  const afterTomorrowISO = new Date(now.getTime() + 2 * 86400000).toISOString().split('T')[0]
+
   return `Você é o assistente virtual da ${dealership.name}, uma revenda de veículos seminovos${dealership.city ? ` em ${dealership.city}/${dealership.state || 'BR'}` : ''}.
+
+DATA DE HOJE: ${todayStr} (${todayISO})
+- "amanhã" = ${tomorrowISO}
+- "depois de amanhã" = ${afterTomorrowISO}
+Sempre use essas datas ao interpretar referências relativas de tempo.
 
 OBJETIVO: Ajudar clientes a encontrar veículos e AGENDAR VISITAS/TEST DRIVES.
 
