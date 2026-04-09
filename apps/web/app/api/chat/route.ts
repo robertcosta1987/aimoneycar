@@ -113,6 +113,7 @@ export async function POST(req: NextRequest) {
     })
 
     const context = {
+      dealershipId: D,
       dealershipName: dealership?.name ?? 'Revenda',
       dealershipCity: dealership?.city,
       summary: {
