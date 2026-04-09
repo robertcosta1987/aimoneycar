@@ -308,15 +308,21 @@ export default function AgendaPage() {
 
   const filtered = statusFilter === 'all' ? appointments : appointments.filter(a => a.status === statusFilter)
 
+  // Convert UTC timestamp to BRT (UTC-3) date string for grouping
+  const toBRTDate = (iso: string) => {
+    const d = new Date(new Date(iso).getTime() - 3 * 60 * 60 * 1000)
+    return d.toISOString().split('T')[0]
+  }
+
   const apptsByDay = weekDays.map(day => ({
     day,
-    appts: filtered.filter(a => new Date(a.data_inicio).toDateString() === day.toDateString()),
+    appts: filtered.filter(a => toBRTDate(a.data_inicio) === dateToISO(day)),
   }))
 
-  const todayStr = new Date().toDateString()
+  const todayISO = dateToISO(new Date())
   const total = appointments.length
   const pending = appointments.filter(a => ['agendado', 'confirmado'].includes(a.status)).length
-  const today = appointments.filter(a => new Date(a.data_inicio).toDateString() === todayStr).length
+  const today = appointments.filter(a => toBRTDate(a.data_inicio) === todayISO).length
 
   return (
     <div className="space-y-5">
@@ -400,7 +406,7 @@ export default function AgendaPage() {
               {/* Day headers */}
               <div className="grid grid-cols-7 border-b border-border">
                 {apptsByDay.map(({ day }) => {
-                  const isToday = day.toDateString() === todayStr
+                  const isToday = dateToISO(day) === todayISO
                   return (
                     <div key={day.toISOString()} className={cn(
                       'p-3 text-center border-r border-border last:border-0',
@@ -423,7 +429,7 @@ export default function AgendaPage() {
               {/* Appointment columns */}
               <div className="grid grid-cols-7 divide-x divide-border min-h-[300px]">
                 {apptsByDay.map(({ day, appts }) => {
-                  const isToday = day.toDateString() === todayStr
+                  const isToday = dateToISO(day) === todayISO
                   return (
                     <div key={day.toISOString()} className={cn('p-2 space-y-1.5', isToday && 'bg-primary/5')}>
                       {appts.length === 0 ? (
@@ -447,7 +453,7 @@ export default function AgendaPage() {
         <div className="space-y-4">
           {apptsByDay.map(({ day, appts }) => {
             if (appts.length === 0) return null
-            const isToday = day.toDateString() === todayStr
+            const isToday = dateToISO(day) === todayISO
             return (
               <div key={day.toISOString()}>
                 <p className={cn(

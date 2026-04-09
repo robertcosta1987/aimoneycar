@@ -16,16 +16,40 @@ export async function GET(req: NextRequest) {
     const end = sp.get('end') || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
     const salespersonId = sp.get('salesperson_id') || null
 
-    const { data, error } = await svc.rpc('get_calendario_dashboard', {
-      p_dealership_id: profile.dealership_id,
-      p_data_inicio: start,
-      p_data_fim: end,
-      p_salesperson_id: salespersonId,
-    })
+    // Use BRT (UTC-3) day boundaries: 00:00 BRT = 03:00 UTC, 23:59 BRT = 02:59 UTC next day
+    const startUTC = `${start}T03:00:00.000Z`
+    const endDate = new Date(end)
+    endDate.setDate(endDate.getDate() + 1)
+    const endUTCFinal = endDate.toISOString().replace(/T.*/, 'T02:59:59.999Z')
+
+    let query = svc
+      .from('agendamentos')
+      .select(`
+        id, data_inicio, data_fim, lead_nome, lead_telefone, lead_email,
+        tipo, veiculo_interesse, status, origem, dados_qualificacao,
+        salesperson_id, vehicle_id,
+        salesperson:employees(name)
+      `)
+      .eq('dealership_id', profile.dealership_id)
+      .gte('data_inicio', startUTC)
+      .lte('data_inicio', endUTCFinal)
+      .order('data_inicio', { ascending: true })
+
+    if (salespersonId) query = query.eq('salesperson_id', salespersonId)
+
+    const { data, error } = await query
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    return NextResponse.json({ appointments: data || [] })
+    // Flatten salesperson join
+    const appointments = (data || []).map((a: any) => ({
+      ...a,
+      salesperson_name: a.salesperson?.name || null,
+      salesperson: undefined,
+      cor: '#00D9FF',
+    }))
+
+    return NextResponse.json({ appointments })
   } catch (err) {
     console.error('[Appointments GET]', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
