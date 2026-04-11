@@ -78,7 +78,7 @@ function NavLink({ item, collapsed, active }: { item: NavItem; collapsed: boolea
       title={collapsed ? item.label : undefined}
     >
       <item.icon className={cn('w-4 h-4 flex-shrink-0', active && 'text-primary')} />
-      {!collapsed && <span className="text-[18px] font-bold">{item.label}</span>}
+      {!collapsed && <span className="text-[14px] font-bold">{item.label}</span>}
     </Link>
   )
 }
@@ -155,7 +155,7 @@ export function Sidebar() {
                       : 'text-foreground-subtle hover:text-foreground-muted'
                   )}
                 >
-                  <span className="text-[10px] font-bold uppercase tracking-widest">
+                  <span className="text-[16px] font-bold">
                     {group.label}
                   </span>
                   <ChevronDown className={cn(
@@ -186,7 +186,7 @@ export function Sidebar() {
         <div className="pt-1">
           {!collapsed && (
             <div className="px-3 py-1.5">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-foreground-subtle">
+              <span className="text-[16px] font-bold text-foreground-subtle">
                 Dados
               </span>
             </div>
@@ -215,7 +215,7 @@ export function Sidebar() {
               title={collapsed ? item.label : undefined}
             >
               <item.icon className="w-4 h-4 flex-shrink-0" />
-              {!collapsed && <span className="text-[18px] font-bold">{item.label}</span>}
+              {!collapsed && <span className="text-[14px] font-bold">{item.label}</span>}
             </Link>
           )
         })}
