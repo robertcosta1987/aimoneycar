@@ -272,10 +272,20 @@ function buildSystemPrompt(
 
   // All dates in BRT (America/Sao_Paulo) — Vercel runs in UTC, which can be
   // a day ahead of Brazil late at night, causing the AI to compute wrong weekdays.
+  // We pre-compute the next 7 days so the AI never has to calculate dates itself.
   const now      = new Date()
   const TZ       = { timeZone: 'America/Sao_Paulo' }
   const todayISO = now.toLocaleDateString('en-CA', TZ)   // YYYY-MM-DD in BRT
   const todayStr = now.toLocaleDateString('pt-BR', { ...TZ, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+
+  const next7Days = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(now.getTime() + i * 86400000)
+    const iso     = d.toLocaleDateString('en-CA', TZ)
+    const weekday = d.toLocaleDateString('pt-BR', { ...TZ, weekday: 'long' })
+    const display = d.toLocaleDateString('pt-BR', { ...TZ, day: '2-digit', month: '2-digit' })
+    return `- "${weekday}" = ${iso} (${display})`
+  }).join('\n')
+
   const tomorrow = new Date(now.getTime() + 86400000).toLocaleDateString('en-CA', TZ)
   const afterTom = new Date(now.getTime() + 2 * 86400000).toLocaleDateString('en-CA', TZ)
 
@@ -302,9 +312,13 @@ DADOS DA LOJA:
 🕐 Horário de atendimento presencial: ${horaInicio && horaFim ? `${horaInicio} às ${horaFim}` : '08:00 às 18:00'}
 
 DATA DE HOJE: ${todayStr} (${todayISO})
+
+PRÓXIMOS 7 DIAS (use EXATAMENTE estas datas — nunca calcule por conta própria):
+${next7Days}
+
 - "amanhã" = ${tomorrow}
 - "depois de amanhã" = ${afterTom}
-Sempre use essas datas ao interpretar referências relativas de tempo.
+IMPORTANTE: Ao mencionar um dia da semana (ex: "segunda-feira"), use SEMPRE a data da tabela acima. Nunca escreva uma data diferente da listada.
 
 ${ctx.customerName ? `CLIENTE: ${ctx.customerName}` : ''}
 
