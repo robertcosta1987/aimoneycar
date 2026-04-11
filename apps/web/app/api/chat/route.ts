@@ -139,7 +139,7 @@ export async function POST(req: NextRequest) {
       employees: employees ?? [],
     }
 
-    const reply = await chatWithClaude(body.messages, context)
+    const { reply, dashboard } = await chatWithClaude(body.messages, context)
 
     const newMessages: ChatMessage[] = [...body.messages, { role: 'assistant', content: reply }]
     if (body.conversation_id) {
@@ -152,7 +152,7 @@ export async function POST(req: NextRequest) {
       } as any)
     }
 
-    return NextResponse.json({ reply })
+    return NextResponse.json({ reply, dashboard })
   } catch (err: any) {
     // Detailed error breakdown for easier debugging
     const isAnthropicError = err?.status !== undefined || err?.error !== undefined

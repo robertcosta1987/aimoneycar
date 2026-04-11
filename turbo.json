@@ -10,7 +10,10 @@
         "NEXT_PUBLIC_SUPABASE_ANON_KEY",
         "SUPABASE_SERVICE_ROLE_KEY",
         "ANTHROPIC_API_KEY",
-        "CRON_SECRET"
+        "CRON_SECRET",
+        "RESEND_API_KEY",
+        "RESEND_FROM_EMAIL",
+        "NEXT_PUBLIC_APP_URL"
       ]
     },
     "dev": {

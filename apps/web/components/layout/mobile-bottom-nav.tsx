@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   LayoutDashboard, MessageSquare, Car, Bell, Receipt,
-  BarChart3, Upload, Settings, LogOut, X, Menu, Zap, CalendarDays, Users
+  BarChart3, Upload, Settings, LogOut, X, Menu, Zap, CalendarDays, Users, CalendarClock, Timer, DollarSign, FileBarChart2, MessageCircle
 } from 'lucide-react'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
@@ -18,9 +18,14 @@ const primaryNav = [
 
 const moreNav = [
   { href: '/dashboard/chat-clientes', icon: Users, label: 'Chat Clientes' },
+  { href: '/dashboard/whatsapp', icon: MessageCircle, label: 'WhatsApp' },
+  { href: '/dashboard/envelhecimento', icon: Timer, label: 'Giro de Estoque' },
+  { href: '/dashboard/custos', icon: DollarSign, label: 'Custos & Margem' },
   { href: '/dashboard/alertas', icon: Bell, label: 'Alertas' },
   { href: '/dashboard/despesas', icon: Receipt, label: 'Despesas' },
   { href: '/dashboard/relatorios', icon: BarChart3, label: 'Relatórios' },
+  { href: '/dashboard/relatorios-executivos', icon: FileBarChart2, label: 'Rel. Executivo' },
+  { href: '/dashboard/relatorios/agendar', icon: CalendarClock, label: 'Email Reports' },
   { href: '/dashboard/importar', icon: Upload, label: 'Importar' },
   { href: '/dashboard/config', icon: Settings, label: 'Configurações' },
 ]
@@ -41,7 +46,7 @@ export function MobileBottomNav({ alertCount = 0 }: MobileBottomNavProps) {
     router.push('/login')
   }
 
-  const isMoreActive = moreNav.some(item => pathname.startsWith(item.href))
+  const isMoreActive = moreNav.some(item => pathname?.startsWith(item.href))
 
   return (
     <>
@@ -69,7 +74,7 @@ export function MobileBottomNav({ alertCount = 0 }: MobileBottomNavProps) {
           </div>
 
           {moreNav.map((item) => {
-            const active = pathname === item.href || pathname.startsWith(item.href)
+            const active = pathname === item.href || pathname?.startsWith(item.href)
             return (
               <Link
                 key={item.href}
@@ -104,7 +109,7 @@ export function MobileBottomNav({ alertCount = 0 }: MobileBottomNavProps) {
       <nav className="fixed bottom-0 left-0 right-0 z-40 md:hidden bg-background-paper border-t border-border">
         <div className="flex items-stretch h-16">
           {primaryNav.map((item) => {
-            const active = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))
+            const active = pathname === item.href || (item.href !== '/dashboard' && pathname?.startsWith(item.href))
             return (
               <Link
                 key={item.href}

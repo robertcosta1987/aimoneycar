@@ -3,12 +3,17 @@ import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import {
   Car, TrendingUp, AlertTriangle, DollarSign, Clock,
-  ArrowRight, ChevronRight
+  ArrowRight, ChevronRight, FileBarChart2
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { formatCurrency, formatPercent, getStockStatusColor } from '@/lib/utils'
+import { AgingWidget } from '@/components/aging/AgingWidget'
+import { AgingNotifications } from '@/components/aging/AgingNotifications'
+import { CostHealthWidget } from '@/components/cost/CostHealthWidget'
+import type { VehicleForCost } from '@/types/cost'
+import type { Expense } from '@/types/index'
 
 export default async function DashboardPage() {
   const supabase = createClient()
@@ -28,9 +33,10 @@ export default async function DashboardPage() {
     { data: vehicles },
     { data: alerts },
     { data: sales },
+    { data: costRaw },
   ] = await Promise.all([
     supabase.rpc('get_dashboard_stats', { d_id: dealId }),
-    supabase.from('vehicles').select('id, brand, model, plate, sale_price, days_in_stock, status')
+    supabase.from('vehicles').select('id, brand, model, plate, sale_price, purchase_price, days_in_stock, status')
       .eq('dealership_id', dealId).eq('status', 'available')
       .order('days_in_stock', { ascending: false }).limit(10),
     supabase.from('ai_alerts').select('*')
@@ -40,6 +46,10 @@ export default async function DashboardPage() {
       .eq('dealership_id', dealId)
       .eq('status', 'sold')
       .order('sale_date', { ascending: false }).limit(5),
+    // Lightweight fleet data for CostHealthWidget
+    supabase.from('vehicles')
+      .select('id, status, purchase_price, sale_price, days_in_stock, purchase_date, sale_date, brand, model, plate, chassis, renavam, version, year_fab, year_model, color, mileage, fuel, transmission, fipe_price, min_price, supplier_name, customer_id, photos, notes, source, external_id, created_at, updated_at, dealership_id, expenses:expenses(id, dealership_id, vehicle_id, category, description, amount, date, vendor_name, payment_method, receipt_url, created_by, external_id, created_at, updated_at)')
+      .eq('dealership_id', dealId),
   ])
 
   const stats = statsData as any || {}
@@ -96,8 +106,25 @@ export default async function DashboardPage() {
     success: 'bg-success/10 border-success/20',
   }
 
+  const agingWidgetVehicles = (vehicles || []).map((v: any) => ({
+    id: v.id,
+    days_in_stock: v.days_in_stock ?? 0,
+    sale_price: v.sale_price ?? null,
+  }))
+
+  const costVehicles: VehicleForCost[] = (costRaw || []).map((v: any) => ({
+    ...v,
+    purchase_price: v.purchase_price ?? 0,
+    sale_price: v.sale_price ?? null,
+    days_in_stock: v.days_in_stock ?? 0,
+    purchase_date: v.purchase_date ?? '',
+    photos: v.photos ?? [],
+    expenses: (v.expenses || []) as Expense[],
+  }))
+
   return (
     <div className="space-y-6">
+      <AgingNotifications vehicles={(vehicles || []).map((v: any) => ({ id: v.id, days_in_stock: v.days_in_stock ?? 0 }))} />
       <div>
         <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
         <p className="text-foreground-muted text-sm mt-1">Visão geral da sua revenda</p>
@@ -121,6 +148,34 @@ export default async function DashboardPage() {
             </CardContent>
           </Card>
         ))}
+      </div>
+
+      {/* Aging Widget */}
+      <AgingWidget vehicles={agingWidgetVehicles} />
+
+      {/* Cost Health Widget */}
+      {costVehicles.length > 0 && (
+        <CostHealthWidget vehicles={costVehicles} />
+      )}
+
+      {/* Executive Report CTA */}
+      <div className="flex items-center justify-between p-4 rounded-2xl bg-gradient-to-r from-primary/5 to-primary/10 border border-primary/20">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center flex-shrink-0">
+            <FileBarChart2 className="w-5 h-5 text-primary" />
+          </div>
+          <div>
+            <p className="font-semibold text-sm text-foreground">Relatório Executivo</p>
+            <p className="text-xs text-foreground-muted">Análise completa: financeiro, vendas, estoque e alertas</p>
+          </div>
+        </div>
+        <Link href="/dashboard/relatorios-executivos">
+          <Button size="sm" className="gap-2 flex-shrink-0">
+            <FileBarChart2 className="w-4 h-4" />
+            <span className="hidden sm:inline">Ver Relatórios</span>
+            <ChevronRight className="w-4 h-4 sm:hidden" />
+          </Button>
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
