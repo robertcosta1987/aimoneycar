@@ -44,11 +44,15 @@ export async function checkSessionStatus(apiKey: string): Promise<{
     const res = await fetch(`${BASE}/status`, {
       headers: { Authorization: `Bearer ${apiKey}` },
     })
-    const data = await res.json()
+    const text = await res.text()
+    console.log('[WASender] status check:', res.status, text.slice(0, 200))
+    if (!res.ok) return { connected: false }
+    let data: any
+    try { data = JSON.parse(text) } catch { return { connected: false } }
     return {
-      connected: data.success && data.data?.status === 'connected',
-      phone: data.data?.phone,
-      name:  data.data?.name,
+      connected: data.success === true && (data.data?.status === 'connected' || data.data?.connected === true),
+      phone: data.data?.phone ?? data.data?.phoneNumber,
+      name:  data.data?.name  ?? data.data?.pushName,
     }
   } catch (e) {
     console.error('[WASender] status check error:', e)

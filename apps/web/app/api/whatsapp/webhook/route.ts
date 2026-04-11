@@ -83,8 +83,8 @@ async function handleIncomingMessage(
 
   console.log(`[Webhook] from=${phoneNumber} text="${messageBody}"`)
 
-  // Load session
-  let sessaoQuery = supabase.from('whatsapp_sessoes').select('*').eq('status', 'conectado')
+  // Load session — filter by dealership only; don't rely on status field
+  let sessaoQuery = supabase.from('whatsapp_sessoes').select('*')
   if (dealershipId) sessaoQuery = sessaoQuery.eq('dealership_id', dealershipId)
   const { data: sessao } = await sessaoQuery.single() as { data: WhatsAppSessao | null }
 

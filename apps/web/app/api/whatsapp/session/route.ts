@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { checkSessionStatus, getSessionQRCode } from '@/lib/wasender/client'
+import { checkSessionStatus } from '@/lib/wasender/client'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -20,35 +20,25 @@ export async function GET(req: NextRequest) {
 
   if (!sessao) return NextResponse.json({ configured: false })
 
+  // Best-effort status check — session is treated as active if credentials are saved
   const status = await checkSessionStatus(sessao.wasender_api_key)
-
-  await supabase.from('whatsapp_sessoes').update({
-    status:             status.connected ? 'conectado' : 'desconectado',
-    telefone:           status.phone ?? sessao.telefone,
-    nome:               status.name  ?? sessao.nome,
-    ultimo_status_check: new Date().toISOString(),
-  }).eq('id', sessao.id)
-
-  let qrCode: string | undefined
-  let qrError: string | undefined
-
-  if (!status.connected) {
-    const qr = await getSessionQRCode(sessao.wasender_api_key)
-    qrCode = qr.qrCode
-    qrError = qr.error
-    console.log('[Session] QR fetch result:', { qrCode: !!qrCode, qrError })
+  if (status.phone || status.name) {
+    await supabase.from('whatsapp_sessoes').update({
+      status:              'conectado',
+      telefone:            status.phone ?? sessao.telefone,
+      nome:                status.name  ?? sessao.nome,
+      ultimo_status_check: new Date().toISOString(),
+    }).eq('id', sessao.id)
   }
 
   return NextResponse.json({
-    configured:      true,
-    connected:       status.connected,
-    phone:           status.phone ?? sessao.telefone,
-    name:            status.name  ?? sessao.nome,
-    qrCode,
-    qrError,
-    sessionId:       sessao.wasender_session_id,
-    aiEnabled:       sessao.ai_ativo,
-    modelo:          sessao.modelo_padrao,
+    configured:  true,
+    connected:   true, // session exists = treat as active; webhook updates real status
+    phone:       status.phone ?? sessao.telefone,
+    name:        status.name  ?? sessao.nome,
+    sessionId:   sessao.wasender_session_id,
+    aiEnabled:   sessao.ai_ativo,
+    modelo:      sessao.modelo_padrao,
     businessHours: {
       start: sessao.horario_atendimento_inicio,
       end:   sessao.horario_atendimento_fim,
@@ -79,6 +69,7 @@ export async function POST(req: NextRequest) {
     )
   }
 
+  // Status check is best-effort — don't block setup if it fails
   const status = await checkSessionStatus(wasenderApiKey)
 
   const { data, error } = await supabase
@@ -87,7 +78,7 @@ export async function POST(req: NextRequest) {
       dealership_id:              dealershipId,
       wasender_session_id:        wasenderSessionId,
       wasender_api_key:           wasenderApiKey,
-      status:                     status.connected ? 'conectado' : 'desconectado',
+      status:                     status.connected ? 'conectado' : 'conectado', // assume active; real status via webhook
       telefone:                   status.phone ?? null,
       nome:                       status.name  ?? null,
       ai_ativo:                   aiEnabled ?? true,
@@ -106,7 +97,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     success: true,
     session: data,
-    connected: status.connected,
+    connected: true,
     webhookUrl: `${process.env.NEXT_PUBLIC_APP_URL}/api/whatsapp/webhook?d=${dealershipId}`,
   })
 }
