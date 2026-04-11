@@ -16,16 +16,49 @@ export async function GET(req: NextRequest) {
     const end = sp.get('end') || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
     const salespersonId = sp.get('salesperson_id') || null
 
-    const { data, error } = await svc.rpc('get_calendario_dashboard', {
-      p_dealership_id: profile.dealership_id,
-      p_data_inicio: start,
-      p_data_fim: end,
-      p_salesperson_id: salespersonId,
-    })
+    // Direct query instead of get_calendario_dashboard RPC to avoid
+    // type mismatch errors between VARCHAR RETURNS TABLE and actual TEXT columns
+    let query = svc
+      .from('agendamentos')
+      .select(`
+        id, data_inicio, data_fim,
+        lead_nome, lead_telefone,
+        tipo, veiculo_interesse, status,
+        salesperson_id, origem,
+        employees ( name )
+      `)
+      .eq('dealership_id', profile.dealership_id)
+      .gte('data_inicio', start)
+      .lt('data_inicio', new Date(new Date(end).getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+      .order('data_inicio')
+
+    if (salespersonId) query = query.eq('salesperson_id', salespersonId)
+
+    const { data, error } = await query
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    return NextResponse.json({ appointments: data || [] })
+    const STATUS_COLORS: Record<string, string> = {
+      agendado: '#3B82F6', confirmado: '#10B981', em_atendimento: '#F59E0B',
+      concluido: '#6B7280', cancelado: '#EF4444', no_show: '#DC2626',
+    }
+
+    const appointments = (data || []).map((a: any) => ({
+      id: a.id,
+      data_inicio: a.data_inicio,
+      data_fim: a.data_fim,
+      lead_nome: a.lead_nome,
+      lead_telefone: a.lead_telefone,
+      tipo: a.tipo,
+      veiculo_interesse: a.veiculo_interesse,
+      status: a.status,
+      salesperson_id: a.salesperson_id,
+      salesperson_name: a.employees?.name ?? null,
+      cor: STATUS_COLORS[a.status] ?? '#00D9FF',
+      origem: a.origem,
+    }))
+
+    return NextResponse.json({ appointments })
   } catch (err) {
     console.error('[Appointments GET]', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
