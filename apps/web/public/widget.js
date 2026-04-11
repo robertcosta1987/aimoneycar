@@ -6,7 +6,7 @@
   const primaryColor = script.getAttribute('data-color') || '#00D9FF';
   const position = script.getAttribute('data-position') || 'bottom-right';
   const greeting = script.getAttribute('data-greeting') || 'Olá! Posso ajudar a encontrar seu próximo carro? 🚗';
-  const apiUrl = script.getAttribute('data-api') || '';
+  const apiUrl = script.getAttribute('data-api') || new URL(script.src).origin;
 
   if (!dealershipSlug) {
     console.error('Moneycar Widget: data-dealership é obrigatório');
