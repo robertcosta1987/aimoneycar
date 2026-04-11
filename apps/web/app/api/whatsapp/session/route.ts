@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
       start: sessao.horario_atendimento_inicio,
       end:   sessao.horario_atendimento_fim,
     },
-    webhookUrl: `${process.env.NEXT_PUBLIC_APP_URL}/api/whatsapp/webhook?d=${dealershipId}`,
+    webhookUrl: `${(process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/$/, '')}/api/whatsapp/webhook?d=${dealershipId}`,
   })
 }
 
@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
     success: true,
     session: data,
     connected: true,
-    webhookUrl: `${process.env.NEXT_PUBLIC_APP_URL}/api/whatsapp/webhook?d=${dealershipId}`,
+    webhookUrl: `${(process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/$/, '')}/api/whatsapp/webhook?d=${dealershipId}`,
   })
 }
 
