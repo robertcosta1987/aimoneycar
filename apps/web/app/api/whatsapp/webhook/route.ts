@@ -128,10 +128,8 @@ async function handleIncomingMessage(
     return
   }
 
-  if (!isWithinBusinessHours(sessao)) {
-    await sendOutOfHoursMessage(sessao, remoteJid)
-    return
-  }
+  // AI responds 24/7 — business hours are only used to guide scheduling suggestions
+  // (passed to the agent so it doesn't offer slots outside working hours)
 
   // Upsert conversation
   let conversa = await getOrCreateConversa(sessao.dealership_id, phoneNumber, remoteJid, pushName)
@@ -174,6 +172,8 @@ async function handleIncomingMessage(
     wasenderMsgId:      key.id,
     customSystemPrompt: sessao.prompt_sistema ?? undefined,
     useSmartModel:      shouldUseSmartModel(conteudo),
+    businessHoursStart: sessao.horario_atendimento_inicio ?? undefined,
+    businessHoursEnd:   sessao.horario_atendimento_fim    ?? undefined,
   })
 
   await sendPresenceUpdate(sessao.wasender_api_key, remoteJid, 'paused')

@@ -260,7 +260,7 @@ async function buildContext(
 
 // ─── System prompt ────────────────────────────────────────────────────────────
 
-function buildSystemPrompt(ctx: WhatsAppContext, customPrompt?: string): string {
+function buildSystemPrompt(ctx: WhatsAppContext, customPrompt?: string, horaInicio?: string, horaFim?: string): string {
   if (customPrompt) return customPrompt
 
   const today = new Date().toLocaleDateString('pt-BR', {
@@ -283,6 +283,7 @@ DADOS DA LOJA:
 📍 Avenida Roberto de Almeida Vinhas 1029 - Guilhermina, Praia Grande - SP
 📞 (13) 99114-9999
 📅 Hoje: ${today}
+🕐 Horário de atendimento presencial: ${horaInicio && horaFim ? `${horaInicio} às ${horaFim}` : '08:00 às 18:00'}
 
 ${ctx.customerName ? `CLIENTE: ${ctx.customerName}` : ''}
 
@@ -305,11 +306,13 @@ FLUXO IDEAL:
 6. Confirme o agendamento com nome e veículo de interesse
 
 REGRAS:
+- Você responde 24 horas por dia, 7 dias por semana — NUNCA diga que está fora do horário
 - NUNCA invente veículos fora da lista acima
 - Para financiamento: trabalhamos com os principais bancos, simule na loja
 - Se o cliente quiser cancelar ou remarcar, use as ferramentas de agenda
 - Se não souber responder, ofereça falar com um vendedor: (13) 99114-9999
 - Mencione o endereço quando sugerir a visita
+- Ao sugerir horários de visita, ofereça apenas slots dentro do horário de atendimento presencial acima
 
 FERRAMENTAS DE AGENDA disponíveis: use-as sempre que precisar verificar horários livres, criar ou alterar agendamentos.`
 }
@@ -323,13 +326,15 @@ interface GenerateResponseParams {
   wasenderMsgId?:      string   // used to exclude the just-saved message from history
   customSystemPrompt?: string
   useSmartModel?:      boolean
+  businessHoursStart?: string  // e.g. '08:00' — used only to guide scheduling suggestions
+  businessHoursEnd?:   string  // e.g. '18:00'
 }
 
 export async function generateAIResponse(params: GenerateResponseParams): Promise<AIResponse> {
-  const { dealershipId, conversaId, userMessage, wasenderMsgId, customSystemPrompt, useSmartModel } = params
+  const { dealershipId, conversaId, userMessage, wasenderMsgId, customSystemPrompt, useSmartModel, businessHoursStart, businessHoursEnd } = params
 
   const ctx          = await buildContext(dealershipId, conversaId, wasenderMsgId)
-  const systemPrompt = buildSystemPrompt(ctx, customSystemPrompt)
+  const systemPrompt = buildSystemPrompt(ctx, customSystemPrompt, businessHoursStart, businessHoursEnd)
   const model        = useSmartModel ? 'claude-sonnet-4-6' : 'claude-haiku-4-5-20251001'
 
   // Build message history
