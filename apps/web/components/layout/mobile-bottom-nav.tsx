@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   LayoutDashboard, MessageSquare, Car, Bell, Receipt,
-  BarChart3, Upload, Settings, LogOut, X, Menu, Zap, CalendarDays, Users, CalendarClock
+  BarChart3, Upload, Settings, LogOut, X, Menu, Zap, CalendarDays, Users, CalendarClock, Timer, DollarSign, FileBarChart2
 } from 'lucide-react'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
@@ -18,9 +18,12 @@ const primaryNav = [
 
 const moreNav = [
   { href: '/dashboard/chat-clientes', icon: Users, label: 'Chat Clientes' },
+  { href: '/dashboard/envelhecimento', icon: Timer, label: 'Giro de Estoque' },
+  { href: '/dashboard/custos', icon: DollarSign, label: 'Custos & Margem' },
   { href: '/dashboard/alertas', icon: Bell, label: 'Alertas' },
   { href: '/dashboard/despesas', icon: Receipt, label: 'Despesas' },
   { href: '/dashboard/relatorios', icon: BarChart3, label: 'Relatórios' },
+  { href: '/dashboard/relatorios-executivos', icon: FileBarChart2, label: 'Rel. Executivo' },
   { href: '/dashboard/relatorios/agendar', icon: CalendarClock, label: 'Email Reports' },
   { href: '/dashboard/importar', icon: Upload, label: 'Importar' },
   { href: '/dashboard/config', icon: Settings, label: 'Configurações' },

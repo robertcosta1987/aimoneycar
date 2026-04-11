@@ -1,20 +1,36 @@
 'use client'
-import { useState, useEffect } from 'react'
-import { Search, Car, Plus, AlertTriangle, Clock, TrendingUp } from 'lucide-react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { Search, Car, Plus } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { formatCurrency, getStockStatusColor } from '@/lib/utils'
+import { formatCurrency } from '@/lib/utils'
+import { AgingBadge } from '@/components/aging/AgingBadge'
+import { useAgingThresholds } from '@/hooks/use-aging-thresholds'
+import { MissingCostBanner } from '@/components/cost/MissingCostBanner'
+import { CostBadge } from '@/components/cost/CostBadge'
+import { CostEditModal } from '@/components/cost/CostEditModal'
+import { VehicleCostPanelDialog } from '@/components/cost/VehicleCostPanel'
+import { buildCostSummary } from '@/utils/vehicleCost'
+import type { VehicleForCost } from '@/types/cost'
+import type { Expense } from '@/types/index'
 
 export default function VeiculosPage() {
-  const [vehicles, setVehicles] = useState<any[]>([])
+  const [vehicles, setVehicles] = useState<VehicleForCost[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('available')
   const supabase = createClient()
+  const { thresholds } = useAgingThresholds()
+
+  // Cost modal state
+  const [editingVehicleId, setEditingVehicleId] = useState<string | null>(null)
+  const [panelVehicleId, setPanelVehicleId] = useState<string | null>(null)
+
+  const editingVehicle = vehicles.find(v => v.id === editingVehicleId) ?? null
+  const panelVehicle = vehicles.find(v => v.id === panelVehicleId) ?? null
 
   useEffect(() => {
     const load = async () => {
@@ -23,22 +39,24 @@ export default function VeiculosPage() {
 
       let query = supabase
         .from('vehicles')
-        .select('*, expenses:expenses(amount)')
+        .select('*, expenses:expenses(id, dealership_id, vehicle_id, category, description, amount, date, vendor_name, payment_method, receipt_url, created_by, external_id, created_at, updated_at)')
         .eq('dealership_id', userData?.dealership_id)
 
-      if (statusFilter !== 'all') {
-        query = query.eq('status', statusFilter)
-      }
+      if (statusFilter !== 'all') query = query.eq('status', statusFilter)
       if (search) {
         query = query.or(`brand.ilike.%${search}%,model.ilike.%${search}%,plate.ilike.%${search}%`)
       }
 
       const { data } = await query.order('days_in_stock', { ascending: false })
 
-      const enriched = (data || []).map((v: any) => ({
+      const enriched: VehicleForCost[] = (data || []).map((v: any) => ({
         ...v,
-        totalExpenses: (v.expenses || []).reduce((sum: number, e: any) => sum + e.amount, 0),
-        margin: (v.sale_price || 0) - v.purchase_price - (v.expenses || []).reduce((sum: number, e: any) => sum + e.amount, 0),
+        purchase_price: v.purchase_price ?? 0,
+        sale_price: v.sale_price ?? null,
+        days_in_stock: v.days_in_stock ?? 0,
+        purchase_date: v.purchase_date ?? '',
+        photos: v.photos ?? [],
+        expenses: (v.expenses || []) as Expense[],
       }))
 
       setVehicles(enriched)
@@ -47,13 +65,19 @@ export default function VeiculosPage() {
     load()
   }, [search, statusFilter])
 
-  const stats = {
+  const handleSaveVehicle = useCallback((updatedVehicle: VehicleForCost) => {
+    setVehicles(prev =>
+      prev.map(v => (v.id === updatedVehicle.id ? updatedVehicle : v))
+    )
+    setEditingVehicleId(null)
+  }, [])
+
+  const stats = useMemo(() => ({
     total: vehicles.length,
     critical: vehicles.filter(v => v.days_in_stock > 60).length,
-    warning: vehicles.filter(v => v.days_in_stock > 30 && v.days_in_stock <= 60).length,
     avgDays: vehicles.length ? Math.round(vehicles.reduce((s, v) => s + v.days_in_stock, 0) / vehicles.length) : 0,
-    totalValue: vehicles.reduce((s, v) => s + (v.sale_price || 0), 0),
-  }
+    totalValue: vehicles.reduce((s, v) => s + (v.sale_price ?? 0), 0),
+  }), [vehicles])
 
   return (
     <div className="space-y-6">
@@ -70,6 +94,20 @@ export default function VeiculosPage() {
           Adicionar
         </Button>
       </div>
+
+      {/* Missing cost banner */}
+      {!loading && (
+        <MissingCostBanner
+          vehicles={vehicles.map(v => ({
+            id: v.id,
+            brand: v.brand,
+            model: v.model,
+            plate: v.plate,
+            purchase_price: v.purchase_price,
+          }))}
+          onFixVehicle={setEditingVehicleId}
+        />
+      )}
 
       {/* Summary cards */}
       {vehicles.length > 0 && (
@@ -140,10 +178,8 @@ export default function VeiculosPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {vehicles.map((v) => {
-            const statusColor = getStockStatusColor(v.days_in_stock)
-            const badgeVar = statusColor === 'success' ? 'success' : statusColor === 'warning' ? 'warning' : 'destructive'
-            const marginColor = v.margin > 0 ? 'text-success' : v.margin < 0 ? 'text-danger' : 'text-foreground-muted'
-            const stockIcon = v.days_in_stock > 60 ? AlertTriangle : v.days_in_stock > 30 ? Clock : TrendingUp
+            const summary = buildCostSummary(v)
+            const marginColor = summary.grossProfit > 0 ? 'text-success' : summary.grossProfit < 0 ? 'text-danger' : 'text-foreground-muted'
 
             return (
               <Card key={v.id} className="hover:border-border-hover transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card-hover">
@@ -156,9 +192,13 @@ export default function VeiculosPage() {
                         {v.version ? `${v.version} · ` : ''}{v.year_model}/{v.year_fab}
                       </p>
                     </div>
-                    <Badge variant={badgeVar as any} className="ml-2 flex-shrink-0 gap-1">
-                      {v.days_in_stock}d
-                    </Badge>
+                    <div className="ml-2 flex-shrink-0 flex flex-col items-end gap-1">
+                      <AgingBadge
+                        daysInStock={v.days_in_stock}
+                        vehicle={{ id: v.id, purchase_price: v.purchase_price, sale_price: v.sale_price, totalExpenses: summary.totalExpenses }}
+                        thresholds={thresholds}
+                      />
+                    </div>
                   </div>
 
                   {/* Details grid */}
@@ -172,16 +212,10 @@ export default function VeiculosPage() {
                       <p className="font-medium text-foreground">{v.mileage?.toLocaleString('pt-BR') ?? '—'} km</p>
                     </div>
                     <div>
-                      <p className="text-xs text-foreground-subtle">Cor</p>
-                      <p className="font-medium text-foreground">{v.color || '—'}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-foreground-subtle">Combustível</p>
-                      <p className="font-medium text-foreground">{v.fuel || '—'}</p>
-                    </div>
-                    <div>
                       <p className="text-xs text-foreground-subtle">Compra</p>
-                      <p className="font-medium text-foreground">{formatCurrency(v.purchase_price)}</p>
+                      <p className={`font-medium ${v.purchase_price === 0 ? 'text-danger' : 'text-foreground'}`}>
+                        {v.purchase_price === 0 ? '⚠️ R$ 0' : formatCurrency(v.purchase_price)}
+                      </p>
                     </div>
                     <div>
                       <p className="text-xs text-foreground-subtle">Venda</p>
@@ -189,17 +223,38 @@ export default function VeiculosPage() {
                     </div>
                   </div>
 
-                  {/* Bottom row */}
-                  <div className="pt-3 border-t border-border flex items-center justify-between">
-                    <div>
-                      <p className="text-xs text-foreground-subtle">Despesas</p>
-                      <p className="text-sm font-medium text-warning">{formatCurrency(v.totalExpenses)}</p>
+                  {/* Cost row */}
+                  <div className="py-2.5 border-t border-border space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs text-foreground-subtle">Despesas</p>
+                        <p className="text-sm font-medium text-warning">{formatCurrency(summary.totalExpenses)}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-foreground-subtle">Custo Real</p>
+                        <p className="text-sm font-semibold text-foreground">{formatCurrency(summary.trueCost)}</p>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-xs text-foreground-subtle">Margem</p>
-                      <p className={`text-sm font-semibold ${marginColor}`}>
-                        {v.sale_price ? formatCurrency(v.margin) : '—'}
-                      </p>
+                    <div className="flex items-center justify-between">
+                      <CostBadge summary={summary} />
+                      <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-xs px-2"
+                          onClick={() => setPanelVehicleId(v.id)}
+                        >
+                          Custos
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-xs px-2"
+                          onClick={() => setEditingVehicleId(v.id)}
+                        >
+                          Editar
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </CardContent>
@@ -208,6 +263,27 @@ export default function VeiculosPage() {
           })}
         </div>
       )}
+
+      {/* Cost Edit Modal */}
+      {editingVehicle && (
+        <CostEditModal
+          vehicle={editingVehicle}
+          open={editingVehicleId !== null}
+          onClose={() => setEditingVehicleId(null)}
+          onSave={handleSaveVehicle}
+        />
+      )}
+
+      {/* Vehicle Cost Panel Dialog */}
+      <VehicleCostPanelDialog
+        vehicle={panelVehicle}
+        open={panelVehicleId !== null}
+        onClose={() => setPanelVehicleId(null)}
+        onEditCosts={id => {
+          setPanelVehicleId(null)
+          setEditingVehicleId(id)
+        }}
+      />
     </div>
   )
 }
