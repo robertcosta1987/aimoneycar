@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { BarChart3, TrendingUp, DollarSign, Car, Receipt, Download, Calendar } from 'lucide-react'
+import { BarChart3, TrendingUp, DollarSign, Car, Receipt, Download, Calendar, CalendarClock } from 'lucide-react'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -139,6 +140,11 @@ export default function RelatoriosPage() {
               <SelectItem value="365">1 ano</SelectItem>
             </SelectContent>
           </Select>
+          <Link href="/dashboard/relatorios/agendar">
+            <Button variant="outline" className="gap-2">
+              <CalendarClock className="w-4 h-4" /> Agendar Envio
+            </Button>
+          </Link>
         </div>
       </div>
 
