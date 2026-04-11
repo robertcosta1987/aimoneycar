@@ -23,6 +23,9 @@ import type {
   WhatsAppSessao,
 } from '@/types/whatsapp'
 
+// Allow up to 60s for AI generation + tool calls (Vercel Pro)
+export const maxDuration = 60
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -95,7 +98,20 @@ async function handleIncomingMessage(
     ? key.senderPn
     : key?.remoteJid ?? ''
 
-  console.log(`[Webhook] from=${phoneNumber} text="${messageBody}"`)
+  console.log(`[Webhook] from=${phoneNumber} text="${messageBody}" msgId=${key?.id}`)
+
+  // ── Deduplication: skip if this wasender_msg_id was already processed ────────
+  if (key?.id) {
+    const { data: alreadyProcessed } = await supabase
+      .from('whatsapp_mensagens')
+      .select('id')
+      .eq('wasender_msg_id', key.id)
+      .maybeSingle()
+    if (alreadyProcessed) {
+      console.log(`[Webhook] duplicate msg ${key.id} — skipping`)
+      return
+    }
+  }
 
   // Load session — filter by dealership only; don't rely on status field
   let sessaoQuery = supabase.from('whatsapp_sessoes').select('*')
@@ -124,7 +140,8 @@ async function handleIncomingMessage(
     return
   }
 
-  // Parse and save incoming message
+  // Parse and save incoming message BEFORE generating AI response
+  // (so it's persisted even if AI fails)
   const { tipo, conteudo, midiaUrl, midiaTipo } = parseMessageContent(msgContent, messageBody)
 
   await supabase.from('whatsapp_mensagens').insert({
@@ -149,13 +166,14 @@ async function handleIncomingMessage(
   await markMessageAsRead(sessao.wasender_api_key, remoteJid, key.id)
   await sendPresenceUpdate(sessao.wasender_api_key, remoteJid, 'composing')
 
-  // Generate AI response
+  // Generate AI response — pass wasenderMsgId so context builder excludes it from history
   const aiResult = await generateAIResponse({
-    dealershipId:     sessao.dealership_id,
-    conversaId:       conversa.id,
-    userMessage:      conteudo,
+    dealershipId:       sessao.dealership_id,
+    conversaId:         conversa.id,
+    userMessage:        conteudo,
+    wasenderMsgId:      key.id,
     customSystemPrompt: sessao.prompt_sistema ?? undefined,
-    useSmartModel:    shouldUseSmartModel(conteudo),
+    useSmartModel:      shouldUseSmartModel(conteudo),
   })
 
   await sendPresenceUpdate(sessao.wasender_api_key, remoteJid, 'paused')

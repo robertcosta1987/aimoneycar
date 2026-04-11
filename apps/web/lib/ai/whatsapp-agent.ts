@@ -195,20 +195,29 @@ interface WhatsAppContext {
 }
 
 async function buildContext(
-  dealershipId: string,
-  conversaId:   string,
+  dealershipId:  string,
+  conversaId:    string,
+  excludeMsgId?: string,
 ): Promise<WhatsAppContext> {
+  // Build the history query, excluding the just-saved incoming message.
+  // Without this, the current message appears twice in the API call
+  // (once from history, once as the explicit userMessage param), which
+  // causes two consecutive user-role messages and an Anthropic API error.
+  let historyQuery = supabase
+    .from('whatsapp_mensagens')
+    .select('direcao, conteudo, criado_em')
+    .eq('conversa_id', conversaId)
+  if (excludeMsgId) {
+    historyQuery = historyQuery.not('wasender_msg_id', 'eq', excludeMsgId)
+  }
+  historyQuery = historyQuery.order('criado_em', { ascending: false }).limit(12)
+
   const [
     { data: messages },
     { data: vehicles },
     { data: conversa },
   ] = await Promise.all([
-    supabase
-      .from('whatsapp_mensagens')
-      .select('direcao, conteudo, criado_em')
-      .eq('conversa_id', conversaId)
-      .order('criado_em', { ascending: false })
-      .limit(12),
+    historyQuery,
 
     supabase
       .from('vehicles')
@@ -308,17 +317,18 @@ FERRAMENTAS DE AGENDA disponíveis: use-as sempre que precisar verificar horári
 // ─── Main export ──────────────────────────────────────────────────────────────
 
 interface GenerateResponseParams {
-  dealershipId:       string
-  conversaId:         string
-  userMessage:        string
+  dealershipId:        string
+  conversaId:          string
+  userMessage:         string
+  wasenderMsgId?:      string   // used to exclude the just-saved message from history
   customSystemPrompt?: string
-  useSmartModel?:     boolean
+  useSmartModel?:      boolean
 }
 
 export async function generateAIResponse(params: GenerateResponseParams): Promise<AIResponse> {
-  const { dealershipId, conversaId, userMessage, customSystemPrompt, useSmartModel } = params
+  const { dealershipId, conversaId, userMessage, wasenderMsgId, customSystemPrompt, useSmartModel } = params
 
-  const ctx          = await buildContext(dealershipId, conversaId)
+  const ctx          = await buildContext(dealershipId, conversaId, wasenderMsgId)
   const systemPrompt = buildSystemPrompt(ctx, customSystemPrompt)
   const model        = useSmartModel ? 'claude-sonnet-4-6' : 'claude-haiku-4-5-20251001'
 
