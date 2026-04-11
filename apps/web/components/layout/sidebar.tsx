@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   LayoutDashboard, MessageSquare, Car, Bell, Receipt,
-  BarChart3, Upload, Settings, LogOut, Zap, ChevronLeft, ChevronRight, CalendarDays, Users
+  BarChart3, Upload, Settings, LogOut, Zap, ChevronLeft, ChevronRight, CalendarDays, Users, CalendarClock
 } from 'lucide-react'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
@@ -18,6 +18,7 @@ const navItems = [
   { href: '/dashboard/alertas', icon: Bell, label: 'Alertas' },
   { href: '/dashboard/despesas', icon: Receipt, label: 'Despesas' },
   { href: '/dashboard/relatorios', icon: BarChart3, label: 'Relatórios' },
+  { href: '/dashboard/relatorios/agendar', icon: CalendarClock, label: 'Email Reports' },
   { href: '/dashboard/importar', icon: Upload, label: 'Importar' },
 ]
 

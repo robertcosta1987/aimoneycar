@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import type { ChatMessage } from '@/types'
+import type { DashboardConfig } from '@/types/dashboard'
 import * as fipe from '@/lib/fipe/client'
 
 function svc() {
@@ -124,6 +125,70 @@ const FIPE_TOOLS: Anthropic.Tool[] = [
     },
   },
 ]
+
+// ─── Dashboard render tool ─────────────────────────────────────────────────────
+
+const DASHBOARD_TOOL: Anthropic.Tool = {
+  name: 'render_dashboard',
+  description: `Renders a visual PowerBI-style dashboard with KPI cards and interactive charts directly in the chat.
+ALWAYS call this tool when the user asks for any kind of analysis, report, or data summary — margins, sales, inventory, expenses, performance, etc.
+Call it BEFORE writing your text commentary. The dashboard will be displayed visually above your reply.
+Choose chart types wisely: bar for comparisons, line/area for time trends, pie for distributions/proportions.
+KPI color guide: green=positive/good, red=negative/alert, yellow=warning, blue=neutral info.
+For KPI trend field, use symbols like "+12% vs mês anterior" or "▲ 3 veículos" or "↓ 5 dias".`,
+  input_schema: {
+    type: 'object' as const,
+    properties: {
+      title: { type: 'string', description: 'Dashboard title (e.g. "Análise de Margem — Últimos 30 dias")' },
+      kpis: {
+        type: 'array',
+        description: 'Key metric cards shown at the top',
+        items: {
+          type: 'object',
+          properties: {
+            label: { type: 'string' },
+            value: { type: 'string', description: 'Formatted value (e.g. "R$ 42.500" or "12,4%")' },
+            color: { type: 'string', enum: ['green', 'red', 'yellow', 'blue', 'default'] },
+            trend: { type: 'string', description: 'Optional trend text (e.g. "+8% vs mês anterior")' },
+          },
+          required: ['label', 'value'],
+        },
+      },
+      charts: {
+        type: 'array',
+        description: 'Visual charts to render',
+        items: {
+          type: 'object',
+          properties: {
+            type: { type: 'string', enum: ['bar', 'line', 'area', 'pie'], description: 'Chart type' },
+            title: { type: 'string' },
+            data: {
+              type: 'array',
+              description: 'Array of data objects. Each object has the xKey field plus one field per series.',
+              items: { type: 'object' },
+            },
+            xKey: { type: 'string', description: 'The field name used as the X axis / category label' },
+            series: {
+              type: 'array',
+              description: 'Data series to plot',
+              items: {
+                type: 'object',
+                properties: {
+                  key: { type: 'string', description: 'Field name in the data objects' },
+                  label: { type: 'string', description: 'Human-readable legend label' },
+                  color: { type: 'string', description: 'Optional hex color' },
+                },
+                required: ['key', 'label'],
+              },
+            },
+          },
+          required: ['type', 'title', 'data', 'xKey', 'series'],
+        },
+      },
+    },
+    required: ['title', 'kpis', 'charts'],
+  },
+}
 
 // ─── Calendar Tool definitions ──────────────────────────────────────────────────
 
@@ -323,7 +388,14 @@ function buildSystemPrompt(ctx: FullDealershipContext): string {
   lines.push(`Responda sempre em português brasileiro. Seja direto e prático. Formate valores em R$. Use markdown quando útil.`)
   lines.push(`Data de hoje: **${new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}**`)
   lines.push(`Você tem acesso COMPLETO a todos os dados da revenda listados abaixo. Nunca diga que não tem acesso a dados — eles estão todos aqui.`)
+  lines.push(``)
+  lines.push(`## REGRA OBRIGATÓRIA — Dashboards Visuais`)
+  lines.push(`Sempre que o usuário pedir análise, relatório, resumo ou qualquer dado quantitativo, OBRIGATORIAMENTE chame a ferramenta **render_dashboard** ANTES de escrever sua resposta em texto.`)
+  lines.push(`O dashboard será exibido visualmente com gráficos interativos no chat. Após chamar render_dashboard, escreva um comentário conciso em texto com insights adicionais.`)
+  lines.push(`Exemplos de quando chamar render_dashboard: margem de lucro, análise de estoque, vendas do período, despesas, performance de vendedores, comparativos, qualquer pergunta com números.`)
+  lines.push(``)
   lines.push(`Você também tem acesso via ferramentas (tools) a:`)
+  lines.push(`- **render_dashboard** — renderiza dashboard visual com KPIs e gráficos no chat (use SEMPRE para dados quantitativos)`)
   lines.push(`- **Tabela FIPE em tempo real** — use sempre que precisar do valor de mercado de um veículo`)
   lines.push(`- **Agenda e agendamentos** — consulte horários disponíveis, liste agendamentos, crie e atualize visitas/test drives`)
 
@@ -415,30 +487,32 @@ function buildSystemPrompt(ctx: FullDealershipContext): string {
 export async function chatWithClaude(
   messages: ChatMessage[],
   context: FullDealershipContext
-): Promise<string> {
+): Promise<{ reply: string; dashboard?: DashboardConfig }> {
   const systemPrompt = buildSystemPrompt(context)
   const apiMessages: Anthropic.MessageParam[] = messages.map(m => ({
     role: m.role,
     content: m.content,
   }))
 
-  const ALL_TOOLS = [...FIPE_TOOLS, ...CALENDAR_TOOLS]
+  const ALL_TOOLS = [DASHBOARD_TOOL, ...FIPE_TOOLS, ...CALENDAR_TOOLS]
+
+  let capturedDashboard: DashboardConfig | undefined
 
   // Agentic loop: keep calling Claude until it stops using tools
   while (true) {
     const response = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 2048,
+      model: 'claude-sonnet-4-6',
+      max_tokens: 4096,
       system: systemPrompt,
       tools: ALL_TOOLS,
       messages: apiMessages,
     })
 
-    // If Claude is done (no tool calls), return the text
+    // If Claude is done (no tool calls), return the text + any captured dashboard
     if (response.stop_reason === 'end_turn') {
       const textBlock = response.content.find(b => b.type === 'text')
       if (!textBlock || textBlock.type !== 'text') throw new Error('No text in response')
-      return textBlock.text
+      return { reply: textBlock.text, dashboard: capturedDashboard }
     }
 
     // Claude wants to use tools — execute them all in parallel
@@ -452,6 +526,17 @@ export async function chatWithClaude(
       const toolResults = await Promise.all(
         toolUseBlocks.map(async (block) => {
           if (block.type !== 'tool_use') return null
+
+          // Intercept render_dashboard — capture config, return "rendered"
+          if (block.name === 'render_dashboard') {
+            capturedDashboard = block.input as unknown as DashboardConfig
+            return {
+              type: 'tool_result' as const,
+              tool_use_id: block.id,
+              content: 'Dashboard rendered successfully. Now provide a concise text commentary.',
+            }
+          }
+
           const result = await executeTool(block.name, block.input as Record<string, any>, context.dealershipId)
           return {
             type: 'tool_result' as const,
@@ -472,7 +557,7 @@ export async function chatWithClaude(
 
     // Unexpected stop reason — return whatever text is available
     const textBlock = response.content.find(b => b.type === 'text')
-    if (textBlock && textBlock.type === 'text') return textBlock.text
+    if (textBlock && textBlock.type === 'text') return { reply: textBlock.text, dashboard: capturedDashboard }
     throw new Error(`Unexpected stop_reason: ${response.stop_reason}`)
   }
 }
