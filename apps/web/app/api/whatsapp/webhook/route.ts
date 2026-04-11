@@ -90,7 +90,10 @@ async function handleIncomingMessage(
   if (key?.remoteJid?.includes('@g.us')) return  // skip groups
 
   const phoneNumber = key?.cleanedSenderPn ?? cleanPhoneNumber(key?.remoteJid ?? '')
-  const remoteJid   = key?.remoteJid ?? ''
+  // Use senderPn (phone JID) for replies when addressingMode is 'lid'
+  const remoteJid = (key?.addressingMode === 'lid' && key?.senderPn)
+    ? key.senderPn
+    : key?.remoteJid ?? ''
 
   console.log(`[Webhook] from=${phoneNumber} text="${messageBody}"`)
 
