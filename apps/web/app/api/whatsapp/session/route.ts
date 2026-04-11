@@ -137,3 +137,17 @@ export async function PUT(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ success: true })
 }
+
+// DELETE /api/whatsapp/session?dealershipId=xxx — remove session config
+export async function DELETE(req: NextRequest) {
+  const dealershipId = new URL(req.url).searchParams.get('dealershipId')
+  if (!dealershipId) return NextResponse.json({ error: 'dealershipId required' }, { status: 400 })
+
+  const { error } = await supabase
+    .from('whatsapp_sessoes')
+    .delete()
+    .eq('dealership_id', dealershipId)
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ success: true })
+}
