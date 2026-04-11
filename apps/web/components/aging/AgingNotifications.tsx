@@ -29,7 +29,7 @@ function getNotifiedSet(): Set<string> {
 
 function saveNotifiedSet(ids: Set<string>) {
   try {
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify([...ids]))
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(Array.from(ids)))
   } catch {
     // ignore
   }
