@@ -30,19 +30,29 @@ export async function GET(req: NextRequest) {
   }).eq('id', sessao.id)
 
   let qrCode: string | undefined
-  if (!status.connected && process.env.WASENDER_PERSONAL_TOKEN) {
-    const qr = await getSessionQRCode(process.env.WASENDER_PERSONAL_TOKEN, sessao.wasender_session_id)
-    qrCode = qr.qrCode
+  let qrError: string | undefined
+  const hasPersonalToken = !!process.env.WASENDER_PERSONAL_TOKEN
+
+  if (!status.connected) {
+    if (hasPersonalToken) {
+      const qr = await getSessionQRCode(process.env.WASENDER_PERSONAL_TOKEN!, sessao.wasender_session_id)
+      qrCode = qr.qrCode
+      qrError = qr.error
+      console.log('[Session] QR fetch result:', { qrCode: !!qrCode, qrError, sessionId: sessao.wasender_session_id })
+    }
   }
 
   return NextResponse.json({
-    configured:    true,
-    connected:     status.connected,
-    phone:         status.phone ?? sessao.telefone,
-    name:          status.name  ?? sessao.nome,
+    configured:      true,
+    connected:       status.connected,
+    phone:           status.phone ?? sessao.telefone,
+    name:            status.name  ?? sessao.nome,
     qrCode,
-    aiEnabled:     sessao.ai_ativo,
-    modelo:        sessao.modelo_padrao,
+    qrError,
+    hasPersonalToken,
+    sessionId:       sessao.wasender_session_id,
+    aiEnabled:       sessao.ai_ativo,
+    modelo:          sessao.modelo_padrao,
     businessHours: {
       start: sessao.horario_atendimento_inicio,
       end:   sessao.horario_atendimento_fim,
