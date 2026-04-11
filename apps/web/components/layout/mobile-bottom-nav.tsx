@@ -42,7 +42,7 @@ export function MobileBottomNav({ alertCount = 0 }: MobileBottomNavProps) {
     router.push('/login')
   }
 
-  const isMoreActive = moreNav.some(item => pathname.startsWith(item.href))
+  const isMoreActive = moreNav.some(item => pathname?.startsWith(item.href))
 
   return (
     <>
@@ -70,7 +70,7 @@ export function MobileBottomNav({ alertCount = 0 }: MobileBottomNavProps) {
           </div>
 
           {moreNav.map((item) => {
-            const active = pathname === item.href || pathname.startsWith(item.href)
+            const active = pathname === item.href || pathname?.startsWith(item.href)
             return (
               <Link
                 key={item.href}
@@ -105,7 +105,7 @@ export function MobileBottomNav({ alertCount = 0 }: MobileBottomNavProps) {
       <nav className="fixed bottom-0 left-0 right-0 z-40 md:hidden bg-background-paper border-t border-border">
         <div className="flex items-stretch h-16">
           {primaryNav.map((item) => {
-            const active = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))
+            const active = pathname === item.href || (item.href !== '/dashboard' && pathname?.startsWith(item.href))
             return (
               <Link
                 key={item.href}
