@@ -183,7 +183,6 @@ interface WhatsAppContext {
   customerName?:       string | null
   dealership:          { name: string; address: string; phone: string; city: string; state: string } | null
   availableVehicles:   AIVehicle[]
-  availableSlots:      Record<string, string[]>   // date -> ["09:00", "09:30", ...]
   conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>
 }
 
@@ -199,19 +198,13 @@ async function buildContext(
   if (excludeMsgId) {
     historyQuery = historyQuery.not('wasender_msg_id', 'eq', excludeMsgId)
   }
-  historyQuery = historyQuery.order('criado_em', { ascending: false }).limit(12)
-
-  // Use BRT (America/Sao_Paulo) so slot queries use the correct local date,
-  // not UTC which can be a day ahead late at night in Brazil.
-  const today    = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
-  const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
+  historyQuery = historyQuery.order('criado_em', { ascending: false }).limit(8)
 
   const [
     { data: messages },
     { data: vehicles },
     { data: conversa },
     { data: dealership },
-    { data: slots },
   ] = await Promise.all([
     historyQuery,
 
@@ -235,13 +228,6 @@ async function buildContext(
       .select('name, address, phone, whatsapp, city, state')
       .eq('id', dealershipId)
       .single(),
-
-    supabase.rpc('get_slots_disponiveis', {
-      p_dealership_id:  dealershipId,
-      p_data_inicio:    today,
-      p_data_fim:       nextWeek,
-      p_salesperson_id: null,
-    }),
   ])
 
   const availableVehicles: AIVehicle[] = (vehicles ?? []).map(v => ({
@@ -253,12 +239,6 @@ async function buildContext(
     mileage: v.mileage,
     color:   v.color,
   }))
-
-  const availableSlots: Record<string, string[]> = {}
-  for (const slot of (slots || []).filter((s: any) => s.disponivel)) {
-    if (!availableSlots[slot.data]) availableSlots[slot.data] = []
-    availableSlots[slot.data].push((slot.horario as string).slice(0, 5))
-  }
 
   return {
     dealershipId,
@@ -273,7 +253,6 @@ async function buildContext(
       state:   dealership.state || '',
     } : null,
     availableVehicles,
-    availableSlots,
     conversationHistory: ((messages ?? []).reverse()).map(m => ({
       role:    m.direcao === 'entrada' ? 'user' as const : 'assistant' as const,
       content: m.conteudo,
@@ -315,13 +294,6 @@ function buildSystemPrompt(
     })
     .join('\n') || 'Nenhum veículo com preço disponível no momento.'
 
-  const slotsText = Object.entries(ctx.availableSlots).slice(0, 5)
-    .map(([date, times]) => {
-      const d = new Date(date + 'T12:00:00')
-      const label = d.toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'short' })
-      return `• ${label}: ${times.slice(0, 6).join(', ')}`
-    }).join('\n') || 'Consulte disponibilidade pelo telefone.'
-
   return `Você é o assistente virtual da ${storeName}, uma revenda de veículos seminovos.
 
 DADOS DA LOJA:
@@ -338,9 +310,6 @@ ${ctx.customerName ? `CLIENTE: ${ctx.customerName}` : ''}
 
 VEÍCULOS DISPONÍVEIS (${ctx.availableVehicles.length} unidades):
 ${vehicleList}
-
-HORÁRIOS DISPONÍVEIS (próximos 7 dias):
-${slotsText}
 
 OBJETIVO: Ajudar o cliente a encontrar o veículo certo e AGENDAR UMA VISITA ou TEST DRIVE.
 
@@ -366,6 +335,7 @@ REGRAS:
 - Para financiamento: trabalhamos com os principais bancos, simule na loja
 - Se não souber responder, ofereça falar com um vendedor: ${storePhone}
 - Mencione o endereço ao sugerir a visita
+- Para verificar horários disponíveis, SEMPRE use a ferramenta verificar_disponibilidade — nunca invente horários
 - Se o cliente confirmar data e horário, use a ferramenta agendar_visita imediatamente
 - IMPORTANTE: só confirme o agendamento ao cliente se a ferramenta retornar success=true. Se retornar success=false, informe que o horário não está disponível e use verificar_disponibilidade para oferecer alternativas`
 }
