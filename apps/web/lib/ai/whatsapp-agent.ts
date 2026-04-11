@@ -125,7 +125,7 @@ async function executeTool(
         const dataInicio = new Date(input.data_hora)
         const dataFim    = new Date(dataInicio.getTime() + 30 * 60 * 1000)
 
-        const { data } = await supabase.rpc('criar_agendamento', {
+        const { data, error } = await supabase.rpc('criar_agendamento', {
           p_dealership_id:      dealershipId,
           p_data_inicio:        dataInicio.toISOString(),
           p_data_fim:           dataFim.toISOString(),
@@ -140,7 +140,18 @@ async function executeTool(
           p_dados_qualificacao: '{}',
           p_conversa_id:        conversaId,
         })
-        result = data
+        if (error) {
+          result = { success: false, error: error.message }
+        } else if (!data?.success) {
+          // Slot unavailable — suggest checking availability instead
+          result = {
+            success: false,
+            error: data?.error || 'Horário não disponível.',
+            instrucao: 'Use verificar_disponibilidade para consultar horários livres e ofereça alternativas ao cliente.',
+          }
+        } else {
+          result = data
+        }
         break
       }
 
@@ -350,7 +361,8 @@ REGRAS:
 - Para financiamento: trabalhamos com os principais bancos, simule na loja
 - Se não souber responder, ofereça falar com um vendedor: ${storePhone}
 - Mencione o endereço ao sugerir a visita
-- Se o cliente confirmar data e horário, use a ferramenta agendar_visita imediatamente`
+- Se o cliente confirmar data e horário, use a ferramenta agendar_visita imediatamente
+- IMPORTANTE: só confirme o agendamento ao cliente se a ferramenta retornar success=true. Se retornar success=false, informe que o horário não está disponível e use verificar_disponibilidade para oferecer alternativas`
 }
 
 // ─── Main export ──────────────────────────────────────────────────────────────
