@@ -162,6 +162,26 @@ async function handleIncomingMessage(
 
   // WA housekeeping
   await markMessageAsRead(sessao.wasender_api_key, remoteJid, key.id)
+
+  // Debounce: wait 1.5s then check if a newer message arrived.
+  // If the user sent multiple messages quickly, only the latest one should
+  // trigger the AI — prevents duplicate/race-condition responses.
+  await new Promise(r => setTimeout(r, 1500))
+
+  const { data: latestMsg } = await supabase
+    .from('whatsapp_mensagens')
+    .select('wasender_msg_id')
+    .eq('conversa_id', conversa.id)
+    .eq('direcao', 'entrada')
+    .order('criado_em', { ascending: false })
+    .limit(1)
+    .single()
+
+  if (latestMsg && latestMsg.wasender_msg_id !== key.id) {
+    console.log(`[Webhook] newer message detected — skipping AI for ${key.id}`)
+    return
+  }
+
   await sendPresenceUpdate(sessao.wasender_api_key, remoteJid, 'composing')
 
   // Generate AI response — pass wasenderMsgId so context builder excludes it from history
