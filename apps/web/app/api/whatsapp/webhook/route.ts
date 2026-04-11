@@ -16,7 +16,7 @@ import {
   markMessageAsRead,
   cleanPhoneNumber,
 } from '@/lib/wasender/client'
-import { generateAIResponse } from '@/lib/ai/whatsapp-agent'
+import { generateAIResponse, shouldUseSmartModel } from '@/lib/ai/whatsapp-agent'
 import type {
   WASenderWebhookPayload,
   WASenderIncomingMessage,
@@ -301,7 +301,3 @@ async function sendOutOfHoursMessage(sessao: WhatsAppSessao, remoteJid: string) 
   await sendWhatsAppMessage({ apiKey: sessao.wasender_api_key, to: remoteJid, text: msg })
 }
 
-function shouldUseSmartModel(message: string): boolean {
-  const complex = ['financiamento','parcela','entrada','comparar','diferença','melhor opção','recomendar']
-  return complex.some(w => message.toLowerCase().includes(w))
-}
