@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { BarChart3, TrendingUp, DollarSign, Car, Receipt, Calendar, CalendarClock, ChevronLeft } from 'lucide-react'
+import { BarChart3, TrendingUp, DollarSign, Car, Receipt, Calendar, CalendarClock, ChevronLeft, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -200,6 +200,22 @@ export default function RelatoriosPage() {
 
   return (
     <div className="space-y-6">
+      {/* ROI Report CTA */}
+      <Link href="/dashboard/relatorios/roi-valor-agregado">
+        <div className="flex items-center justify-between rounded-2xl bg-foreground text-background px-5 py-4 cursor-pointer hover:opacity-90 transition-opacity">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center flex-shrink-0">
+              <Sparkles className="w-5 h-5 text-yellow-300" />
+            </div>
+            <div>
+              <p className="font-bold text-sm">ROI e Valor Agregado</p>
+              <p className="text-xs text-white/60 mt-0.5">Relatório completo das funcionalidades com retorno estimado e impacto operacional</p>
+            </div>
+          </div>
+          <span className="text-xs font-semibold text-white/70 hidden sm:block">Ver relatório →</span>
+        </div>
+      </Link>
+
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
