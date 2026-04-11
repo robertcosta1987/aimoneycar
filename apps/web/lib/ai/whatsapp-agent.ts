@@ -113,10 +113,21 @@ async function executeTool(
           p_salesperson_id: null,
         })
         const available = (slots || []).filter((s: any) => s.disponivel)
+        // Compute the day label server-side in BRT so the AI never has to
+        // convert a YYYY-MM-DD string to a weekday name (it gets that wrong).
+        const [y, m, d] = (input.data as string).split('-').map(Number)
+        const dateObj = new Date(Date.UTC(y, m - 1, d, 12, 0, 0)) // noon UTC avoids any TZ shift
+        const TZ = { timeZone: 'America/Sao_Paulo' }
+        const diaSemana = dateObj.toLocaleDateString('pt-BR', { ...TZ, weekday: 'long' })
+        const dataDisplay = dateObj.toLocaleDateString('pt-BR', { ...TZ, day: '2-digit', month: '2-digit', year: 'numeric' })
         result = {
           data: input.data,
+          dia_semana: diaSemana,
+          data_formatada: dataDisplay,
+          label: `${diaSemana}, ${dataDisplay}`,
           horarios_disponiveis: available.map((s: any) => (s.horario as string).slice(0, 5)),
           total: available.length,
+          instrucao: `Ao apresentar esta data ao cliente, use EXATAMENTE: "${diaSemana} (${(input.data as string).slice(5).replace('-', '/')})" — não calcule o dia da semana por conta própria.`,
         }
         break
       }
@@ -150,7 +161,19 @@ async function executeTool(
             instrucao: 'Use verificar_disponibilidade para consultar horários livres e ofereça alternativas ao cliente.',
           }
         } else {
-          result = data
+          // Add server-computed date label to the success response so AI echoes it correctly
+          const dtISO = (input.data_hora as string).slice(0, 10)
+          const [y2, m2, d2] = dtISO.split('-').map(Number)
+          const dtObj = new Date(Date.UTC(y2, m2 - 1, d2, 12, 0, 0))
+          const TZ2 = { timeZone: 'America/Sao_Paulo' }
+          const diaSemana2 = dtObj.toLocaleDateString('pt-BR', { ...TZ2, weekday: 'long' })
+          const dataDisplay2 = dtObj.toLocaleDateString('pt-BR', { ...TZ2, day: '2-digit', month: '2-digit', year: 'numeric' })
+          result = {
+            ...data,
+            dia_semana: diaSemana2,
+            data_formatada: dataDisplay2,
+            label: `${diaSemana2}, ${dataDisplay2}`,
+          }
         }
         break
       }
@@ -356,6 +379,7 @@ REGRAS:
 - Mencione o endereço ao sugerir a visita
 - Para verificar horários disponíveis, SEMPRE use a ferramenta verificar_disponibilidade — nunca invente horários
 - Se o cliente confirmar data e horário, use a ferramenta agendar_visita imediatamente
+- CRÍTICO: ao mencionar datas ao cliente, use SEMPRE o campo "label" retornado pela ferramenta (ex: "segunda-feira, 13/04/2026"). NUNCA calcule o dia da semana de uma data — use apenas o que a ferramenta retornou.
 - IMPORTANTE: só confirme o agendamento ao cliente se a ferramenta retornar success=true. Se retornar success=false, informe que o horário não está disponível e use verificar_disponibilidade para oferecer alternativas`
 }
 
