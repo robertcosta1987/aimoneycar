@@ -17,6 +17,53 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+// ─── Slot logic (mirrors widget exactly) ──────────────────────────────────────
+// 9:00–18:00 BRT, 30-min appointments, 15-min gap = 45-min cycle, max 2 concurrent
+
+const SLOT_STARTS_BRT = (() => {
+  const slots: string[] = []
+  let h = 9, m = 0
+  while (h < 18) {
+    slots.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`)
+    m += 45
+    if (m >= 60) { h += Math.floor(m / 60); m = m % 60 }
+    if (h === 17 && m > 15) break
+  }
+  return slots
+})()
+
+async function getSlotsForDate(dealershipId: string, dateISO: string): Promise<{ time: string; available: boolean }[]> {
+  const dayStart = `${dateISO}T00:00:00-03:00`
+  const dayEnd   = `${dateISO}T23:59:59-03:00`
+
+  const { data: existing } = await supabase
+    .from('agendamentos')
+    .select('data_inicio, data_fim')
+    .eq('dealership_id', dealershipId)
+    .neq('status', 'cancelado')
+    .gte('data_inicio', dayStart)
+    .lte('data_inicio', dayEnd)
+
+  const booked = existing || []
+
+  return SLOT_STARTS_BRT.map(slotTime => {
+    const [sh, sm] = slotTime.split(':').map(Number)
+    const slotStartMs = Date.UTC(
+      Number(dateISO.slice(0, 4)),
+      Number(dateISO.slice(5, 7)) - 1,
+      Number(dateISO.slice(8, 10)),
+      sh + 3, sm  // BRT+3 = UTC
+    )
+    const slotEndMs = slotStartMs + 30 * 60 * 1000
+    const count = booked.filter(a => {
+      const aStart = new Date(a.data_inicio).getTime()
+      const aEnd   = new Date(a.data_fim).getTime()
+      return aStart < slotEndMs && aEnd > slotStartMs
+    }).length
+    return { time: slotTime, available: count < 2 }
+  })
+}
+
 // ─── Tools (mirrors widget) ────────────────────────────────────────────────────
 
 const TOOLS: Anthropic.Tool[] = [
@@ -117,40 +164,25 @@ async function executeTool(
 
       case 'proximos_dias_disponiveis': {
         const dias = Math.min(input.quantidade_dias || 7, 14)
-        const TZ = { timeZone: 'America/Sao_Paulo' }
+        const TZ  = { timeZone: 'America/Sao_Paulo' }
         const now = new Date()
 
-        // Build list of upcoming dates in BRT
-        const candidates: { iso: string; label: string; display: string }[] = []
-        for (let i = 1; i <= dias + 7; i++) { // check extra days in case some are fully booked
-          const d = new Date(Date.UTC(
-            ...(() => {
-              // Get the BRT date for "today + i days" safely
-              const t = new Date(now.getTime() + i * 86400000)
-              const s = t.toLocaleDateString('en-CA', TZ) // YYYY-MM-DD
-              const [y, m, dd] = s.split('-').map(Number)
-              return [y, m - 1, dd] as [number, number, number]
-            })(),
-            12, 0, 0,
-          ))
-          const iso = d.toLocaleDateString('en-CA', TZ)
+        // Build candidate dates starting from tomorrow in BRT
+        const candidates: { iso: string; label: string }[] = []
+        for (let i = 1; candidates.length < dias && i <= dias + 7; i++) {
+          const iso = new Date(now.getTime() + i * 86400000).toLocaleDateString('en-CA', TZ)
+          const d   = new Date(iso + 'T12:00:00Z')
           const weekday = d.toLocaleDateString('pt-BR', { ...TZ, weekday: 'long' })
-          const mmdd = iso.slice(5).replace('-', '/')
-          candidates.push({ iso, label: `${weekday} (${mmdd})`, display: `${weekday}, ${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` })
-          if (candidates.length >= dias) break
+          const mmdd    = iso.slice(5).replace('-', '/')
+          candidates.push({ iso, label: `${weekday} (${mmdd})` })
         }
 
-        // Check availability for each day in parallel
+        // Check availability using the same logic as the widget
         const results = await Promise.all(
           candidates.map(async (c) => {
-            const { data: slots } = await supabase.rpc('get_slots_disponiveis', {
-              p_dealership_id:  dealershipId,
-              p_data_inicio:    c.iso,
-              p_data_fim:       c.iso,
-              p_salesperson_id: null,
-            })
-            const available = (slots || []).filter((s: any) => s.disponivel)
-            return { ...c, data_iso: c.iso, horarios: available.map((s: any) => (s.horario as string).slice(0, 5)), total: available.length }
+            const slots   = await getSlotsForDate(dealershipId, c.iso)
+            const horarios = slots.filter(s => s.available).map(s => s.time)
+            return { ...c, data_iso: c.iso, horarios, total: horarios.length }
           })
         )
 
@@ -163,73 +195,89 @@ async function executeTool(
       }
 
       case 'verificar_disponibilidade': {
-        const { data: slots } = await supabase.rpc('get_slots_disponiveis', {
-          p_dealership_id:  dealershipId,
-          p_data_inicio:    input.data,
-          p_data_fim:       input.data,
-          p_salesperson_id: null,
-        })
-        const available = (slots || []).filter((s: any) => s.disponivel)
-        // Compute the day label server-side in BRT so the AI never has to
-        // convert a YYYY-MM-DD string to a weekday name (it gets that wrong).
-        const [y, m, d] = (input.data as string).split('-').map(Number)
-        const dateObj = new Date(Date.UTC(y, m - 1, d, 12, 0, 0)) // noon UTC avoids any TZ shift
-        const TZ = { timeZone: 'America/Sao_Paulo' }
-        const diaSemana = dateObj.toLocaleDateString('pt-BR', { ...TZ, weekday: 'long' })
-        const dataDisplay = dateObj.toLocaleDateString('pt-BR', { ...TZ, day: '2-digit', month: '2-digit', year: 'numeric' })
+        const slots   = await getSlotsForDate(dealershipId, input.data)
+        const available = slots.filter(s => s.available).map(s => s.time)
+        const TZ      = { timeZone: 'America/Sao_Paulo' }
+        const dateObj = new Date(input.data + 'T12:00:00Z')
+        const diaSemana  = dateObj.toLocaleDateString('pt-BR', { ...TZ, weekday: 'long' })
+        const mmdd       = (input.data as string).slice(5).replace('-', '/')
         result = {
           data: input.data,
-          dia_semana: diaSemana,
-          data_formatada: dataDisplay,
-          label: `${diaSemana}, ${dataDisplay}`,
-          horarios_disponiveis: available.map((s: any) => (s.horario as string).slice(0, 5)),
+          label: `${diaSemana} (${mmdd})`,
+          horarios_disponiveis: available,
           total: available.length,
-          instrucao: `Ao apresentar esta data ao cliente, use EXATAMENTE: "${diaSemana} (${(input.data as string).slice(5).replace('-', '/')})" — não calcule o dia da semana por conta própria.`,
+          instrucao: `Ao apresentar esta data, use EXATAMENTE: "${diaSemana} (${mmdd})"`,
         }
         break
       }
 
       case 'agendar_visita': {
-        const dataInicio = new Date(input.data_hora)
-        const dataFim    = new Date(dataInicio.getTime() + 30 * 60 * 1000)
+        const localStr = (input.data_hora as string).includes('T') ? input.data_hora : (input.data_hora as string).replace(' ', 'T')
+        const [datePart, timePart] = localStr.split('T')
+        const [hh, mm] = (timePart || '09:00').split(':').map(Number)
+        const slotKey  = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`
 
-        const { data, error } = await supabase.rpc('criar_agendamento', {
-          p_dealership_id:      dealershipId,
-          p_data_inicio:        dataInicio.toISOString(),
-          p_data_fim:           dataFim.toISOString(),
-          p_lead_nome:          input.nome,
-          p_lead_telefone:      input.telefone || customerPhone,
-          p_lead_email:         null,
-          p_tipo:               input.tipo,
-          p_vehicle_id:         null,
-          p_veiculo_interesse:  input.veiculo_interesse || null,
-          p_salesperson_id:     null,
-          p_origem:             'whatsapp',
-          p_dados_qualificacao: '{}',
-          p_conversa_id:        conversaId,
-        })
-        if (error) {
-          result = { success: false, error: error.message }
-        } else if (!data?.success) {
-          // Slot unavailable — suggest checking availability instead
+        // Validate slot time against the same set the widget uses
+        if (!SLOT_STARTS_BRT.includes(slotKey)) {
           result = {
             success: false,
-            error: data?.error || 'Horário não disponível.',
-            instrucao: 'Use verificar_disponibilidade para consultar horários livres e ofereça alternativas ao cliente.',
+            error: `Horário ${slotKey} não é válido. Horários disponíveis: ${SLOT_STARTS_BRT.join(', ')}`,
           }
-        } else {
-          // Add server-computed date label to the success response so AI echoes it correctly
-          const dtISO = (input.data_hora as string).slice(0, 10)
-          const [y2, m2, d2] = dtISO.split('-').map(Number)
-          const dtObj = new Date(Date.UTC(y2, m2 - 1, d2, 12, 0, 0))
-          const TZ2 = { timeZone: 'America/Sao_Paulo' }
-          const diaSemana2 = dtObj.toLocaleDateString('pt-BR', { ...TZ2, weekday: 'long' })
-          const dataDisplay2 = dtObj.toLocaleDateString('pt-BR', { ...TZ2, day: '2-digit', month: '2-digit', year: 'numeric' })
+          break
+        }
+
+        // Check availability the same way the widget does
+        const slots = await getSlotsForDate(dealershipId, datePart)
+        const slot  = slots.find(s => s.time === slotKey)
+        if (!slot?.available) {
           result = {
-            ...data,
-            dia_semana: diaSemana2,
-            data_formatada: dataDisplay2,
-            label: `${diaSemana2}, ${dataDisplay2}`,
+            success: false,
+            error: `Horário ${slotKey} em ${datePart} não está disponível.`,
+            alternativas: slots.filter(s => s.available).map(s => s.time),
+            instrucao: 'Ofereça as alternativas ao cliente.',
+          }
+          break
+        }
+
+        // Build UTC timestamps (BRT = UTC-3) — same as widget
+        const startUTC = new Date(Date.UTC(
+          Number(datePart.slice(0, 4)),
+          Number(datePart.slice(5, 7)) - 1,
+          Number(datePart.slice(8, 10)),
+          hh + 3, mm
+        ))
+        const endUTC = new Date(startUTC.getTime() + 30 * 60 * 1000)
+
+        const { data: inserted, error } = await supabase
+          .from('agendamentos')
+          .insert({
+            dealership_id:     dealershipId,
+            data_inicio:       startUTC.toISOString(),
+            data_fim:          endUTC.toISOString(),
+            lead_nome:         input.nome,
+            lead_telefone:     input.telefone || customerPhone,
+            lead_email:        null,
+            tipo:              input.tipo,
+            veiculo_interesse: input.veiculo_interesse || null,
+            origem:            'whatsapp',
+            dados_qualificacao: {},
+            conversa_id:       conversaId,
+            status:            'agendado',
+          })
+          .select('id, data_inicio, data_fim, tipo, status')
+          .single()
+
+        if (error) {
+          result = { success: false, error: error.message }
+        } else {
+          const TZ       = { timeZone: 'America/Sao_Paulo' }
+          const dateObj  = new Date(datePart + 'T12:00:00Z')
+          const diaSemana = dateObj.toLocaleDateString('pt-BR', { ...TZ, weekday: 'long' })
+          const mmdd      = datePart.slice(5).replace('-', '/')
+          result = {
+            success: true,
+            agendamento: { id: inserted.id, data: datePart, horario: slotKey, tipo: inserted.tipo },
+            label: `${diaSemana} (${mmdd}) às ${slotKey}`,
           }
         }
         break
@@ -402,7 +450,8 @@ IMPORTANTE: Ao mencionar um dia da semana (ex: "segunda-feira"), use SEMPRE a da
 DADOS DA LOJA:
 📍 ${storeAddress}
 📞 ${storePhone}
-🕐 Horário de atendimento presencial: ${horaInicio && horaFim ? `${horaInicio} às ${horaFim}` : '08:00 às 18:00'}
+🕐 Horário de atendimento presencial: ${horaInicio && horaFim ? `${horaInicio} às ${horaFim}` : '09:00 às 18:00'}
+⏰ Slots de agendamento disponíveis: ${SLOT_STARTS_BRT.join(', ')}
 ${dateBlock}
 
 ${ctx.customerName ? `CLIENTE: ${ctx.customerName}` : ''}
