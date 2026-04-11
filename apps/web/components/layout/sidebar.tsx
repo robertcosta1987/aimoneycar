@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   LayoutDashboard, MessageSquare, Car, Bell, Receipt,
-  BarChart3, Upload, Settings, LogOut, Zap, ChevronLeft, ChevronRight, CalendarDays, Users, CalendarClock, Timer, DollarSign, FileBarChart2, MessageCircle
+  BarChart3, Upload, Settings, LogOut, Zap, ChevronLeft, ChevronRight, CalendarDays, Users, CalendarClock, Timer, DollarSign, FileBarChart2, MessageCircle, Sparkles
 } from 'lucide-react'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
@@ -22,6 +22,7 @@ const navItems = [
   { href: '/dashboard/despesas', icon: Receipt, label: 'Despesas' },
   { href: '/dashboard/relatorios', icon: BarChart3, label: 'Relatórios' },
   { href: '/dashboard/relatorios-executivos', icon: FileBarChart2, label: 'Rel. Executivo' },
+  { href: '/dashboard/relatorios/roi-valor-agregado', icon: Sparkles, label: 'ROI & Valor' },
   { href: '/dashboard/relatorios/agendar', icon: CalendarClock, label: 'Email Reports' },
   { href: '/dashboard/importar', icon: Upload, label: 'Importar' },
 ]
