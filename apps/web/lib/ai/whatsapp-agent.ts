@@ -35,8 +35,18 @@ const TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: 'proximos_dias_disponiveis',
+    description: 'Retorna os próximos dias com horários disponíveis para agendamento. USE SEMPRE este tool antes de sugerir datas ao cliente — nunca invente datas.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        quantidade_dias: { type: 'integer', description: 'Quantos dias verificar a partir de hoje (padrão: 7)' },
+      },
+    },
+  },
+  {
     name: 'verificar_disponibilidade',
-    description: 'Verifica horários disponíveis para agendamento em uma data específica',
+    description: 'Verifica horários disponíveis para agendamento em uma data específica (use o campo "data_iso" retornado por proximos_dias_disponiveis)',
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -102,6 +112,53 @@ async function executeTool(
 
         const { data } = await query.limit(10)
         result = { encontrados: data?.length || 0, veiculos: data || [] }
+        break
+      }
+
+      case 'proximos_dias_disponiveis': {
+        const dias = Math.min(input.quantidade_dias || 7, 14)
+        const TZ = { timeZone: 'America/Sao_Paulo' }
+        const now = new Date()
+
+        // Build list of upcoming dates in BRT
+        const candidates: { iso: string; label: string; display: string }[] = []
+        for (let i = 1; i <= dias + 7; i++) { // check extra days in case some are fully booked
+          const d = new Date(Date.UTC(
+            ...(() => {
+              // Get the BRT date for "today + i days" safely
+              const t = new Date(now.getTime() + i * 86400000)
+              const s = t.toLocaleDateString('en-CA', TZ) // YYYY-MM-DD
+              const [y, m, dd] = s.split('-').map(Number)
+              return [y, m - 1, dd] as [number, number, number]
+            })(),
+            12, 0, 0,
+          ))
+          const iso = d.toLocaleDateString('en-CA', TZ)
+          const weekday = d.toLocaleDateString('pt-BR', { ...TZ, weekday: 'long' })
+          const mmdd = iso.slice(5).replace('-', '/')
+          candidates.push({ iso, label: `${weekday} (${mmdd})`, display: `${weekday}, ${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` })
+          if (candidates.length >= dias) break
+        }
+
+        // Check availability for each day in parallel
+        const results = await Promise.all(
+          candidates.map(async (c) => {
+            const { data: slots } = await supabase.rpc('get_slots_disponiveis', {
+              p_dealership_id:  dealershipId,
+              p_data_inicio:    c.iso,
+              p_data_fim:       c.iso,
+              p_salesperson_id: null,
+            })
+            const available = (slots || []).filter((s: any) => s.disponivel)
+            return { ...c, data_iso: c.iso, horarios: available.map((s: any) => (s.horario as string).slice(0, 5)), total: available.length }
+          })
+        )
+
+        const comDisponibilidade = results.filter(r => r.total > 0)
+        result = {
+          instrucao: 'Use o campo "label" de cada dia ao apresentar opções ao cliente. Não altere nem recalcule as datas.',
+          dias: comDisponibilidade.length > 0 ? comDisponibilidade : results,
+        }
         break
       }
 
@@ -377,10 +434,11 @@ REGRAS:
 - Para financiamento: trabalhamos com os principais bancos, simule na loja
 - Se não souber responder, ofereça falar com um vendedor: ${storePhone}
 - Mencione o endereço ao sugerir a visita
-- Para verificar horários disponíveis, SEMPRE use a ferramenta verificar_disponibilidade — nunca invente horários
-- Se o cliente confirmar data e horário, use a ferramenta agendar_visita imediatamente
-- CRÍTICO: ao mencionar datas ao cliente, use SEMPRE o campo "label" retornado pela ferramenta (ex: "segunda-feira, 13/04/2026"). NUNCA calcule o dia da semana de uma data — use apenas o que a ferramenta retornou.
-- IMPORTANTE: só confirme o agendamento ao cliente se a ferramenta retornar success=true. Se retornar success=false, informe que o horário não está disponível e use verificar_disponibilidade para oferecer alternativas`
+- NUNCA mencione datas ou dias da semana sem antes chamar proximos_dias_disponiveis — suas datas internas estão desatualizadas
+- Ao sugerir opções de agenda, chame proximos_dias_disponiveis e apresente o campo "label" de cada dia exatamente como retornado
+- Se o cliente escolher um dia, chame verificar_disponibilidade com o campo "data_iso" correspondente para confirmar os horários
+- Se o cliente confirmar data e horário, chame agendar_visita imediatamente
+- IMPORTANTE: só confirme o agendamento ao cliente se agendar_visita retornar success=true. Se retornar success=false, use proximos_dias_disponiveis para oferecer alternativas`
 }
 
 // ─── Main export ──────────────────────────────────────────────────────────────
