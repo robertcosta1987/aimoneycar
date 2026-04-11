@@ -2,10 +2,8 @@
  * lib/ai/whatsapp-agent.ts
  *
  * Customer-facing WhatsApp AI agent.
- * Goal: understand what the customer is looking for, match with available
- * vehicles, and schedule an in-person visit or test drive.
- *
- * Uses an agentic tool-use loop (same as internal chat) with calendar access.
+ * Mirrors the widget chat agent: same tools, same prompt structure,
+ * same data sources (dealership info, vehicles, available slots from DB).
  */
 
 import Anthropic from '@anthropic-ai/sdk'
@@ -19,59 +17,59 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// ─── Calendar tools (same as internal chat) ───────────────────────────────────
+// ─── Tools (mirrors widget) ────────────────────────────────────────────────────
 
-const CALENDAR_TOOLS: Anthropic.Tool[] = [
+const TOOLS: Anthropic.Tool[] = [
   {
-    name: 'calendar_get_slots',
-    description: 'Busca horários disponíveis para agendamento. Use sempre que o cliente quiser saber quando pode vir à loja ou quando for sugerir um horário para visita ou test drive.',
+    name: 'buscar_veiculos',
+    description: 'Busca veículos disponíveis no estoque por marca, modelo, ano ou preço',
     input_schema: {
       type: 'object' as const,
       properties: {
-        data_inicio: { type: 'string', description: 'Data início no formato YYYY-MM-DD' },
-        data_fim:    { type: 'string', description: 'Data fim no formato YYYY-MM-DD. Se omitido, usa data_inicio.' },
+        marca:     { type: 'string', description: 'Marca do veículo (ex: Volkswagen, Fiat)' },
+        modelo:    { type: 'string', description: 'Modelo do veículo (ex: Gol, Onix)' },
+        ano_min:   { type: 'integer', description: 'Ano mínimo' },
+        ano_max:   { type: 'integer', description: 'Ano máximo' },
+        preco_max: { type: 'number', description: 'Preço máximo em reais' },
       },
-      required: ['data_inicio'],
     },
   },
   {
-    name: 'calendar_create_appointment',
-    description: 'Cria um agendamento para o cliente. Use quando o cliente confirmar data e horário para visita ou test drive.',
+    name: 'verificar_disponibilidade',
+    description: 'Verifica horários disponíveis para agendamento em uma data específica',
     input_schema: {
       type: 'object' as const,
       properties: {
-        lead_nome:         { type: 'string', description: 'Nome completo do cliente' },
-        lead_telefone:     { type: 'string', description: 'Telefone do cliente com DDD' },
-        data_hora:         { type: 'string', description: 'Data e hora no formato ISO (ex: 2024-04-15T14:00:00)' },
-        tipo:              { type: 'string', enum: ['visita', 'test_drive', 'avaliacao_troca', 'entrega'], description: 'Tipo de agendamento' },
-        veiculo_interesse: { type: 'string', description: 'Veículo de interesse mencionado pelo cliente' },
+        data: { type: 'string', description: 'Data no formato YYYY-MM-DD' },
       },
-      required: ['lead_nome', 'lead_telefone', 'data_hora', 'tipo'],
+      required: ['data'],
     },
   },
   {
-    name: 'calendar_list_appointments',
-    description: 'Consulta agendamentos existentes. Use para verificar se o cliente já tem algo marcado ou para confirmar um agendamento.',
+    name: 'agendar_visita',
+    description: 'Agenda uma visita ou test drive para o cliente. Use quando o cliente confirmar data e horário.',
     input_schema: {
       type: 'object' as const,
       properties: {
-        data_inicio: { type: 'string', description: 'Data início no formato YYYY-MM-DD' },
-        data_fim:    { type: 'string', description: 'Data fim no formato YYYY-MM-DD' },
+        nome:              { type: 'string', description: 'Nome completo do cliente' },
+        telefone:          { type: 'string', description: 'Telefone do cliente com DDD' },
+        data_hora:         { type: 'string', description: 'Data e hora ISO (ex: 2024-04-15T14:00:00)' },
+        tipo:              { type: 'string', enum: ['visita', 'test_drive'], description: 'Tipo de agendamento' },
+        veiculo_interesse: { type: 'string', description: 'Veículo de interesse' },
       },
-      required: ['data_inicio'],
+      required: ['nome', 'telefone', 'data_hora', 'tipo'],
     },
   },
   {
-    name: 'calendar_update_status',
-    description: 'Atualiza o status de um agendamento (confirmar, cancelar, etc.).',
+    name: 'cancelar_agendamento',
+    description: 'Cancela um agendamento existente do cliente',
     input_schema: {
       type: 'object' as const,
       properties: {
         agendamento_id: { type: 'string', description: 'ID do agendamento' },
-        status:         { type: 'string', enum: ['confirmado', 'cancelado', 'no_show'], description: 'Novo status' },
-        motivo:         { type: 'string', description: 'Motivo (obrigatório para cancelado)' },
+        motivo:         { type: 'string', description: 'Motivo do cancelamento' },
       },
-      required: ['agendamento_id', 'status'],
+      required: ['agendamento_id'],
     },
   },
 ]
@@ -89,87 +87,69 @@ async function executeTool(
     let result: any
 
     switch (name) {
-      case 'calendar_get_slots': {
-        const endDate = input.data_fim || input.data_inicio
-        const { data, error } = await supabase.rpc('get_slots_disponiveis', {
+      case 'buscar_veiculos': {
+        let query = supabase
+          .from('vehicles')
+          .select('id, brand, model, version, year_model, color, mileage, sale_price, fuel, transmission')
+          .eq('dealership_id', dealershipId)
+          .eq('status', 'available')
+
+        if (input.marca)     query = query.ilike('brand', `%${input.marca}%`)
+        if (input.modelo)    query = query.ilike('model', `%${input.modelo}%`)
+        if (input.ano_min)   query = query.gte('year_model', input.ano_min)
+        if (input.ano_max)   query = query.lte('year_model', input.ano_max)
+        if (input.preco_max) query = query.lte('sale_price', input.preco_max)
+
+        const { data } = await query.limit(10)
+        result = { encontrados: data?.length || 0, veiculos: data || [] }
+        break
+      }
+
+      case 'verificar_disponibilidade': {
+        const { data: slots } = await supabase.rpc('get_slots_disponiveis', {
           p_dealership_id:  dealershipId,
-          p_data_inicio:    input.data_inicio,
-          p_data_fim:       endDate,
+          p_data_inicio:    input.data,
+          p_data_fim:       input.data,
           p_salesperson_id: null,
         })
-        if (error) { result = { error: error.message }; break }
-        const grouped: Record<string, any> = {}
-        for (const slot of (data || []).filter((s: any) => s.disponivel)) {
-          if (!grouped[slot.data]) grouped[slot.data] = { data: slot.data, dia_nome: slot.dia_nome, horarios: [] }
-          grouped[slot.data].horarios.push((slot.horario as string).slice(0, 5))
-        }
+        const available = (slots || []).filter((s: any) => s.disponivel)
         result = {
-          dias_disponiveis: Object.values(grouped),
-          total_slots: (data || []).filter((s: any) => s.disponivel).length,
+          data: input.data,
+          horarios_disponiveis: available.map((s: any) => (s.horario as string).slice(0, 5)),
+          total: available.length,
         }
         break
       }
 
-      case 'calendar_create_appointment': {
+      case 'agendar_visita': {
         const dataInicio = new Date(input.data_hora)
         const dataFim    = new Date(dataInicio.getTime() + 30 * 60 * 1000)
-        const { data, error } = await supabase.rpc('criar_agendamento', {
-          p_dealership_id:     dealershipId,
-          p_data_inicio:       dataInicio.toISOString(),
-          p_data_fim:          dataFim.toISOString(),
-          p_lead_nome:         input.lead_nome,
-          p_lead_telefone:     input.lead_telefone || customerPhone,
-          p_lead_email:        null,
-          p_tipo:              input.tipo,
-          p_vehicle_id:        null,
-          p_veiculo_interesse: input.veiculo_interesse || null,
-          p_salesperson_id:    null,
-          p_origem:            'whatsapp',
+
+        const { data } = await supabase.rpc('criar_agendamento', {
+          p_dealership_id:      dealershipId,
+          p_data_inicio:        dataInicio.toISOString(),
+          p_data_fim:           dataFim.toISOString(),
+          p_lead_nome:          input.nome,
+          p_lead_telefone:      input.telefone || customerPhone,
+          p_lead_email:         null,
+          p_tipo:               input.tipo,
+          p_vehicle_id:         null,
+          p_veiculo_interesse:  input.veiculo_interesse || null,
+          p_salesperson_id:     null,
+          p_origem:             'whatsapp',
           p_dados_qualificacao: '{}',
-          p_conversa_id:       conversaId,
+          p_conversa_id:        conversaId,
         })
-        if (error) { result = { error: error.message }; break }
         result = data
         break
       }
 
-      case 'calendar_list_appointments': {
-        const endDate = input.data_fim || input.data_inicio
-        const { data, error } = await supabase.rpc('get_calendario_dashboard', {
-          p_dealership_id:  dealershipId,
-          p_data_inicio:    input.data_inicio,
-          p_data_fim:       endDate,
-          p_salesperson_id: null,
+      case 'cancelar_agendamento': {
+        const { data } = await supabase.rpc('cancelar_agendamento', {
+          p_agendamento_id: input.agendamento_id,
+          p_motivo:         input.motivo || null,
         })
-        if (error) { result = { error: error.message }; break }
-        result = {
-          total: (data || []).length,
-          agendamentos: (data || []).map((a: any) => ({
-            id:        a.id,
-            cliente:   a.lead_nome,
-            data_hora: a.data_inicio,
-            tipo:      a.tipo,
-            veiculo:   a.veiculo_interesse,
-            status:    a.status,
-          })),
-        }
-        break
-      }
-
-      case 'calendar_update_status': {
-        if (input.status === 'cancelado') {
-          const { data } = await supabase.rpc('cancelar_agendamento', {
-            p_agendamento_id: input.agendamento_id,
-            p_motivo:         input.motivo || null,
-          })
-          result = data
-        } else {
-          const { error } = await supabase
-            .from('agendamentos')
-            .update({ status: input.status, updated_at: new Date().toISOString() })
-            .eq('id', input.agendamento_id)
-          result = error ? { error: error.message } : { success: true }
-        }
+        result = data
         break
       }
 
@@ -190,7 +170,9 @@ interface WhatsAppContext {
   conversaId:          string
   customerPhone:       string
   customerName?:       string | null
+  dealership:          { name: string; address: string; phone: string; city: string; state: string } | null
   availableVehicles:   AIVehicle[]
+  availableSlots:      Record<string, string[]>   // date -> ["09:00", "09:30", ...]
   conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>
 }
 
@@ -199,10 +181,6 @@ async function buildContext(
   conversaId:    string,
   excludeMsgId?: string,
 ): Promise<WhatsAppContext> {
-  // Build the history query, excluding the just-saved incoming message.
-  // Without this, the current message appears twice in the API call
-  // (once from history, once as the explicit userMessage param), which
-  // causes two consecutive user-role messages and an Anthropic API error.
   let historyQuery = supabase
     .from('whatsapp_mensagens')
     .select('direcao, conteudo, criado_em')
@@ -212,16 +190,21 @@ async function buildContext(
   }
   historyQuery = historyQuery.order('criado_em', { ascending: false }).limit(12)
 
+  const today    = new Date().toISOString().split('T')[0]
+  const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+
   const [
     { data: messages },
     { data: vehicles },
     { data: conversa },
+    { data: dealership },
+    { data: slots },
   ] = await Promise.all([
     historyQuery,
 
     supabase
       .from('vehicles')
-      .select('id, brand, model, year_model, sale_price, mileage, color, fuel')
+      .select('id, brand, model, version, year_model, color, mileage, sale_price, fuel, transmission')
       .eq('dealership_id', dealershipId)
       .eq('status', 'available')
       .not('sale_price', 'is', null)
@@ -230,9 +213,22 @@ async function buildContext(
 
     supabase
       .from('whatsapp_conversas')
-      .select('nome_contato, telefone, telefone_limpo, ultima_intencao')
+      .select('nome_contato, telefone, telefone_limpo')
       .eq('id', conversaId)
       .single(),
+
+    supabase
+      .from('dealerships')
+      .select('name, address, phone, whatsapp, city, state')
+      .eq('id', dealershipId)
+      .single(),
+
+    supabase.rpc('get_slots_disponiveis', {
+      p_dealership_id:  dealershipId,
+      p_data_inicio:    today,
+      p_data_fim:       nextWeek,
+      p_salesperson_id: null,
+    }),
   ])
 
   const availableVehicles: AIVehicle[] = (vehicles ?? []).map(v => ({
@@ -245,12 +241,26 @@ async function buildContext(
     color:   v.color,
   }))
 
+  const availableSlots: Record<string, string[]> = {}
+  for (const slot of (slots || []).filter((s: any) => s.disponivel)) {
+    if (!availableSlots[slot.data]) availableSlots[slot.data] = []
+    availableSlots[slot.data].push((slot.horario as string).slice(0, 5))
+  }
+
   return {
     dealershipId,
     conversaId,
-    customerPhone:       conversa?.telefone_limpo ?? '',
-    customerName:        conversa?.nome_contato,
+    customerPhone:  conversa?.telefone_limpo ?? '',
+    customerName:   conversa?.nome_contato,
+    dealership:     dealership ? {
+      name:    dealership.name,
+      address: dealership.address || '',
+      phone:   dealership.phone || dealership.whatsapp || '',
+      city:    dealership.city  || '',
+      state:   dealership.state || '',
+    } : null,
     availableVehicles,
+    availableSlots,
     conversationHistory: ((messages ?? []).reverse()).map(m => ({
       role:    m.direcao === 'entrada' ? 'user' as const : 'assistant' as const,
       content: m.conteudo,
@@ -260,61 +270,87 @@ async function buildContext(
 
 // ─── System prompt ────────────────────────────────────────────────────────────
 
-function buildSystemPrompt(ctx: WhatsAppContext, customPrompt?: string, horaInicio?: string, horaFim?: string): string {
+function buildSystemPrompt(
+  ctx:          WhatsAppContext,
+  customPrompt?: string,
+  horaInicio?:   string,
+  horaFim?:      string,
+): string {
   if (customPrompt) return customPrompt
 
-  const today = new Date().toLocaleDateString('pt-BR', {
-    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-  })
+  const now      = new Date()
+  const todayISO = now.toISOString().split('T')[0]
+  const todayStr = now.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+  const tomorrow = new Date(now.getTime() + 86400000).toISOString().split('T')[0]
+  const afterTom = new Date(now.getTime() + 2 * 86400000).toISOString().split('T')[0]
+
+  const d = ctx.dealership
+  const storeName    = d?.name    || 'nossa loja'
+  const storeAddress = d?.address || ''
+  const storePhone   = d?.phone   || ''
 
   const vehicleList = ctx.availableVehicles.slice(0, 20)
     .map(v => {
-      const km = v.mileage ? ` — ${Number(v.mileage).toLocaleString('pt-BR')} km` : ''
-      const cor = v.color ? ` — ${v.color}` : ''
-      return `• ${v.brand} ${v.model} ${v.year} — R$ ${Number(v.price).toLocaleString('pt-BR')}${km}${cor}`
+      const version = (v as any).version ? ` ${(v as any).version}` : ''
+      const km      = v.mileage ? ` — ${Number(v.mileage).toLocaleString('pt-BR')} km` : ''
+      const cor     = v.color   ? ` — ${v.color}` : ''
+      const trans   = (v as any).transmission ? ` — ${(v as any).transmission}` : ''
+      return `• ${v.brand} ${v.model}${version} ${v.year} — R$ ${Number(v.price).toLocaleString('pt-BR')}${km}${cor}${trans}`
     })
     .join('\n') || 'Nenhum veículo com preço disponível no momento.'
 
-  return `Você é o assistente virtual da nossa revenda de veículos seminovos. Seu nome é *Moneycar AI*.
+  const slotsText = Object.entries(ctx.availableSlots).slice(0, 5)
+    .map(([date, times]) => {
+      const d = new Date(date + 'T12:00:00')
+      const label = d.toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'short' })
+      return `• ${label}: ${times.slice(0, 6).join(', ')}`
+    }).join('\n') || 'Consulte disponibilidade pelo telefone.'
 
-MISSÃO: Entender o que o cliente procura, encontrar o melhor veículo para ele no nosso estoque e agendar uma visita presencial ou test drive.
+  return `Você é o assistente virtual da ${storeName}, uma revenda de veículos seminovos.
 
 DADOS DA LOJA:
-📍 Avenida Roberto de Almeida Vinhas 1029 - Guilhermina, Praia Grande - SP
-📞 (13) 99114-9999
-📅 Hoje: ${today}
+📍 ${storeAddress}
+📞 ${storePhone}
 🕐 Horário de atendimento presencial: ${horaInicio && horaFim ? `${horaInicio} às ${horaFim}` : '08:00 às 18:00'}
+
+DATA DE HOJE: ${todayStr} (${todayISO})
+- "amanhã" = ${tomorrow}
+- "depois de amanhã" = ${afterTom}
+Sempre use essas datas ao interpretar referências relativas de tempo.
 
 ${ctx.customerName ? `CLIENTE: ${ctx.customerName}` : ''}
 
-VEÍCULOS DISPONÍVEIS NO ESTOQUE:
+VEÍCULOS DISPONÍVEIS (${ctx.availableVehicles.length} unidades):
 ${vehicleList}
 
+HORÁRIOS DISPONÍVEIS (próximos 7 dias):
+${slotsText}
+
+OBJETIVO: Ajudar o cliente a encontrar o veículo certo e AGENDAR UMA VISITA ou TEST DRIVE.
+
 PERSONALIDADE:
-- Sempre educado, simpático e prestativo
-- Linguagem descontraída e brasileira (não muito formal)
+- Educado, simpático e prestativo
+- Linguagem descontraída e brasileira
 - SEMPRE em português do Brasil
-- Respostas CURTAS e objetivas — é WhatsApp, não e-mail! (máximo 3-4 linhas por mensagem)
+- Respostas CURTAS e objetivas — é WhatsApp, não e-mail! (máximo 3-4 linhas)
 - Use 1-2 emojis por mensagem, com moderação
 
 FLUXO IDEAL:
-1. Cumprimente e pergunte o que o cliente procura (tipo de veículo, uso, orçamento)
-2. Sugira 1-3 veículos do estoque que melhor se encaixam
+1. Cumprimente e pergunte o que o cliente procura
+2. Sugira 1-3 veículos que se encaixam no perfil
 3. Tire dúvidas sobre preço, km, condições
-4. Convide para uma visita presencial ou test drive
-5. Consulte a agenda e ofereça horários disponíveis
+4. Convide para visita presencial ou test drive
+5. Ofereça horários disponíveis
 6. Confirme o agendamento com nome e veículo de interesse
 
 REGRAS:
 - Você responde 24 horas por dia, 7 dias por semana — NUNCA diga que está fora do horário
+- Ao sugerir horários, ofereça apenas slots dentro do horário de atendimento acima
 - NUNCA invente veículos fora da lista acima
 - Para financiamento: trabalhamos com os principais bancos, simule na loja
-- Se o cliente quiser cancelar ou remarcar, use as ferramentas de agenda
-- Se não souber responder, ofereça falar com um vendedor: (13) 99114-9999
-- Mencione o endereço quando sugerir a visita
-- Ao sugerir horários de visita, ofereça apenas slots dentro do horário de atendimento presencial acima
-
-FERRAMENTAS DE AGENDA disponíveis: use-as sempre que precisar verificar horários livres, criar ou alterar agendamentos.`
+- Se não souber responder, ofereça falar com um vendedor: ${storePhone}
+- Mencione o endereço ao sugerir a visita
+- Se o cliente confirmar data e horário, use a ferramenta agendar_visita imediatamente`
 }
 
 // ─── Main export ──────────────────────────────────────────────────────────────
@@ -323,21 +359,23 @@ interface GenerateResponseParams {
   dealershipId:        string
   conversaId:          string
   userMessage:         string
-  wasenderMsgId?:      string   // used to exclude the just-saved message from history
+  wasenderMsgId?:      string
   customSystemPrompt?: string
   useSmartModel?:      boolean
-  businessHoursStart?: string  // e.g. '08:00' — used only to guide scheduling suggestions
-  businessHoursEnd?:   string  // e.g. '18:00'
+  businessHoursStart?: string
+  businessHoursEnd?:   string
 }
 
 export async function generateAIResponse(params: GenerateResponseParams): Promise<AIResponse> {
-  const { dealershipId, conversaId, userMessage, wasenderMsgId, customSystemPrompt, useSmartModel, businessHoursStart, businessHoursEnd } = params
+  const {
+    dealershipId, conversaId, userMessage, wasenderMsgId,
+    customSystemPrompt, useSmartModel, businessHoursStart, businessHoursEnd,
+  } = params
 
   const ctx          = await buildContext(dealershipId, conversaId, wasenderMsgId)
   const systemPrompt = buildSystemPrompt(ctx, customSystemPrompt, businessHoursStart, businessHoursEnd)
   const model        = useSmartModel ? 'claude-sonnet-4-6' : 'claude-haiku-4-5-20251001'
 
-  // Build message history
   const apiMessages: Anthropic.MessageParam[] = ctx.conversationHistory.slice(-10).map(m => ({
     role:    m.role,
     content: m.content,
@@ -345,16 +383,19 @@ export async function generateAIResponse(params: GenerateResponseParams): Promis
   apiMessages.push({ role: 'user', content: userMessage })
 
   try {
-    // Agentic tool-use loop
     let responseText = 'Desculpe, não consegui processar sua mensagem no momento.'
+    const MAX_ITERATIONS = 5
+    let iterations = 0
 
-    while (true) {
+    while (iterations < MAX_ITERATIONS) {
+      iterations++
+
       const response = await anthropic.messages.create({
         model,
-        max_tokens:  600,
-        system:      systemPrompt,
-        tools:       CALENDAR_TOOLS,
-        messages:    apiMessages,
+        max_tokens: 1024,
+        system:     systemPrompt,
+        tools:      TOOLS,
+        messages:   apiMessages,
       })
 
       if (response.stop_reason === 'end_turn') {
@@ -377,11 +418,7 @@ export async function generateAIResponse(params: GenerateResponseParams): Promis
               conversaId,
               ctx.customerPhone,
             )
-            return {
-              type:        'tool_result' as const,
-              tool_use_id: block.id,
-              content:     result,
-            }
+            return { type: 'tool_result' as const, tool_use_id: block.id, content: result }
           })
         )
 
@@ -406,8 +443,9 @@ export async function generateAIResponse(params: GenerateResponseParams): Promis
     }
   } catch (e: unknown) {
     console.error('[WhatsApp AI] generation error:', e)
+    const phone = ctx.dealership?.phone || ''
     return {
-      message:               'Desculpe, estou com uma instabilidade agora 😅 Por favor, ligue para *(13) 99114-9999* e nossa equipe te atende!',
+      message:               `Desculpe, estou com uma instabilidade agora 😅 Por favor, ligue para *${phone}* e nossa equipe te atende!`,
       intent:                'erro',
       vehicleIds:            [],
       shouldTransferToHuman: true,
