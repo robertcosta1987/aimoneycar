@@ -16,7 +16,8 @@ export async function GET(req: NextRequest) {
     const end = sp.get('end') || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
     const salespersonId = sp.get('salesperson_id') || null
 
-    // Use BRT (UTC-3) day boundaries: 00:00 BRT = 03:00 UTC, 23:59 BRT = 02:59 UTC next day
+    // Direct query instead of get_calendario_dashboard RPC (avoids TEXT/VARCHAR type mismatch).
+    // Use BRT (UTC-3) day boundaries: 00:00 BRT = 03:00 UTC, end-of-day BRT = next day 02:59 UTC
     const startUTC = `${start}T03:00:00.000Z`
     const endDate = new Date(end)
     endDate.setDate(endDate.getDate() + 1)
@@ -25,9 +26,9 @@ export async function GET(req: NextRequest) {
     let query = svc
       .from('agendamentos')
       .select(`
-        id, data_inicio, data_fim, lead_nome, lead_telefone, lead_email,
-        tipo, veiculo_interesse, status, origem, dados_qualificacao,
-        salesperson_id, vehicle_id,
+        id, data_inicio, data_fim, lead_nome, lead_telefone,
+        tipo, veiculo_interesse, status, origem,
+        salesperson_id,
         salesperson:employees(name)
       `)
       .eq('dealership_id', profile.dealership_id)
@@ -41,12 +42,24 @@ export async function GET(req: NextRequest) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    // Flatten salesperson join
+    const STATUS_COLORS: Record<string, string> = {
+      agendado: '#3B82F6', confirmado: '#10B981', em_atendimento: '#F59E0B',
+      concluido: '#6B7280', cancelado: '#EF4444', no_show: '#DC2626',
+    }
+
     const appointments = (data || []).map((a: any) => ({
-      ...a,
-      salesperson_name: a.salesperson?.name || null,
-      salesperson: undefined,
-      cor: '#00D9FF',
+      id: a.id,
+      data_inicio: a.data_inicio,
+      data_fim: a.data_fim,
+      lead_nome: a.lead_nome,
+      lead_telefone: a.lead_telefone,
+      tipo: a.tipo,
+      veiculo_interesse: a.veiculo_interesse,
+      status: a.status,
+      salesperson_id: a.salesperson_id,
+      salesperson_name: a.salesperson?.name ?? null,
+      cor: STATUS_COLORS[a.status] ?? '#00D9FF',
+      origem: a.origem,
     }))
 
     return NextResponse.json({ appointments })
