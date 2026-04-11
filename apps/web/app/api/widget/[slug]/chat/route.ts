@@ -2,6 +2,16 @@ import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@supabase/supabase-js'
 
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: CORS_HEADERS })
+}
+
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -220,10 +230,10 @@ export async function POST(
 
     await saveConversation(dealership.id, conversationId, visitorId, messages, replyText)
 
-    return NextResponse.json({ message: replyText, conversationId })
+    return NextResponse.json({ message: replyText, conversationId }, { headers: CORS_HEADERS })
   } catch (err: any) {
     console.error('[Widget Chat]', err)
-    return NextResponse.json({ error: 'Erro ao processar mensagem' }, { status: 500 })
+    return NextResponse.json({ error: 'Erro ao processar mensagem' }, { status: 500, headers: CORS_HEADERS })
   }
 }
 
