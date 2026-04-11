@@ -38,7 +38,6 @@ interface SessionData {
   name?:           string
   qrCode?:         string
   qrError?:        string
-  hasPersonalToken?: boolean
   sessionId?:      string
   aiEnabled?:      boolean
   modelo?:         string
@@ -275,11 +274,7 @@ export default function WhatsAppConfigPage() {
 
             {!session.connected && !session.qrCode && (
               <div className="space-y-2">
-                {!session.hasPersonalToken ? (
-                  <div className="p-3 rounded-xl bg-warning/10 border border-warning/20 text-sm text-warning">
-                    Adicione <code className="font-mono">WASENDER_PERSONAL_TOKEN</code> ao <code className="font-mono">.env.local</code> e reinicie o servidor para exibir o QR Code aqui.
-                  </div>
-                ) : session.qrError ? (
+                {session.qrError ? (
                   <div className="p-3 rounded-xl bg-danger/10 border border-danger/20 text-sm text-danger">
                     Erro ao buscar QR Code: {session.qrError}
                   </div>

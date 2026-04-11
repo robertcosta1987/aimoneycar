@@ -57,28 +57,28 @@ export async function checkSessionStatus(apiKey: string): Promise<{
 }
 
 export async function getSessionQRCode(
-  personalAccessToken: string,
-  sessionId: string
+  sessionApiKey: string,
 ): Promise<{ qrCode?: string; error?: string }> {
-  const url = `${BASE}/whatsapp-sessions/${sessionId}/qrcode`
+  const url = `${BASE}/qrcode`
   console.log('[WASender] QR code fetch URL:', url)
   try {
     const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${personalAccessToken}` },
+      headers: { Authorization: `Bearer ${sessionApiKey}` },
     })
     const text = await res.text()
-    console.log('[WASender] QR response status:', res.status, 'body:', text.slice(0, 200))
+    console.log('[WASender] QR response status:', res.status, 'body:', text.slice(0, 300))
 
     if (!res.ok) return { error: `HTTP ${res.status}: ${text.slice(0, 120)}` }
 
     let data: any
     try { data = JSON.parse(text) } catch {
-      return { error: `Invalid JSON response (status ${res.status}) — check WASENDER_PERSONAL_TOKEN and session ID` }
+      return { error: `Invalid JSON (status ${res.status})` }
     }
 
-    if (data.success && data.data?.qrcode) return { qrCode: data.data.qrcode }
-    if (data.success && data.data?.qr_code) return { qrCode: data.data.qr_code }
-    return { error: data.message || data.error || 'QR code not available in response' }
+    if (data.success && data.data?.qrcode)   return { qrCode: data.data.qrcode }
+    if (data.success && data.data?.qr_code)  return { qrCode: data.data.qr_code }
+    if (data.success && data.data?.base64)   return { qrCode: data.data.base64 }
+    return { error: data.message || data.error || JSON.stringify(data).slice(0, 120) }
   } catch (e: unknown) {
     return { error: e instanceof Error ? e.message : 'Network error' }
   }

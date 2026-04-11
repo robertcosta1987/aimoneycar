@@ -31,15 +31,12 @@ export async function GET(req: NextRequest) {
 
   let qrCode: string | undefined
   let qrError: string | undefined
-  const hasPersonalToken = !!process.env.WASENDER_PERSONAL_TOKEN
 
   if (!status.connected) {
-    if (hasPersonalToken) {
-      const qr = await getSessionQRCode(process.env.WASENDER_PERSONAL_TOKEN!, sessao.wasender_session_id)
-      qrCode = qr.qrCode
-      qrError = qr.error
-      console.log('[Session] QR fetch result:', { qrCode: !!qrCode, qrError, sessionId: sessao.wasender_session_id })
-    }
+    const qr = await getSessionQRCode(sessao.wasender_api_key)
+    qrCode = qr.qrCode
+    qrError = qr.error
+    console.log('[Session] QR fetch result:', { qrCode: !!qrCode, qrError })
   }
 
   return NextResponse.json({
@@ -49,7 +46,6 @@ export async function GET(req: NextRequest) {
     name:            status.name  ?? sessao.nome,
     qrCode,
     qrError,
-    hasPersonalToken,
     sessionId:       sessao.wasender_session_id,
     aiEnabled:       sessao.ai_ativo,
     modelo:          sessao.modelo_padrao,
