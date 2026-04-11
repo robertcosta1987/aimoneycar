@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   LayoutDashboard, MessageSquare, Car, Bell, Receipt,
-  BarChart3, Upload, Settings, LogOut, Zap, ChevronLeft, ChevronRight, CalendarDays, Users, CalendarClock, Timer, DollarSign, FileBarChart2
+  BarChart3, Upload, Settings, LogOut, Zap, ChevronLeft, ChevronRight, CalendarDays, Users, CalendarClock, Timer, DollarSign, FileBarChart2, MessageCircle
 } from 'lucide-react'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
@@ -13,6 +13,7 @@ const navItems = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { href: '/dashboard/chat', icon: MessageSquare, label: 'Chat IA' },
   { href: '/dashboard/chat-clientes', icon: Users, label: 'Chat Clientes' },
+  { href: '/dashboard/whatsapp', icon: MessageCircle, label: 'WhatsApp' },
   { href: '/dashboard/agenda', icon: CalendarDays, label: 'Agenda' },
   { href: '/dashboard/veiculos', icon: Car, label: 'Veículos' },
   { href: '/dashboard/envelhecimento', icon: Timer, label: 'Giro de Estoque' },

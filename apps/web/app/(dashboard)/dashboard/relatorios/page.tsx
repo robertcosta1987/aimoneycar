@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { BarChart3, TrendingUp, DollarSign, Car, Receipt, Download, Calendar, CalendarClock } from 'lucide-react'
+import { BarChart3, TrendingUp, DollarSign, Car, Receipt, Calendar, CalendarClock, ChevronLeft } from 'lucide-react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -12,91 +12,167 @@ import { Progress } from '@/components/ui/progress'
 import { formatCurrency, formatPercent } from '@/lib/utils'
 import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
+type Mode = 'rolling' | 'month'
+interface AvailableMonth { value: string; label: string; salesCount: number }
+
 export default function RelatoriosPage() {
-  const [period, setPeriod] = useState('30')
-  const [sales, setSales] = useState<any[]>([])
+  const [mode, setMode]                   = useState<Mode>('rolling')
+  const [period, setPeriod]               = useState('30')
+  const [selectedMonth, setSelectedMonth] = useState<string>('')
+  const [availableMonths, setAvailableMonths] = useState<AvailableMonth[]>([])
+  const [sales, setSales]       = useState<any[]>([])
   const [vehicles, setVehicles] = useState<any[]>([])
   const [expenses, setExpenses] = useState<any[]>([])
-  const [stats, setStats] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading]   = useState(true)
   const supabase = createClient()
 
+  // ── load available months once ──────────────────────────────────────────────
+  useEffect(() => {
+    const loadMonths = async () => {
+      const { data: userData } = await supabase.from('users').select('dealership_id').single()
+      const did = userData?.dealership_id
+      if (!did) return
+
+      const { data } = await supabase
+        .from('vehicles')
+        .select('sale_date')
+        .eq('dealership_id', did)
+        .eq('status', 'sold')
+        .not('sale_date', 'is', null)
+
+      if (!data) return
+
+      const monthMap = new Map<string, number>()
+      for (const v of data) {
+        if (!v.sale_date) continue
+        const d   = new Date(v.sale_date + 'T00:00:00')
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+        monthMap.set(key, (monthMap.get(key) || 0) + 1)
+      }
+
+      // Fill last 24 calendar months even if empty
+      const now = new Date()
+      for (let i = 0; i < 24; i++) {
+        const d   = new Date(now.getFullYear(), now.getMonth() - i, 1)
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+        if (!monthMap.has(key)) monthMap.set(key, 0)
+      }
+
+      const months = Array.from(monthMap.entries())
+        .map(([value, salesCount]) => {
+          const d     = new Date(value + 'T00:00:00')
+          const label = d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+          return { value, label: label.charAt(0).toUpperCase() + label.slice(1), salesCount }
+        })
+        .sort((a, b) => b.value.localeCompare(a.value))
+
+      setAvailableMonths(months)
+      // pre-select most recent month with data, or latest calendar month
+      const withData = months.find(m => m.salesCount > 0)
+      setSelectedMonth(withData?.value ?? months[0]?.value ?? '')
+    }
+    loadMonths()
+  }, [])
+
+  // ── load report data ─────────────────────────────────────────────────────────
   useEffect(() => {
     const load = async () => {
       setLoading(true)
       const { data: userData } = await supabase.from('users').select('dealership_id').single()
       const did = userData?.dealership_id
-      const cutoff = new Date(Date.now() - parseInt(period) * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
-      const [
-        { data: salesData },
-        { data: vehiclesData },
-        { data: expensesData },
-        { data: statsData },
-      ] = await Promise.all([
-        supabase.from('vehicles').select('id, brand, model, plate, year_fab, year_model, purchase_price, sale_price, purchase_date, sale_date, days_in_stock, expenses:expenses(amount)')
-          .eq('dealership_id', did)
-          .eq('status', 'sold')
-          .gte('sale_date', cutoff)
-          .order('sale_date', { ascending: true }),
-        supabase.from('vehicles').select('id, brand, model, plate, year_fab, year_model, color, mileage, fuel, purchase_price, sale_price, days_in_stock, status, purchase_date')
+      // compute date range
+      let dateStart: string
+      let dateEnd: string | null = null
+
+      if (mode === 'month' && selectedMonth) {
+        dateStart = selectedMonth
+        const d = new Date(selectedMonth + 'T00:00:00')
+        const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()
+        dateEnd = `${selectedMonth.slice(0, 7)}-${String(lastDay).padStart(2, '0')}`
+      } else {
+        dateStart = new Date(Date.now() - parseInt(period) * 24 * 60 * 60 * 1000)
+          .toISOString().split('T')[0]
+      }
+
+      let salesQ = supabase
+        .from('vehicles')
+        .select('id, brand, model, plate, year_fab, year_model, purchase_price, sale_price, purchase_date, sale_date, days_in_stock, expenses:expenses(amount)')
+        .eq('dealership_id', did)
+        .eq('status', 'sold')
+        .gte('sale_date', dateStart)
+        .order('sale_date', { ascending: true })
+      if (dateEnd) salesQ = salesQ.lte('sale_date', dateEnd)
+
+      let expQ = supabase
+        .from('expenses')
+        .select('category, amount, date')
+        .eq('dealership_id', did)
+        .gte('date', dateStart)
+      if (dateEnd) expQ = expQ.lte('date', dateEnd)
+
+      const [{ data: salesData }, { data: vehiclesData }, { data: expensesData }] = await Promise.all([
+        salesQ,
+        supabase
+          .from('vehicles')
+          .select('id, brand, model, plate, year_fab, year_model, color, mileage, fuel, purchase_price, sale_price, days_in_stock, status, purchase_date')
           .eq('dealership_id', did)
           .neq('status', 'sold')
           .order('days_in_stock', { ascending: false }),
-        supabase.from('expenses').select('category, amount, date')
-          .eq('dealership_id', did)
-          .gte('date', cutoff),
-        supabase.rpc('get_dashboard_stats', { d_id: did }),
+        expQ,
       ])
 
       setSales(salesData || [])
       setVehicles(vehiclesData || [])
       setExpenses(expensesData || [])
-      setStats(statsData || {})
       setLoading(false)
     }
-    load()
-  }, [period])
+    if (mode === 'rolling' || (mode === 'month' && selectedMonth)) load()
+  }, [mode, period, selectedMonth])
 
-  // ── Vendas (from vehicles with status=sold) ──
+  // ── Vendas ───────────────────────────────────────────────────────────────────
   const salesEnriched = sales.map((v: any) => {
-    const totalExp = (v.expenses || []).reduce((s: number, e: any) => s + e.amount, 0)
-    const profit = (v.sale_price || 0) - v.purchase_price - totalExp
+    const totalExp  = (v.expenses || []).reduce((s: number, e: any) => s + e.amount, 0)
+    const profit    = (v.sale_price || 0) - v.purchase_price - totalExp
     const profitPct = v.sale_price > 0 ? (profit / v.sale_price) * 100 : 0
     return { ...v, totalExp, profit, profitPct }
   })
 
   const salesTotals = {
-    revenue: salesEnriched.reduce((s, x) => s + (x.sale_price || 0), 0),
-    profit: salesEnriched.reduce((s, x) => s + x.profit, 0),
-    count: salesEnriched.length,
-    avgMargin: salesEnriched.length ? salesEnriched.reduce((s, x) => s + x.profitPct, 0) / salesEnriched.length : 0,
+    revenue:   salesEnriched.reduce((s, x) => s + (x.sale_price || 0), 0),
+    profit:    salesEnriched.reduce((s, x) => s + x.profit, 0),
+    count:     salesEnriched.length,
+    avgMargin: salesEnriched.length
+      ? salesEnriched.reduce((s, x) => s + x.profitPct, 0) / salesEnriched.length
+      : 0,
   }
 
   const salesByDay = salesEnriched.reduce((acc: Record<string, { revenue: number; profit: number }>, s) => {
     const day = s.sale_date?.slice(5) ?? ''
     if (!acc[day]) acc[day] = { revenue: 0, profit: 0 }
     acc[day].revenue += s.sale_price || 0
-    acc[day].profit += s.profit
+    acc[day].profit  += s.profit
     return acc
   }, {})
   const salesChartData = Object.entries(salesByDay).map(([day, d]) => ({ day, ...d }))
 
-  // ── Estoque ──
-  const available = vehicles.filter(v => v.status === 'available')
+  // ── Estoque ──────────────────────────────────────────────────────────────────
+  const available    = vehicles.filter(v => v.status === 'available')
   const stockBuckets = [
-    { range: '0-15 dias', count: available.filter(v => v.days_in_stock <= 15).length, color: '#00E676' },
+    { range: '0-15 dias',  count: available.filter(v => v.days_in_stock <= 15).length, color: '#00E676' },
     { range: '16-30 dias', count: available.filter(v => v.days_in_stock > 15 && v.days_in_stock <= 30).length, color: '#00D9FF' },
     { range: '31-60 dias', count: available.filter(v => v.days_in_stock > 30 && v.days_in_stock <= 60).length, color: '#FFB800' },
-    { range: '+60 dias', count: available.filter(v => v.days_in_stock > 60).length, color: '#FF5252' },
+    { range: '+60 dias',   count: available.filter(v => v.days_in_stock > 60).length, color: '#FF5252' },
   ]
-  const healthy = available.filter(v => v.days_in_stock <= 30).length
-  const warning = available.filter(v => v.days_in_stock > 30 && v.days_in_stock <= 60).length
+  const healthy  = available.filter(v => v.days_in_stock <= 30).length
+  const warning  = available.filter(v => v.days_in_stock > 30 && v.days_in_stock <= 60).length
   const critical = available.filter(v => v.days_in_stock > 60).length
-  const avgDays = available.length ? Math.round(available.reduce((s, v) => s + v.days_in_stock, 0) / available.length) : 0
+  const avgDays  = available.length
+    ? Math.round(available.reduce((s, v) => s + v.days_in_stock, 0) / available.length)
+    : 0
 
-  // ── Despesas ──
-  const expTotal = expenses.reduce((s, e) => s + e.amount, 0)
+  // ── Despesas ─────────────────────────────────────────────────────────────────
+  const expTotal      = expenses.reduce((s, e) => s + e.amount, 0)
   const expByCategory = Object.entries(
     expenses.reduce((acc: Record<string, { total: number; count: number }>, e) => {
       const cat = e.category || 'Outros'
@@ -108,6 +184,8 @@ export default function RelatoriosPage() {
   )
     .map(([cat, d]) => ({ cat, ...d, pct: expTotal > 0 ? Math.round((d.total / expTotal) * 100) : 0 }))
     .sort((a, b) => b.total - a.total)
+
+  const currentMonthLabel = availableMonths.find(m => m.value === selectedMonth)?.label ?? ''
 
   if (loading) {
     return (
@@ -126,20 +204,77 @@ export default function RelatoriosPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold">Relatórios</h1>
-          <p className="text-foreground-muted text-sm mt-1">Análise de performance da revenda</p>
+          <p className="text-foreground-muted text-sm mt-1">
+            {mode === 'month' && currentMonthLabel
+              ? `Mês selecionado: ${currentMonthLabel}`
+              : 'Análise de performance da revenda'}
+          </p>
         </div>
-        <div className="flex gap-2">
-          <Select value={period} onValueChange={setPeriod}>
-            <SelectTrigger className="w-36">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="7">7 dias</SelectItem>
-              <SelectItem value="30">30 dias</SelectItem>
-              <SelectItem value="90">90 dias</SelectItem>
-              <SelectItem value="365">1 ano</SelectItem>
-            </SelectContent>
-          </Select>
+
+        <div className="flex flex-wrap gap-2 items-center">
+          {/* Mode toggle */}
+          <div className="flex rounded-xl overflow-hidden border border-border">
+            <button
+              onClick={() => setMode('rolling')}
+              className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                mode === 'rolling'
+                  ? 'bg-primary/20 text-primary'
+                  : 'text-foreground-muted hover:text-foreground'
+              }`}
+            >
+              Período
+            </button>
+            <button
+              onClick={() => setMode('month')}
+              className={`px-3 py-1.5 text-sm font-medium transition-colors flex items-center gap-1.5 ${
+                mode === 'month'
+                  ? 'bg-primary/20 text-primary'
+                  : 'text-foreground-muted hover:text-foreground'
+              }`}
+            >
+              <Calendar className="w-3.5 h-3.5" />
+              Selecionar Mês
+            </button>
+          </div>
+
+          {/* Rolling period selector */}
+          {mode === 'rolling' && (
+            <Select value={period} onValueChange={setPeriod}>
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="7">7 dias</SelectItem>
+                <SelectItem value="30">30 dias</SelectItem>
+                <SelectItem value="90">90 dias</SelectItem>
+                <SelectItem value="365">1 ano</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+
+          {/* Month selector */}
+          {mode === 'month' && availableMonths.length > 0 && (
+            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="Selecione o mês" />
+              </SelectTrigger>
+              <SelectContent>
+                {availableMonths.map(m => (
+                  <SelectItem key={m.value} value={m.value}>
+                    <span className="flex items-center gap-2">
+                      {m.label}
+                      {m.salesCount > 0 && (
+                        <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4">
+                          {m.salesCount} venda{m.salesCount !== 1 ? 's' : ''}
+                        </Badge>
+                      )}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
           <Link href="/dashboard/relatorios/agendar">
             <Button variant="outline" className="gap-2">
               <CalendarClock className="w-4 h-4" /> Agendar Envio
@@ -151,10 +286,10 @@ export default function RelatoriosPage() {
       {/* Quick stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: 'Faturamento', value: formatCurrency(salesTotals.revenue), icon: DollarSign, color: 'text-success' },
-          { label: 'Lucro Líquido', value: formatCurrency(salesTotals.profit), icon: TrendingUp, color: 'text-secondary' },
-          { label: 'Veículos Vendidos', value: salesTotals.count, icon: Car, color: 'text-primary' },
-          { label: 'Tempo Médio Estoque', value: `${avgDays} dias`, icon: BarChart3, color: 'text-warning' },
+          { label: 'Faturamento',         value: formatCurrency(salesTotals.revenue), icon: DollarSign, color: 'text-success' },
+          { label: 'Lucro Líquido',        value: formatCurrency(salesTotals.profit), icon: TrendingUp, color: 'text-secondary' },
+          { label: 'Veículos Vendidos',    value: salesTotals.count,                  icon: Car,        color: 'text-primary' },
+          { label: 'Tempo Médio Estoque',  value: `${avgDays} dias`,                  icon: BarChart3,  color: 'text-warning' },
         ].map(s => (
           <Card key={s.label}>
             <CardContent className="p-4">
@@ -195,7 +330,7 @@ export default function RelatoriosPage() {
                       formatter={(v: any) => formatCurrency(v)}
                     />
                     <Bar dataKey="revenue" fill="#00D9FF" name="Receita" radius={[4,4,0,0]} />
-                    <Bar dataKey="profit" fill="#00E676" name="Lucro" radius={[4,4,0,0]} />
+                    <Bar dataKey="profit"  fill="#00E676" name="Lucro"   radius={[4,4,0,0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -204,6 +339,11 @@ export default function RelatoriosPage() {
             <Card>
               <CardContent className="py-12 text-center text-foreground-muted text-sm">
                 Nenhuma venda registrada no período
+                {mode === 'month' && availableMonths.some(m => m.salesCount > 0) && (
+                  <p className="mt-2 text-xs">
+                    Tente selecionar outro mês — há dados em outros períodos.
+                  </p>
+                )}
               </CardContent>
             </Card>
           )}
@@ -292,7 +432,7 @@ export default function RelatoriosPage() {
               <CardContent>
                 <div className="space-y-3">
                   {available.slice(0, 8).map(v => {
-                    const pct = Math.min(100, Math.round((v.days_in_stock / 90) * 100))
+                    const pct   = Math.min(100, Math.round((v.days_in_stock / 90) * 100))
                     const color = v.days_in_stock > 60 ? 'text-danger' : v.days_in_stock > 30 ? 'text-warning' : 'text-success'
                     return (
                       <div key={v.id} className="space-y-1">
@@ -355,10 +495,8 @@ export default function RelatoriosPage() {
                   <span className="font-medium text-foreground">{expenses.length}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-foreground-muted">Veículos com Despesas</span>
-                  <span className="font-medium text-foreground">
-                    {expByCategory.reduce((s, c) => s + c.count, 0)} lançamentos
-                  </span>
+                  <span className="text-sm text-foreground-muted">Categorias</span>
+                  <span className="font-medium text-foreground">{expByCategory.length}</span>
                 </div>
               </CardContent>
             </Card>
