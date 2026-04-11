@@ -42,6 +42,7 @@ export function ChatClientesClient({ dealershipName, slug, baseUrl, conversation
   const embedCode = `<script
   src="${baseUrl}/widget.js"
   data-dealership="${slug}"
+  data-api="${baseUrl}"
   data-color="#00D9FF"
   data-greeting="Olá! Posso ajudar a encontrar seu próximo carro? 🚗"
 ></script>`
