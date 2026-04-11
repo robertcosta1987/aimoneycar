@@ -29,13 +29,13 @@ export function useReportData() {
     }
   }, [])
 
-  const generateReport = useCallback(async (type: ReportType): Promise<ExecutiveReport | null> => {
+  const generateReport = useCallback(async (type: ReportType, referenceDate?: string): Promise<ExecutiveReport | null> => {
     setState(s => ({ ...s, generating: true, error: null }))
     try {
       const res = await fetch('/api/executive-reports', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type }),
+        body: JSON.stringify({ type, referenceDate }),
       })
       if (!res.ok) {
         const err = await res.json()

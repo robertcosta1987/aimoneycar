@@ -49,18 +49,23 @@ export async function POST(req: NextRequest) {
   if (!dealId) return NextResponse.json({ error: 'No dealership' }, { status: 400 })
 
   let type: ReportType
+  let referenceDate: Date | undefined
   try {
     const body = await req.json()
     type = body.type
     if (!['weekly', 'monthly', 'quarterly', 'annual'].includes(type)) {
       return NextResponse.json({ error: 'Invalid type' }, { status: 400 })
     }
+    if (body.referenceDate) {
+      const d = new Date(body.referenceDate)
+      if (!isNaN(d.getTime())) referenceDate = d
+    }
   } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
   }
 
   try {
-    const data = await computeExecutiveReport(supabase, dealId, type)
+    const data = await computeExecutiveReport(supabase, dealId, type, referenceDate)
 
     const { data: saved, error } = await supabase
       .from('executive_reports')

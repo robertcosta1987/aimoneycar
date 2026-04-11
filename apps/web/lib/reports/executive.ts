@@ -31,15 +31,21 @@ const MONTHS_BR_FULL = [
 
 // ─── Period ───────────────────────────────────────────────────────────────────
 
-export function getPeriodDates(type: ReportType): ReportPeriod {
-  const now = new Date()
+// referenceDate: any date within the desired period (defaults to today)
+export function getPeriodDates(type: ReportType, referenceDate?: Date): ReportPeriod {
+  const now = referenceDate ? new Date(referenceDate) : new Date()
   let start: Date, end: Date, label: string
 
   switch (type) {
     case 'weekly': {
-      end = new Date(now)
-      start = new Date(now)
-      start.setDate(start.getDate() - 6)
+      // Full calendar week (Mon–Sun) containing the reference date
+      const day = now.getDay() // 0=Sun
+      const mon = new Date(now)
+      mon.setDate(now.getDate() - ((day + 6) % 7))
+      const sun = new Date(mon)
+      sun.setDate(mon.getDate() + 6)
+      start = mon
+      end   = sun
       label = `Semana de ${fmtDate(start)} a ${fmtDate(end)}`
       break
     }
@@ -50,12 +56,11 @@ export function getPeriodDates(type: ReportType): ReportPeriod {
       break
     }
     case 'quarterly': {
-      // Last 3 complete calendar months
-      const endMonth  = now.getMonth()        // current month index
-      const endYear   = now.getFullYear()
-      start = new Date(endYear, endMonth - 2, 1)
-      end   = new Date(endYear, endMonth + 1, 0)
-      label = `${MONTHS_SHORT[start.getMonth()]}–${MONTHS_SHORT[end.getMonth()]} ${endYear}`
+      // Quarter containing the reference date
+      const q     = Math.floor(now.getMonth() / 3)
+      start = new Date(now.getFullYear(), q * 3, 1)
+      end   = new Date(now.getFullYear(), q * 3 + 3, 0)
+      label = `${MONTHS_SHORT[start.getMonth()]}–${MONTHS_SHORT[end.getMonth()]} ${now.getFullYear()}`
       break
     }
     case 'annual': {
@@ -69,8 +74,8 @@ export function getPeriodDates(type: ReportType): ReportPeriod {
   return {
     type,
     label,
-    start: isoDate(start),
-    end:   isoDate(end),
+    start: isoDate(start!),
+    end:   isoDate(end!),
   }
 }
 
@@ -133,9 +138,10 @@ export async function computeExecutiveReport(
   supabase: SupabaseClient,
   dealId: string,
   type: ReportType,
+  referenceDate?: Date,
 ): Promise<ExecutiveReportData> {
 
-  const period = getPeriodDates(type)
+  const period = getPeriodDates(type, referenceDate)
   const { start: pStart, end: pEnd } = period
 
   // ── Parallel queries ───────────────────────────────────────────────────────
