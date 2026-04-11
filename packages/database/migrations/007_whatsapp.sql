@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS whatsapp_conversas (
   remote_jid              text,                    -- WhatsApp JID
 
   status                  text NOT NULL DEFAULT 'ativo'
-    CHECK (status IN ('ativo','arquivado','bloqueado')),
+    CHECK (status IN ('ativo','encerrado','aguardando_humano','arquivado')),
 
   -- AI context
   contexto_resumo         text,
