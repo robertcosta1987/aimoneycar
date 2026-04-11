@@ -201,8 +201,10 @@ async function buildContext(
   }
   historyQuery = historyQuery.order('criado_em', { ascending: false }).limit(12)
 
-  const today    = new Date().toISOString().split('T')[0]
-  const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+  // Use BRT (America/Sao_Paulo) so slot queries use the correct local date,
+  // not UTC which can be a day ahead late at night in Brazil.
+  const today    = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
+  const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
 
   const [
     { data: messages },
@@ -289,11 +291,14 @@ function buildSystemPrompt(
 ): string {
   if (customPrompt) return customPrompt
 
+  // All dates in BRT (America/Sao_Paulo) — Vercel runs in UTC, which can be
+  // a day ahead of Brazil late at night, causing the AI to compute wrong weekdays.
   const now      = new Date()
-  const todayISO = now.toISOString().split('T')[0]
-  const todayStr = now.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
-  const tomorrow = new Date(now.getTime() + 86400000).toISOString().split('T')[0]
-  const afterTom = new Date(now.getTime() + 2 * 86400000).toISOString().split('T')[0]
+  const TZ       = { timeZone: 'America/Sao_Paulo' }
+  const todayISO = now.toLocaleDateString('en-CA', TZ)   // YYYY-MM-DD in BRT
+  const todayStr = now.toLocaleDateString('pt-BR', { ...TZ, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+  const tomorrow = new Date(now.getTime() + 86400000).toLocaleDateString('en-CA', TZ)
+  const afterTom = new Date(now.getTime() + 2 * 86400000).toLocaleDateString('en-CA', TZ)
 
   const d = ctx.dealership
   const storeName    = d?.name    || 'nossa loja'
