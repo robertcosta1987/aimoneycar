@@ -7,9 +7,23 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
-import { Loader2, Save, Check, Mail, Calendar, Bell } from 'lucide-react'
+import { Loader2, Save, Check, Mail, Calendar, Bell, ToggleLeft, ToggleRight } from 'lucide-react'
+
+function Toggle({ checked, onCheckedChange }: { checked: boolean; onCheckedChange: (v: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onCheckedChange(!checked)}
+      className="text-foreground-muted hover:text-primary transition-colors"
+    >
+      {checked
+        ? <ToggleRight className="w-8 h-8 text-primary" />
+        : <ToggleLeft  className="w-8 h-8" />
+      }
+    </button>
+  )
+}
 
 const ALL_TYPES: ReportType[] = ['weekly', 'monthly', 'quarterly', 'annual']
 
@@ -57,7 +71,7 @@ export function ReportScheduleSettings() {
                 <p className="text-xs text-foreground-muted">Ativar envio periódico por e-mail</p>
               </div>
             </div>
-            <Switch
+            <Toggle
               checked={schedule.enabled}
               onCheckedChange={v => setSchedule({ ...schedule, enabled: v })}
             />
@@ -210,7 +224,7 @@ export function ReportScheduleSettings() {
           </div>
 
           <div className="flex items-center gap-3">
-            <Switch
+            <Toggle
               checked={schedule.includeAttachment}
               onCheckedChange={v => setSchedule({ ...schedule, includeAttachment: v })}
             />
