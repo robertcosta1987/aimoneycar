@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import {
   Wifi, WifiOff, RefreshCw, Copy, Check, ArrowLeft,
   MessageCircle, Brain, Clock, FileText, Key, QrCode,
-  ToggleLeft, ToggleRight, AlertCircle,
+  ToggleLeft, ToggleRight, AlertCircle, Trash2,
 } from 'lucide-react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
@@ -32,15 +32,17 @@ function Toggle({ checked, onCheckedChange }: { checked: boolean; onCheckedChang
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface SessionData {
-  configured:    boolean
-  connected?:    boolean
-  phone?:        string
-  name?:         string
-  qrCode?:       string
-  aiEnabled?:    boolean
-  modelo?:       string
-  businessHours?: { start: string; end: string }
-  webhookUrl?:   string
+  configured:      boolean
+  connected?:      boolean
+  phone?:          string
+  name?:           string
+  qrCode?:         string
+  qrError?:        string
+  sessionId?:      string
+  aiEnabled?:      boolean
+  modelo?:         string
+  businessHours?:  { start: string; end: string }
+  webhookUrl?:     string
 }
 
 // ── Page ─────────────────────────────────────────────────────────────────────
@@ -50,6 +52,8 @@ export default function WhatsAppConfigPage() {
   const [loading, setLoading]           = useState(true)
   const [saving, setSaving]             = useState(false)
   const [copied, setCopied]             = useState(false)
+  const [removing, setRemoving]         = useState(false)
+  const [confirmRemove, setConfirmRemove] = useState(false)
   const [statusMsg, setStatusMsg]       = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   // Setup form
@@ -94,6 +98,26 @@ export default function WhatsAppConfigPage() {
   useEffect(() => {
     if (dealershipId) loadSession(dealershipId)
   }, [dealershipId])
+
+  // ── Remove session ─────────────────────────────────────────────────────────
+  const handleRemove = async () => {
+    if (!dealershipId) return
+    setRemoving(true)
+    setStatusMsg(null)
+
+    const res = await fetch(`/api/whatsapp/session?dealershipId=${dealershipId}`, { method: 'DELETE' })
+    setRemoving(false)
+    setConfirmRemove(false)
+
+    if (res.ok) {
+      setSession({ configured: false })
+      setSessionId('')
+      setApiKey('')
+    } else {
+      const json = await res.json()
+      setStatusMsg({ type: 'error', text: json.error ?? 'Erro ao remover configuração' })
+    }
+  }
 
   // ── Setup session ──────────────────────────────────────────────────────────
   const handleSetup = async () => {
@@ -249,10 +273,64 @@ export default function WhatsAppConfigPage() {
             )}
 
             {!session.connected && !session.qrCode && (
-              <div className="p-3 rounded-xl bg-warning/10 border border-warning/20 text-sm text-warning">
-                Configure WASENDER_PERSONAL_TOKEN no ambiente para exibir o QR Code.
+              <div className="space-y-2">
+                {session.qrError ? (
+                  <div className="p-3 rounded-xl bg-danger/10 border border-danger/20 text-sm text-danger">
+                    Erro ao buscar QR Code: {session.qrError}
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-xl bg-warning/10 border border-warning/20 text-sm text-warning">
+                    QR Code indisponível no momento.
+                  </div>
+                )}
+                <div className="p-3 rounded-xl bg-background-elevated text-sm text-foreground-muted">
+                  Alternativamente, escaneie o QR Code diretamente no{' '}
+                  <a
+                    href="https://app.wasenderapi.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary underline"
+                  >
+                    painel WASenderAPI
+                  </a>
+                  {session.sessionId && (
+                    <span> → sessão <code className="font-mono">{session.sessionId}</code></span>
+                  )}
+                  .
+                </div>
               </div>
             )}
+
+            {/* Remove config */}
+            <div className="pt-2 border-t border-border">
+              {!confirmRemove ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setConfirmRemove(true)}
+                  className="gap-2 text-danger border-danger/30 hover:bg-danger/10 hover:border-danger"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Remover configuração
+                </Button>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <p className="text-sm text-foreground-muted">Confirmar remoção?</p>
+                  <Button
+                    size="sm"
+                    onClick={handleRemove}
+                    disabled={removing}
+                    className="bg-danger hover:bg-danger/90 text-white gap-1"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    {removing ? 'Removendo...' : 'Sim, remover'}
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setConfirmRemove(false)}>
+                    Cancelar
+                  </Button>
+                </div>
+              )}
+            </div>
 
             {/* Webhook URL */}
             {session.webhookUrl && (

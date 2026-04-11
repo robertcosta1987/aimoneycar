@@ -16,7 +16,7 @@ import {
   markMessageAsRead,
   cleanPhoneNumber,
 } from '@/lib/wasender/client'
-import { generateAIResponse } from '@/lib/ai/whatsapp-agent'
+import { generateAIResponse, shouldUseSmartModel } from '@/lib/ai/whatsapp-agent'
 import type {
   WASenderWebhookPayload,
   WASenderIncomingMessage,
@@ -36,12 +36,21 @@ export async function POST(req: NextRequest) {
     const dealershipId = searchParams.get('d')
 
     const body: WASenderWebhookPayload = await req.json()
+    console.log(`[Webhook] RAW PAYLOAD:`, JSON.stringify(body, null, 2))
     console.log(`[Webhook] event=${body.event} dealership=${dealershipId ?? 'unset'}`)
 
     switch (body.event) {
       case 'messages.received':
         if (body.data.messages) {
-          await handleIncomingMessage(body.data.messages, dealershipId)
+          // Handle both single message and array
+          const msgs = Array.isArray(body.data.messages)
+            ? body.data.messages
+            : [body.data.messages]
+          for (const msg of msgs) {
+            await handleIncomingMessage(msg, dealershipId)
+          }
+        } else {
+          console.log('[Webhook] messages.received but no data.messages — full data:', JSON.stringify(body.data))
         }
         break
       case 'session.status':
@@ -73,18 +82,23 @@ async function handleIncomingMessage(
   message: WASenderIncomingMessage,
   dealershipId: string | null
 ) {
+  console.log('[Webhook] handleIncomingMessage raw:', JSON.stringify(message, null, 2))
+
   const { key, messageBody, message: msgContent, pushName } = message
 
-  if (key.fromMe) return  // skip own messages
-  if (key.remoteJid.includes('@g.us')) return  // skip groups
+  if (key?.fromMe) return  // skip own messages
+  if (key?.remoteJid?.includes('@g.us')) return  // skip groups
 
-  const phoneNumber = key.cleanedSenderPn ?? cleanPhoneNumber(key.remoteJid)
-  const remoteJid   = key.remoteJid
+  const phoneNumber = key?.cleanedSenderPn ?? cleanPhoneNumber(key?.remoteJid ?? '')
+  // Use senderPn (phone JID) for replies when addressingMode is 'lid'
+  const remoteJid = (key?.addressingMode === 'lid' && key?.senderPn)
+    ? key.senderPn
+    : key?.remoteJid ?? ''
 
   console.log(`[Webhook] from=${phoneNumber} text="${messageBody}"`)
 
-  // Load session
-  let sessaoQuery = supabase.from('whatsapp_sessoes').select('*').eq('status', 'conectado')
+  // Load session — filter by dealership only; don't rely on status field
+  let sessaoQuery = supabase.from('whatsapp_sessoes').select('*')
   if (dealershipId) sessaoQuery = sessaoQuery.eq('dealership_id', dealershipId)
   const { data: sessao } = await sessaoQuery.single() as { data: WhatsAppSessao | null }
 
@@ -287,7 +301,3 @@ async function sendOutOfHoursMessage(sessao: WhatsAppSessao, remoteJid: string) 
   await sendWhatsAppMessage({ apiKey: sessao.wasender_api_key, to: remoteJid, text: msg })
 }
 
-function shouldUseSmartModel(message: string): boolean {
-  const complex = ['financiamento','parcela','entrada','comparar','diferença','melhor opção','recomendar']
-  return complex.some(w => message.toLowerCase().includes(w))
-}

@@ -44,11 +44,15 @@ export async function checkSessionStatus(apiKey: string): Promise<{
     const res = await fetch(`${BASE}/status`, {
       headers: { Authorization: `Bearer ${apiKey}` },
     })
-    const data = await res.json()
+    const text = await res.text()
+    console.log('[WASender] status check:', res.status, text.slice(0, 200))
+    if (!res.ok) return { connected: false }
+    let data: any
+    try { data = JSON.parse(text) } catch { return { connected: false } }
     return {
-      connected: data.success && data.data?.status === 'connected',
-      phone: data.data?.phone,
-      name:  data.data?.name,
+      connected: data.success === true && (data.data?.status === 'connected' || data.data?.connected === true),
+      phone: data.data?.phone ?? data.data?.phoneNumber,
+      name:  data.data?.name  ?? data.data?.pushName,
     }
   } catch (e) {
     console.error('[WASender] status check error:', e)
@@ -57,18 +61,30 @@ export async function checkSessionStatus(apiKey: string): Promise<{
 }
 
 export async function getSessionQRCode(
-  personalAccessToken: string,
-  sessionId: string
+  sessionApiKey: string,
 ): Promise<{ qrCode?: string; error?: string }> {
+  const url = `${BASE}/qrcode`
+  console.log('[WASender] QR code fetch URL:', url)
   try {
-    const res = await fetch(`${BASE}/whatsapp-sessions/${sessionId}/qrcode`, {
-      headers: { Authorization: `Bearer ${personalAccessToken}` },
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${sessionApiKey}` },
     })
-    const data = await res.json()
-    if (data.success && data.data?.qrcode) return { qrCode: data.data.qrcode }
-    return { error: data.message || 'QR code not available' }
+    const text = await res.text()
+    console.log('[WASender] QR response status:', res.status, 'body:', text.slice(0, 300))
+
+    if (!res.ok) return { error: `HTTP ${res.status}: ${text.slice(0, 120)}` }
+
+    let data: any
+    try { data = JSON.parse(text) } catch {
+      return { error: `Invalid JSON (status ${res.status})` }
+    }
+
+    if (data.success && data.data?.qrcode)   return { qrCode: data.data.qrcode }
+    if (data.success && data.data?.qr_code)  return { qrCode: data.data.qr_code }
+    if (data.success && data.data?.base64)   return { qrCode: data.data.base64 }
+    return { error: data.message || data.error || JSON.stringify(data).slice(0, 120) }
   } catch (e: unknown) {
-    return { error: e instanceof Error ? e.message : 'Error' }
+    return { error: e instanceof Error ? e.message : 'Network error' }
   }
 }
 
