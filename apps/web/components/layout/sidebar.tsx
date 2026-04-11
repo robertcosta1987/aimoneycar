@@ -78,7 +78,7 @@ function NavLink({ item, collapsed, active }: { item: NavItem; collapsed: boolea
       title={collapsed ? item.label : undefined}
     >
       <item.icon className={cn('w-4 h-4 flex-shrink-0', active && 'text-primary')} />
-      {!collapsed && <span className="text-sm font-medium">{item.label}</span>}
+      {!collapsed && <span className="text-[14px] font-bold">{item.label}</span>}
     </Link>
   )
 }
@@ -215,7 +215,7 @@ export function Sidebar() {
               title={collapsed ? item.label : undefined}
             >
               <item.icon className="w-4 h-4 flex-shrink-0" />
-              {!collapsed && <span className="text-sm font-medium">{item.label}</span>}
+              {!collapsed && <span className="text-[14px] font-bold">{item.label}</span>}
             </Link>
           )
         })}
