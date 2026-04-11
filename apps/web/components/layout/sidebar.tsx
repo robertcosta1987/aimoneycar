@@ -191,10 +191,20 @@ export function Sidebar() {
               </span>
             </div>
           )}
-          {standaloneBottom.map(item => {
-            const active = (pathname ?? '') === item.href
-            return <NavLink key={item.href} item={item} collapsed={collapsed} active={active} />
-          })}
+          {standaloneBottom.map(item => (
+            <Link
+              key={item.href}
+              href={item.href}
+              title={collapsed ? item.label : undefined}
+              className={cn(
+                'flex items-center gap-3 px-3 py-2 rounded-xl transition-all duration-150',
+                'bg-blue-600 hover:bg-blue-500 text-white',
+              )}
+            >
+              <item.icon className="w-4 h-4 flex-shrink-0" />
+              {!collapsed && <span className="text-[14px] font-bold">{item.label}</span>}
+            </Link>
+          ))}
         </div>
       </nav>
 
