@@ -14,7 +14,7 @@ export function ReportPDFExport({ data, onClose }: Props) {
   const printRef = useRef<HTMLDivElement>(null)
 
   const handlePrint = () => {
-    window.print()
+    setTimeout(() => window.print(), 0)
   }
 
   return (
