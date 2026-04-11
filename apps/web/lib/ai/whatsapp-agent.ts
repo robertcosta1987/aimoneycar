@@ -268,11 +268,11 @@ function buildSystemPrompt(
   horaInicio?:   string,
   horaFim?:      string,
 ): string {
-  if (customPrompt) return customPrompt
-
   // All dates in BRT (America/Sao_Paulo) — Vercel runs in UTC, which can be
   // a day ahead of Brazil late at night, causing the AI to compute wrong weekdays.
   // We pre-compute the next 7 days so the AI never has to calculate dates itself.
+  // This date block is always appended — even when a custom prompt is used —
+  // because without it the AI falls back to its training data calendar (wrong year).
   const now      = new Date()
   const TZ       = { timeZone: 'America/Sao_Paulo' }
   const todayISO = now.toLocaleDateString('en-CA', TZ)   // YYYY-MM-DD in BRT
@@ -288,6 +288,19 @@ function buildSystemPrompt(
 
   const tomorrow = new Date(now.getTime() + 86400000).toLocaleDateString('en-CA', TZ)
   const afterTom = new Date(now.getTime() + 2 * 86400000).toLocaleDateString('en-CA', TZ)
+
+  const dateBlock = `
+
+DATA DE HOJE: ${todayStr} (${todayISO})
+
+PRÓXIMOS 7 DIAS (use EXATAMENTE estas datas — nunca calcule por conta própria):
+${next7Days}
+
+- "amanhã" = ${tomorrow}
+- "depois de amanhã" = ${afterTom}
+IMPORTANTE: Ao mencionar um dia da semana (ex: "segunda-feira"), use SEMPRE a data da tabela acima. Nunca escreva uma data diferente da listada.`
+
+  if (customPrompt) return customPrompt + dateBlock
 
   const d = ctx.dealership
   const storeName    = d?.name    || 'nossa loja'
@@ -310,15 +323,7 @@ DADOS DA LOJA:
 📍 ${storeAddress}
 📞 ${storePhone}
 🕐 Horário de atendimento presencial: ${horaInicio && horaFim ? `${horaInicio} às ${horaFim}` : '08:00 às 18:00'}
-
-DATA DE HOJE: ${todayStr} (${todayISO})
-
-PRÓXIMOS 7 DIAS (use EXATAMENTE estas datas — nunca calcule por conta própria):
-${next7Days}
-
-- "amanhã" = ${tomorrow}
-- "depois de amanhã" = ${afterTom}
-IMPORTANTE: Ao mencionar um dia da semana (ex: "segunda-feira"), use SEMPRE a data da tabela acima. Nunca escreva uma data diferente da listada.
+${dateBlock}
 
 ${ctx.customerName ? `CLIENTE: ${ctx.customerName}` : ''}
 
