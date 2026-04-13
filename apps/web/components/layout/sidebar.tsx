@@ -110,11 +110,15 @@ export function Sidebar() {
       {/* Logo */}
       <div className="flex items-center justify-center p-3 h-32 border-b border-border">
         {collapsed ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src="/logo.png" alt="CogniVenda AI" className="w-10 h-10 object-contain" />
+          <div className="bg-white rounded-xl p-1.5">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="CogniVenda AI" className="w-10 h-10 object-contain" />
+          </div>
         ) : (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src="/logo.png" alt="CogniVenda AI" className="h-28 w-auto object-contain" />
+          <div className="bg-white rounded-2xl p-2">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="CogniVenda AI" className="h-28 w-auto object-contain" />
+          </div>
         )}
       </div>
 

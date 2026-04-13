@@ -19,8 +19,10 @@ export default function DemoLayout({ children }: { children: React.ReactNode }) 
     <div className="flex h-screen bg-background overflow-hidden">
       <aside className="flex flex-col w-64 h-full bg-background-paper border-r border-border">
         <div className="flex items-center justify-between px-4 py-3 h-32 border-b border-border">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.png" alt="CogniVenda AI" className="h-28 w-auto object-contain" />
+          <div className="bg-white rounded-2xl p-2">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="CogniVenda AI" className="h-28 w-auto object-contain" />
+          </div>
           <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full">Demo</span>
         </div>
         <nav className="flex-1 px-3 py-4 space-y-1">
