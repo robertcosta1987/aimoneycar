@@ -112,12 +112,12 @@ export function Sidebar() {
         {collapsed ? (
           <div className="bg-white rounded-xl p-1.5">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.png" alt="CogniVenda AI" className="w-10 h-10 object-contain" />
+            <img src="/logo.png" alt="CogniVenda IA" className="w-10 h-10 object-contain" />
           </div>
         ) : (
           <div className="bg-white rounded-2xl p-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.png" alt="CogniVenda AI" className="h-28 w-auto object-contain" />
+            <img src="/logo.png" alt="CogniVenda IA" className="h-28 w-auto object-contain" />
           </div>
         )}
       </div>

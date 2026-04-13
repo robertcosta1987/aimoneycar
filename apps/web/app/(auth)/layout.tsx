@@ -6,7 +6,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           <div className="inline-flex items-center justify-center mb-2">
             <div className="bg-white rounded-2xl p-3 shadow-sm">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logo.png" alt="CogniVenda AI" className="h-36 w-auto" />
+              <img src="/logo.png" alt="CogniVenda IA" className="h-36 w-auto" />
             </div>
           </div>
           <p className="text-foreground-muted text-sm">Inteligência para sua revenda</p>

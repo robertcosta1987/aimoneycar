@@ -19,7 +19,7 @@ export function Header({ dealershipName = 'Minha Revenda', userName = 'Usuário'
       <div className="flex items-center gap-2 md:hidden">
         <div className="bg-white rounded-2xl p-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.png" alt="CogniVenda AI" className="h-28 w-auto object-contain" />
+          <img src="/logo.png" alt="CogniVenda IA" className="h-28 w-auto object-contain" />
         </div>
       </div>
 

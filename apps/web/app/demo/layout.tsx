@@ -21,7 +21,7 @@ export default function DemoLayout({ children }: { children: React.ReactNode }) 
         <div className="flex items-center justify-between px-4 py-3 h-32 border-b border-border">
           <div className="bg-white rounded-2xl p-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.png" alt="CogniVenda AI" className="h-28 w-auto object-contain" />
+            <img src="/logo.png" alt="CogniVenda IA" className="h-28 w-auto object-contain" />
           </div>
           <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full">Demo</span>
         </div>
