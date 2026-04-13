@@ -1,6 +1,5 @@
 import Link from 'next/link'
 import { ArrowRight, Zap, Bell, MessageSquare, BarChart3, Car, TrendingUp, Check } from 'lucide-react'
-import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -51,7 +50,7 @@ export default function LandingPage() {
       {/* Navbar */}
       <nav className="border-b border-border bg-background-paper/80 backdrop-blur-xl sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-6 h-40 flex items-center justify-between">
-          <span className="font-black text-2xl text-primary tracking-tight">MoneyCar <span className="text-foreground">AI</span></span>
+          <span className="font-black text-[34px] text-primary tracking-tight">MoneyCar <span className="text-foreground">AI</span></span>
           <div className="flex items-center gap-3">
             <Link href="/login"><Button variant="ghost" size="sm">Entrar</Button></Link>
             <Link href="/register"><Button size="sm">Criar conta</Button></Link>
