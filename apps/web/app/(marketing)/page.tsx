@@ -50,8 +50,8 @@ export default function LandingPage() {
     <div className="min-h-screen bg-background">
       {/* Navbar */}
       <nav className="border-b border-border bg-background-paper/80 backdrop-blur-xl sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-          <Image src="/logo.png" alt="CogniVenda" width={168} height={60} className="h-10 w-auto object-contain" />
+        <div className="max-w-6xl mx-auto px-6 h-32 flex items-center justify-between">
+          <Image src="/logo.png" alt="CogniVenda" width={400} height={128} className="h-32 w-auto object-contain" />
           <div className="flex items-center gap-3">
             <Link href="/login"><Button variant="ghost" size="sm">Entrar</Button></Link>
             <Link href="/register"><Button size="sm">Criar conta</Button></Link>

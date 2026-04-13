@@ -92,12 +92,8 @@ export function MobileBottomNav({ alertCount = 0 }: MobileBottomNavProps) {
           {/* Header */}
           <div className="sticky top-0 bg-background-paper flex items-center justify-between px-4 py-3 border-b border-border">
             <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-primary/20 flex items-center justify-center">
-                <Zap className="w-3.5 h-3.5 text-primary" />
-              </div>
-              <span className="font-bold text-sm text-foreground">
-                Moneycar <span className="text-primary">AI</span>
-              </span>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.png" alt="CogniVenda" className="h-24 w-auto object-contain" />
             </div>
             <button onClick={() => setMenuOpen(false)} className="p-1 rounded-lg text-foreground-muted hover:text-foreground">
               <X className="w-5 h-5" />

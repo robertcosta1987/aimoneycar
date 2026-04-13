@@ -116,7 +116,7 @@ export function Sidebar() {
           </div>
         ) : (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src="/logo.png" alt="CogniVenda" className="h-12 w-auto object-contain" />
+          <img src="/logo.png" alt="CogniVenda" className="h-24 w-auto object-contain" />
         )}
       </div>
 

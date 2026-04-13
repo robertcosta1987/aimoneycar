@@ -1,7 +1,7 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { BarChart3, MessageSquare, Receipt, Upload, Zap } from 'lucide-react'
+import { BarChart3, MessageSquare, Receipt, Upload } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 
@@ -18,9 +18,9 @@ export default function DemoLayout({ children }: { children: React.ReactNode }) 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
       <aside className="flex flex-col w-64 h-full bg-background-paper border-r border-border">
-        <div className="flex items-center gap-2 px-6 py-5 border-b border-border">
-          <Zap className="h-6 w-6 text-primary" />
-          <span className="font-bold text-lg">Moneycar <span className="text-primary">AI</span></span>
+        <div className="flex items-center gap-3 px-6 py-5 border-b border-border">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="CogniVenda" className="h-24 w-auto object-contain" />
           <span className="ml-auto text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full">Demo</span>
         </div>
         <nav className="flex-1 px-3 py-4 space-y-1">
