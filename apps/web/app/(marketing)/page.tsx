@@ -51,9 +51,7 @@ export default function LandingPage() {
       {/* Navbar */}
       <nav className="border-b border-border bg-background-paper/80 backdrop-blur-xl sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-6 h-40 flex items-center justify-between">
-          <div className="bg-white rounded-2xl p-3 shadow-sm">
-            <Image src="/logo.png" alt="CogniVenda IA" width={200} height={160} className="h-36 w-auto object-contain" />
-          </div>
+          <span className="font-black text-2xl text-primary tracking-tight">MoneyCar <span className="text-foreground">AI</span></span>
           <div className="flex items-center gap-3">
             <Link href="/login"><Button variant="ghost" size="sm">Entrar</Button></Link>
             <Link href="/register"><Button size="sm">Criar conta</Button></Link>
@@ -143,7 +141,7 @@ export default function LandingPage() {
 
       {/* Footer */}
       <footer className="border-t border-border bg-background-paper py-8 text-center text-sm text-foreground-muted">
-        <p>© {new Date().getFullYear()} CogniVenda IA. Todos os direitos reservados.</p>
+        <p>© {new Date().getFullYear()} MoneyCar AI. Todos os direitos reservados.</p>
       </footer>
     </div>
   )

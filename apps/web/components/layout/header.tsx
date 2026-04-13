@@ -17,10 +17,7 @@ export function Header({ dealershipName = 'Minha Revenda', userName = 'Usuário'
     <header className="h-32 border-b border-border bg-background-paper px-4 md:px-6 flex items-center justify-between gap-3">
       {/* Mobile: logo | Desktop: search bar */}
       <div className="flex items-center gap-2 md:hidden">
-        <div className="bg-white rounded-2xl p-2">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.png" alt="CogniVenda IA" className="h-28 w-auto object-contain" />
-        </div>
+        <span className="font-black text-xl text-primary tracking-tight">MoneyCar <span className="text-foreground">AI</span></span>
       </div>
 
       <div className="hidden md:block flex-1 max-w-md">

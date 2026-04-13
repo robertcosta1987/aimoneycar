@@ -4,8 +4,8 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: {
-    default: 'CogniVenda IA - Inteligência Artificial para Revendas',
-    template: '%s | CogniVenda IA',
+    default: 'MoneyCar AI - Inteligência Artificial para Revendas',
+    template: '%s | MoneyCar AI',
   },
   description:
     'Transforme sua revenda de veículos com inteligência artificial. Alertas inteligentes, análise de margem e assistente virtual para maximizar seus lucros.',
@@ -16,16 +16,16 @@ export const metadata: Metadata = {
     'gestão de estoque',
     'lucro revenda',
     'WhatsApp business',
-    'cognivenda',
+    'moneycar',
   ],
-  authors: [{ name: 'CogniVenda IA' }],
-  creator: 'CogniVenda IA',
+  authors: [{ name: 'MoneyCar AI' }],
+  creator: 'MoneyCar AI',
   openGraph: {
     type: 'website',
     locale: 'pt_BR',
-    url: 'https://cognivenda.ai',
-    siteName: 'CogniVenda IA',
-    title: 'CogniVenda IA - Inteligência Artificial para Revendas',
+    url: 'https://moneycar.ai',
+    siteName: 'MoneyCar AI',
+    title: 'MoneyCar AI - Inteligência Artificial para Revendas',
     description:
       'Transforme sua revenda de veículos com inteligência artificial.',
     images: [
@@ -33,13 +33,13 @@ export const metadata: Metadata = {
         url: '/logo.png',
         width: 1200,
         height: 630,
-        alt: 'CogniVenda IA',
+        alt: 'MoneyCar AI',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'CogniVenda IA',
+    title: 'MoneyCar AI',
     description: 'Inteligência Artificial para Revendas de Veículos',
   },
   robots: {
