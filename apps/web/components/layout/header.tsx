@@ -1,5 +1,5 @@
 'use client'
-import { Bell, Search, Zap } from 'lucide-react'
+import { Bell, Search } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,10 +17,8 @@ export function Header({ dealershipName = 'Minha Revenda', userName = 'Usuário'
     <header className="h-14 md:h-16 border-b border-border bg-background-paper px-4 md:px-6 flex items-center justify-between gap-3">
       {/* Mobile: logo | Desktop: search bar */}
       <div className="flex items-center gap-2 md:hidden">
-        <div className="w-7 h-7 rounded-lg bg-primary/20 flex items-center justify-center">
-          <Zap className="w-3.5 h-3.5 text-primary" />
-        </div>
-        <span className="font-bold text-sm text-foreground">Moneycar <span className="text-primary">AI</span></span>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logo.png" alt="CogniVenda" className="h-7 w-auto object-contain" />
       </div>
 
       <div className="hidden md:block flex-1 max-w-md">

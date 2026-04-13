@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   LayoutDashboard, MessageSquare, Car, Bell, Receipt,
-  BarChart3, Upload, Settings, LogOut, Zap, ChevronLeft, ChevronRight,
+  BarChart3, Upload, Settings, LogOut, ChevronLeft, ChevronRight,
   CalendarDays, Users, CalendarClock, Timer, DollarSign, FileBarChart2,
   MessageCircle, Sparkles, ChevronDown,
 } from 'lucide-react'
@@ -109,14 +109,14 @@ export function Sidebar() {
     )}>
       {/* Logo */}
       <div className="flex items-center gap-3 p-4 h-16 border-b border-border">
-        <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
-          <Zap className="w-4 h-4 text-primary" />
-        </div>
-        {!collapsed && (
-          <div>
-            <span className="font-bold text-foreground text-sm">Moneycar</span>
-            <span className="text-primary font-bold text-sm"> AI</span>
+        {collapsed ? (
+          <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="CogniVenda" className="w-6 h-6 object-contain" />
           </div>
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src="/logo.png" alt="CogniVenda" className="h-8 w-auto object-contain" />
         )}
       </div>
 
