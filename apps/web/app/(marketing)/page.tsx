@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { ArrowRight, Zap, Bell, MessageSquare, BarChart3, Car, TrendingUp, Check } from 'lucide-react'
+import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -10,7 +11,7 @@ const features = [
   { icon: BarChart3, title: 'Análise de Margem', desc: 'Veja em tempo real quanto está ganhando em cada veículo.', color: 'text-primary bg-primary/10' },
   { icon: Car, title: 'Estoque Inteligente', desc: 'Identifique veículos parados e a hora certa de baixar o preço.', color: 'text-secondary bg-secondary/10' },
   { icon: TrendingUp, title: 'Chat IA', desc: 'Converse com seu assistente e tire dúvidas sobre o negócio.', color: 'text-primary bg-primary/10' },
-  { icon: Zap, title: 'Importação Fácil', desc: 'Importe dados do Moneycar com um clique.', color: 'text-success bg-success/10' },
+  { icon: Zap, title: 'Importação Fácil', desc: 'Importe dados da sua plataforma com um clique.', color: 'text-success bg-success/10' },
 ]
 
 const plans = [
@@ -50,10 +51,7 @@ export default function LandingPage() {
       {/* Navbar */}
       <nav className="border-b border-border bg-background-paper/80 backdrop-blur-xl sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Zap className="w-5 h-5 text-primary" />
-            <span className="font-bold text-lg">Moneycar<span className="text-primary"> AI</span></span>
-          </div>
+          <Image src="/logo.png" alt="CogniVenda" width={168} height={60} className="h-10 w-auto object-contain" />
           <div className="flex items-center gap-3">
             <Link href="/login"><Button variant="ghost" size="sm">Entrar</Button></Link>
             <Link href="/register"><Button size="sm">Criar conta</Button></Link>
@@ -143,7 +141,7 @@ export default function LandingPage() {
 
       {/* Footer */}
       <footer className="border-t border-border bg-background-paper py-8 text-center text-sm text-foreground-muted">
-        <p>© {new Date().getFullYear()} Moneycar AI. Todos os direitos reservados.</p>
+        <p>© {new Date().getFullYear()} CogniVenda. Todos os direitos reservados.</p>
       </footer>
     </div>
   )
