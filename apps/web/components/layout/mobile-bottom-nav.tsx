@@ -93,7 +93,7 @@ export function MobileBottomNav({ alertCount = 0 }: MobileBottomNavProps) {
           <div className="sticky top-0 bg-background-paper flex items-center justify-between px-4 py-3 border-b border-border">
             <div className="flex items-center gap-2">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logo.png" alt="CogniVenda" className="h-24 w-auto object-contain" />
+              <img src="/logo.png" alt="CogniVenda AI" className="h-24 w-auto object-contain" />
             </div>
             <button onClick={() => setMenuOpen(false)} className="p-1 rounded-lg text-foreground-muted hover:text-foreground">
               <X className="w-5 h-5" />

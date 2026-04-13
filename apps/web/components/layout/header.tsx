@@ -14,11 +14,11 @@ interface HeaderProps {
 
 export function Header({ dealershipName = 'Minha Revenda', userName = 'Usuário', alertCount = 0 }: HeaderProps) {
   return (
-    <header className="h-14 md:h-16 border-b border-border bg-background-paper px-4 md:px-6 flex items-center justify-between gap-3">
+    <header className="h-32 border-b border-border bg-background-paper px-4 md:px-6 flex items-center justify-between gap-3">
       {/* Mobile: logo | Desktop: search bar */}
       <div className="flex items-center gap-2 md:hidden">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo.png" alt="CogniVenda" className="h-24 w-auto object-contain" />
+        <img src="/logo.png" alt="CogniVenda AI" className="h-28 w-auto object-contain" />
       </div>
 
       <div className="hidden md:block flex-1 max-w-md">

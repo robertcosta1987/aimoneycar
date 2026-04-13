@@ -108,22 +108,20 @@ export function Sidebar() {
       collapsed ? 'w-16' : 'w-64'
     )}>
       {/* Logo */}
-      <div className="flex items-center gap-3 p-4 h-16 border-b border-border">
+      <div className="flex items-center justify-center p-3 h-32 border-b border-border">
         {collapsed ? (
-          <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.png" alt="CogniVenda" className="w-9 h-9 object-contain" />
-          </div>
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src="/logo.png" alt="CogniVenda AI" className="w-10 h-10 object-contain" />
         ) : (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src="/logo.png" alt="CogniVenda" className="h-24 w-auto object-contain" />
+          <img src="/logo.png" alt="CogniVenda AI" className="h-28 w-auto object-contain" />
         )}
       </div>
 
       {/* Collapse toggle */}
       <button
         onClick={() => setCollapsed(!collapsed)}
-        className="absolute -right-3 top-20 w-6 h-6 rounded-full bg-background-elevated border border-border flex items-center justify-center hover:bg-background-hover transition-colors z-10"
+        className="absolute -right-3 top-36 w-6 h-6 rounded-full bg-background-elevated border border-border flex items-center justify-center hover:bg-background-hover transition-colors z-10"
       >
         {collapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronLeft className="w-3 h-3" />}
       </button>
