@@ -4,8 +4,8 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: {
-    default: 'CogniVenda - Inteligência Artificial para Revendas',
-    template: '%s | CogniVenda',
+    default: 'CogniVenda AI - Inteligência Artificial para Revendas',
+    template: '%s | CogniVenda AI',
   },
   description:
     'Transforme sua revenda de veículos com inteligência artificial. Alertas inteligentes, análise de margem e assistente virtual para maximizar seus lucros.',
@@ -18,14 +18,14 @@ export const metadata: Metadata = {
     'WhatsApp business',
     'cognivenda',
   ],
-  authors: [{ name: 'CogniVenda' }],
-  creator: 'CogniVenda',
+  authors: [{ name: 'CogniVenda AI' }],
+  creator: 'CogniVenda AI',
   openGraph: {
     type: 'website',
     locale: 'pt_BR',
     url: 'https://cognivenda.ai',
-    siteName: 'CogniVenda',
-    title: 'CogniVenda - Inteligência Artificial para Revendas',
+    siteName: 'CogniVenda AI',
+    title: 'CogniVenda AI - Inteligência Artificial para Revendas',
     description:
       'Transforme sua revenda de veículos com inteligência artificial.',
     images: [
@@ -33,13 +33,13 @@ export const metadata: Metadata = {
         url: '/logo.png',
         width: 1200,
         height: 630,
-        alt: 'CogniVenda',
+        alt: 'CogniVenda AI',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'CogniVenda',
+    title: 'CogniVenda AI',
     description: 'Inteligência Artificial para Revendas de Veículos',
   },
   robots: {

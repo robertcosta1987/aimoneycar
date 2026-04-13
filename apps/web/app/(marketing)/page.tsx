@@ -141,7 +141,7 @@ export default function LandingPage() {
 
       {/* Footer */}
       <footer className="border-t border-border bg-background-paper py-8 text-center text-sm text-foreground-muted">
-        <p>© {new Date().getFullYear()} CogniVenda. Todos os direitos reservados.</p>
+        <p>© {new Date().getFullYear()} CogniVenda AI. Todos os direitos reservados.</p>
       </footer>
     </div>
   )
