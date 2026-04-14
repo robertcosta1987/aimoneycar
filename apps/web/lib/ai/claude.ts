@@ -3,6 +3,7 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import type { ChatMessage } from '@/types'
 import type { DashboardConfig } from '@/types/dashboard'
 import * as fipe from '@/lib/fipe/client'
+import { getFieldMap } from '@/lib/ai/field-map'
 
 function svc() {
   return createSupabaseClient(
@@ -398,6 +399,14 @@ function buildSystemPrompt(ctx: FullDealershipContext): string {
   lines.push(`- **render_dashboard** — renderiza dashboard visual com KPIs e gráficos no chat (use SEMPRE para dados quantitativos)`)
   lines.push(`- **Tabela FIPE em tempo real** — use sempre que precisar do valor de mercado de um veículo`)
   lines.push(`- **Agenda e agendamentos** — consulte horários disponíveis, liste agendamentos, crie e atualize visitas/test drives`)
+
+  lines.push(`\n## MAPA DE CAMPOS DO BANCO DE DADOS`)
+  lines.push(`Use o mapa abaixo para traduzir perguntas em linguagem natural para os campos corretos do banco.`)
+  lines.push(`Ele descreve todas as 28 tabelas, seus campos, os valores aceitos e as fórmulas de cálculo.`)
+  lines.push(`Sempre que o usuário perguntar sobre dados específicos, consulte este mapa para garantir que está`)
+  lines.push(`usando os campos certos, os valores corretos dos enums, e as fórmulas de lucro/margem exatas.`)
+  lines.push(``)
+  lines.push(getFieldMap())
 
   lines.push(`\n## Resumo Geral`)
   lines.push(`- Estoque: ${s.availableCount} disponíveis | ${s.soldCount} vendidos | ${s.totalVehicles} total`)
