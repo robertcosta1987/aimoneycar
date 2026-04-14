@@ -52,7 +52,7 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
-  themeColor: '#0A0E14',
+  themeColor: '#FFFFFF',
 };
 
 export default function RootLayout({
@@ -73,7 +73,7 @@ export default function RootLayout({
       <body className="min-h-screen bg-background antialiased">
         <ThemeProvider
           attribute="class"
-          defaultTheme="dark"
+          defaultTheme="light"
           enableSystem={false}
           disableTransitionOnChange
         >

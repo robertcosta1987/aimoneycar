@@ -10,7 +10,7 @@ import { loadThresholds, saveThresholds } from '@/lib/aging'
 import type { AgingThresholds } from '@/types/aging'
 
 export function useAgingThresholds() {
-  const [thresholds, setThresholdsState] = useState<AgingThresholds>({ attention: 30, critical: 60 })
+  const [thresholds, setThresholdsState] = useState<AgingThresholds>({ attention: 45, critical: 90 })
   const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {

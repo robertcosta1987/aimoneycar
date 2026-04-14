@@ -6,24 +6,30 @@ import {
 } from 'recharts'
 import { DashboardConfig, ChartConfig } from '@/types/dashboard'
 
-const PALETTE = ['#00D9FF', '#00E676', '#FFB800', '#FF5252', '#C084FC', '#FB923C', '#34D399', '#F472B6']
+const PALETTE = ['#0EA5E9', '#10B981', '#F59E0B', '#EF4444', '#A78BFA', '#FB923C', '#34D399', '#F472B6']
 
 const KPI_COLORS: Record<string, string> = {
-  green: '#00E676',
-  red: '#FF5252',
-  yellow: '#FFB800',
-  blue: '#00D9FF',
-  default: '#E2E8F0',
+  green:   'rgb(var(--success))',
+  red:     'rgb(var(--danger))',
+  yellow:  'rgb(var(--warning))',
+  blue:    'rgb(var(--primary))',
+  default: 'rgb(var(--fg-muted))',
 }
 
 const TOOLTIP_STYLE = {
-  contentStyle: { background: '#111820', border: '1px solid #1E2A3A', borderRadius: 12, fontSize: 12 },
-  labelStyle: { color: '#8B9EB3' },
-  itemStyle: { color: '#E2E8F0' },
+  contentStyle: {
+    background: 'rgb(var(--bg-elevated))',
+    border: '1px solid rgb(var(--border))',
+    borderRadius: 12,
+    fontSize: 12,
+    color: 'rgb(var(--fg))',
+  },
+  labelStyle: { color: 'rgb(var(--fg-muted))' },
+  itemStyle:  { color: 'rgb(var(--fg))' },
 }
 
-const AXIS_TICK = { fontSize: 11, fill: '#8B9EB3' }
-const GRID_STYLE = { strokeDasharray: '3 3', stroke: '#1E2A3A' }
+const AXIS_TICK  = { fontSize: 11, fill: 'rgb(var(--fg-muted))' }
+const GRID_STYLE = { strokeDasharray: '3 3', stroke: 'rgb(var(--border))' }
 
 function renderChart(chart: ChartConfig) {
   const colors = chart.series.map((s, i) => s.color ?? PALETTE[i % PALETTE.length])
@@ -48,7 +54,7 @@ function renderChart(chart: ChartConfig) {
             ))}
           </Pie>
           <Tooltip {...TOOLTIP_STYLE} />
-          <Legend wrapperStyle={{ fontSize: 11, color: '#8B9EB3' }} />
+          <Legend wrapperStyle={{ fontSize: 11, color: 'rgb(var(--fg-muted))' }} />
         </PieChart>
       </ResponsiveContainer>
     )
@@ -62,7 +68,7 @@ function renderChart(chart: ChartConfig) {
           <XAxis dataKey={chart.xKey} tick={AXIS_TICK} />
           <YAxis tick={AXIS_TICK} width={50} />
           <Tooltip {...TOOLTIP_STYLE} />
-          {chart.series.length > 1 && <Legend wrapperStyle={{ fontSize: 11, color: '#8B9EB3' }} />}
+          {chart.series.length > 1 && <Legend wrapperStyle={{ fontSize: 11, color: 'rgb(var(--fg-muted))' }} />}
           {chart.series.map((s, i) => (
             <Line
               key={s.key}
@@ -95,7 +101,7 @@ function renderChart(chart: ChartConfig) {
           <XAxis dataKey={chart.xKey} tick={AXIS_TICK} />
           <YAxis tick={AXIS_TICK} width={50} />
           <Tooltip {...TOOLTIP_STYLE} />
-          {chart.series.length > 1 && <Legend wrapperStyle={{ fontSize: 11, color: '#8B9EB3' }} />}
+          {chart.series.length > 1 && <Legend wrapperStyle={{ fontSize: 11, color: 'rgb(var(--fg-muted))' }} />}
           {chart.series.map((s, i) => (
             <Area
               key={s.key}
@@ -120,7 +126,7 @@ function renderChart(chart: ChartConfig) {
         <XAxis dataKey={chart.xKey} tick={AXIS_TICK} />
         <YAxis tick={AXIS_TICK} width={50} />
         <Tooltip {...TOOLTIP_STYLE} />
-        {chart.series.length > 1 && <Legend wrapperStyle={{ fontSize: 11, color: '#8B9EB3' }} />}
+        {chart.series.length > 1 && <Legend wrapperStyle={{ fontSize: 11, color: 'rgb(var(--fg-muted))' }} />}
         {chart.series.map((s, i) => (
           <Bar key={s.key} dataKey={s.key} name={s.label} fill={colors[i]} radius={[3, 3, 0, 0]} />
         ))}
@@ -141,15 +147,15 @@ export function ChatDashboard({ dashboard }: { dashboard: DashboardConfig }) {
       {dashboard.kpis.length > 0 && (
         <div className={`grid gap-2 ${dashboard.kpis.length <= 2 ? 'grid-cols-2' : dashboard.kpis.length === 3 ? 'grid-cols-3' : 'grid-cols-2 sm:grid-cols-4'}`}>
           {dashboard.kpis.map((kpi, i) => (
-            <div key={i} className="bg-[#0D1117] rounded-xl p-3 border border-[#1E2A3A]">
-              <p className="text-[10px] text-[#8B9EB3] leading-none mb-1">{kpi.label}</p>
+            <div key={i} className="bg-background-paper rounded-xl p-3 border border-border">
+              <p className="text-[10px] text-foreground-muted leading-none mb-1">{kpi.label}</p>
               <p className="text-lg font-bold leading-none" style={{ color: KPI_COLORS[kpi.color ?? 'default'] }}>
                 {kpi.value}
               </p>
               {kpi.trend && (
                 <p className="text-[10px] mt-1" style={{
-                  color: kpi.trend.startsWith('+') || kpi.trend.startsWith('▲') ? '#00E676' :
-                    kpi.trend.startsWith('-') || kpi.trend.startsWith('▼') ? '#FF5252' : '#8B9EB3'
+                  color: kpi.trend.startsWith('+') || kpi.trend.startsWith('▲') ? 'rgb(var(--success))' :
+                    kpi.trend.startsWith('-') || kpi.trend.startsWith('▼') ? 'rgb(var(--danger))' : 'rgb(var(--fg-muted))'
                 }}>
                   {kpi.trend}
                 </p>
@@ -163,10 +169,10 @@ export function ChatDashboard({ dashboard }: { dashboard: DashboardConfig }) {
       {dashboard.charts.length > 0 && (
         <div className={`grid gap-3 ${dashboard.charts.length === 1 ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2'}`}>
           {dashboard.charts.map((chart, i) => (
-            <div key={i} className="bg-[#0D1117] rounded-xl p-3 border border-[#1E2A3A]">
-              <p className="text-[11px] font-semibold text-[#8B9EB3] mb-3">{chart.title}</p>
+            <div key={i} className="bg-background-paper rounded-xl p-3 border border-border">
+              <p className="text-[11px] font-semibold text-foreground-muted mb-3">{chart.title}</p>
               {chart.data.length === 0 ? (
-                <p className="text-xs text-[#4A5568] text-center py-8">Sem dados no período</p>
+                <p className="text-xs text-foreground-subtle text-center py-8">Sem dados no período</p>
               ) : (
                 renderChart(chart)
               )}

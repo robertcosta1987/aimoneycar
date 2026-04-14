@@ -10,9 +10,9 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Primary — deep sky blue, readable on white
+        // Primary — references CSS var so opacity modifiers work
         primary: {
-          DEFAULT: '#0369A1',
+          DEFAULT: 'rgb(var(--primary) / <alpha-value>)',
           50:  '#F0F9FF',
           100: '#E0F2FE',
           200: '#BAE6FD',
@@ -24,9 +24,9 @@ const config: Config = {
           800: '#075985',
           900: '#0C4A6E',
         },
-        // Secondary — warm amber (darkened for white bg)
+        // Secondary — warm amber
         secondary: {
-          DEFAULT: '#B45309',
+          DEFAULT: 'rgb(var(--secondary) / <alpha-value>)',
           50:  '#FFFBEB',
           100: '#FEF3C7',
           200: '#FDE68A',
@@ -40,39 +40,39 @@ const config: Config = {
         },
         // Success
         success: {
-          DEFAULT: '#15803D',
+          DEFAULT: 'rgb(var(--success) / <alpha-value>)',
           500: '#16A34A',
           600: '#15803D',
         },
         // Warning
         warning: {
-          DEFAULT: '#B45309',
+          DEFAULT: 'rgb(var(--warning) / <alpha-value>)',
           500: '#D97706',
           600: '#B45309',
         },
         // Danger
         danger: {
-          DEFAULT: '#B91C1C',
+          DEFAULT: 'rgb(var(--danger) / <alpha-value>)',
           500: '#DC2626',
           600: '#B91C1C',
         },
-        // Backgrounds — white-based
+        // Backgrounds — driven by CSS vars
         background: {
-          DEFAULT: '#FFFFFF',
-          paper:   '#F8FAFC',
-          elevated:'#F1F5F9',
-          hover:   '#E2E8F0',
+          DEFAULT:  'rgb(var(--bg) / <alpha-value>)',
+          paper:    'rgb(var(--bg-paper) / <alpha-value>)',
+          elevated: 'rgb(var(--bg-elevated) / <alpha-value>)',
+          hover:    'rgb(var(--bg-hover) / <alpha-value>)',
         },
-        // Text — dark on white
+        // Text — driven by CSS vars
         foreground: {
-          DEFAULT: '#0F172A',
-          muted:   '#64748B',
-          subtle:  '#94A3B8',
+          DEFAULT: 'rgb(var(--fg) / <alpha-value>)',
+          muted:   'rgb(var(--fg-muted) / <alpha-value>)',
+          subtle:  'rgb(var(--fg-subtle) / <alpha-value>)',
         },
-        // Border — light gray
+        // Border — driven by CSS vars
         border: {
-          DEFAULT: '#E2E8F0',
-          hover:   '#CBD5E1',
+          DEFAULT: 'rgb(var(--border) / <alpha-value>)',
+          hover:   'rgb(var(--border-hover) / <alpha-value>)',
         },
       },
       fontFamily: {

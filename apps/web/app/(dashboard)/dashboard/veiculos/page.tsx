@@ -74,7 +74,7 @@ export default function VeiculosPage() {
 
   const stats = useMemo(() => ({
     total: vehicles.length,
-    critical: vehicles.filter(v => v.days_in_stock > 60).length,
+    critical: vehicles.filter(v => v.days_in_stock > 90).length,
     avgDays: vehicles.length ? Math.round(vehicles.reduce((s, v) => s + v.days_in_stock, 0) / vehicles.length) : 0,
     totalValue: vehicles.reduce((s, v) => s + (v.sale_price ?? 0), 0),
   }), [vehicles])
@@ -127,7 +127,7 @@ export default function VeiculosPage() {
           <Card>
             <CardContent className="p-3 text-center">
               <p className="text-2xl font-bold text-danger">{stats.critical}</p>
-              <p className="text-xs text-foreground-muted mt-0.5">Críticos +60d</p>
+              <p className="text-xs text-foreground-muted mt-0.5">Críticos +90d</p>
             </CardContent>
           </Card>
           <Card>

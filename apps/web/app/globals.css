@@ -1,9 +1,11 @@
+/* Import Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Import Google Fonts */
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+/* ── Design tokens ──────────────────────────────────────────────────────────── */
 
 :root {
   --font-outfit: 'Outfit', system-ui, sans-serif;
@@ -11,15 +13,53 @@
 
   --gradient-primary: linear-gradient(135deg, #0EA5E9 0%, #0369A1 100%);
   --gradient-gold:    linear-gradient(135deg, #F59E0B 0%, #B45309 100%);
+
+  /* Light mode color tokens (space-separated RGB for rgb(var(--x) / alpha) pattern) */
+  --bg:              255 255 255;
+  --bg-paper:        248 250 252;
+  --bg-elevated:     241 245 249;
+  --bg-hover:        226 232 240;
+  --fg:              15 23 42;
+  --fg-muted:        100 116 139;
+  --fg-subtle:       148 163 184;
+  --primary:         3 105 161;
+  --primary-light:   14 165 233;
+  --secondary:       180 83 9;
+  --success:         21 128 61;
+  --warning:         217 119 6;
+  --danger:          185 28 28;
+  --border:          226 232 240;
+  --border-hover:    203 213 225;
 }
+
+.dark {
+  --bg:              10 14 20;
+  --bg-paper:        17 24 32;
+  --bg-elevated:     26 35 50;
+  --bg-hover:        36 48 68;
+  --fg:              240 244 255;
+  --fg-muted:        139 158 179;
+  --fg-subtle:       90 107 125;
+  --primary:         56 189 248;
+  --primary-light:   125 211 252;
+  --secondary:       251 191 36;
+  --success:         52 211 153;
+  --warning:         251 191 36;
+  --danger:          248 113 113;
+  --border:          30 42 58;
+  --border-hover:    46 64 88;
+}
+
+/* ── Base layer ─────────────────────────────────────────────────────────────── */
 
 @layer base {
   * {
-    @apply border-border;
+    border-color: rgb(var(--border));
   }
 
   body {
-    @apply bg-background text-foreground;
+    background-color: rgb(var(--bg));
+    color: rgb(var(--fg));
     font-family: var(--font-outfit);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -35,27 +75,41 @@
   }
 }
 
+/* ── Component layer ────────────────────────────────────────────────────────── */
+
 @layer components {
-  /* Card — clean white with subtle shadow */
+  /* Card */
   .glass-card {
-    @apply bg-white border border-border rounded-2xl;
+    background-color: rgb(var(--bg));
+    border: 1px solid rgb(var(--border));
+    @apply rounded-2xl;
     box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.06);
   }
 
   /* Primary Button */
   .btn-primary {
-    @apply relative px-6 py-3 bg-primary text-white font-semibold rounded-xl;
+    background-color: rgb(var(--primary));
+    color: #ffffff;
+    @apply relative px-6 py-3 font-semibold rounded-xl;
     @apply transition-all duration-300;
-    @apply hover:bg-primary-800 hover:shadow-glow-primary hover:scale-105;
+    @apply hover:shadow-glow-primary hover:scale-105;
     @apply active:scale-95;
+  }
+  .btn-primary:hover {
+    background-color: rgb(var(--primary) / 0.85);
   }
 
   /* Secondary Button */
   .btn-secondary {
-    @apply relative px-6 py-3 bg-transparent border-2 border-primary text-primary font-semibold rounded-xl;
+    background-color: transparent;
+    border: 2px solid rgb(var(--primary));
+    color: rgb(var(--primary));
+    @apply relative px-6 py-3 font-semibold rounded-xl;
     @apply transition-all duration-300;
-    @apply hover:bg-primary-50 hover:shadow-glow-primary;
-    @apply active:scale-95;
+    @apply hover:shadow-glow-primary active:scale-95;
+  }
+  .btn-secondary:hover {
+    background-color: rgb(var(--primary) / 0.08);
   }
 
   /* Gold Accent Button */
@@ -73,47 +127,72 @@
   }
 
   .status-success {
-    @apply bg-green-50 text-success border border-green-200;
+    background-color: rgb(var(--success) / 0.1);
+    color: rgb(var(--success));
+    border: 1px solid rgb(var(--success) / 0.3);
   }
 
   .status-warning {
-    @apply bg-amber-50 text-warning border border-amber-200;
+    background-color: rgb(var(--warning) / 0.1);
+    color: rgb(var(--warning));
+    border: 1px solid rgb(var(--warning) / 0.3);
   }
 
   .status-danger {
-    @apply bg-red-50 text-danger border border-red-200;
+    background-color: rgb(var(--danger) / 0.1);
+    color: rgb(var(--danger));
+    border: 1px solid rgb(var(--danger) / 0.3);
   }
 
   /* Metric Card */
   .metric-card {
     @apply glass-card p-6;
     @apply transition-all duration-300;
-    @apply hover:border-primary/30 hover:shadow-card-hover;
+  }
+  .metric-card:hover {
+    border-color: rgb(var(--primary) / 0.3);
+    @apply shadow-card-hover;
   }
 
   /* Navigation Link */
   .nav-link {
     @apply flex items-center gap-3 px-4 py-3 rounded-xl;
-    @apply text-foreground-muted transition-all duration-200;
-    @apply hover:bg-background-hover hover:text-foreground;
+    color: rgb(var(--fg-muted));
+    @apply transition-all duration-200;
+  }
+  .nav-link:hover {
+    background-color: rgb(var(--bg-hover));
+    color: rgb(var(--fg));
   }
 
   .nav-link.active {
-    @apply bg-primary-50 text-primary border-l-2 border-primary;
+    background-color: rgb(var(--primary) / 0.1);
+    color: rgb(var(--primary));
+    border-left: 2px solid rgb(var(--primary));
   }
 
   /* Input Field */
   .input-field {
-    @apply w-full px-4 py-3 bg-white border border-border rounded-xl;
-    @apply text-foreground placeholder:text-foreground-subtle;
+    @apply w-full px-4 py-3 rounded-xl;
+    background-color: rgb(var(--bg));
+    border: 1px solid rgb(var(--border));
+    color: rgb(var(--fg));
     @apply transition-all duration-200;
-    @apply focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30;
+    @apply focus:outline-none;
+  }
+  .input-field::placeholder {
+    color: rgb(var(--fg-subtle));
+  }
+  .input-field:focus {
+    border-color: rgb(var(--primary));
+    box-shadow: 0 0 0 1px rgb(var(--primary) / 0.3);
   }
 
   /* Scrollbar */
   .custom-scrollbar::-webkit-scrollbar       { width: 6px; height: 6px; }
-  .custom-scrollbar::-webkit-scrollbar-track { @apply bg-background-paper rounded-full; }
-  .custom-scrollbar::-webkit-scrollbar-thumb { @apply bg-border rounded-full hover:bg-border-hover; }
+  .custom-scrollbar::-webkit-scrollbar-track { background: rgb(var(--bg-paper)); border-radius: 9999px; }
+  .custom-scrollbar::-webkit-scrollbar-thumb { background: rgb(var(--border)); border-radius: 9999px; }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgb(var(--border-hover)); }
 
   /* Gradient Text */
   .text-gradient {
@@ -129,8 +208,8 @@
   /* Subtle grid background */
   .bg-grid {
     background-image:
-      linear-gradient(rgba(3, 105, 161, 0.04) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(3, 105, 161, 0.04) 1px, transparent 1px);
+      linear-gradient(rgb(var(--primary) / 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(var(--primary) / 0.04) 1px, transparent 1px);
     background-size: 60px 60px;
   }
 
@@ -140,7 +219,7 @@
     width: 600px;
     height: 600px;
     border-radius: 50%;
-    background: radial-gradient(circle, rgba(14, 165, 233, 0.1) 0%, transparent 70%);
+    background: radial-gradient(circle, rgb(var(--primary-light) / 0.1) 0%, transparent 70%);
     filter: blur(80px);
     pointer-events: none;
   }
@@ -167,26 +246,48 @@
   }
 
   /* Pulse dot */
-  .pulse-dot { @apply relative w-2 h-2 rounded-full bg-success; }
+  .pulse-dot {
+    @apply relative w-2 h-2 rounded-full;
+    background-color: rgb(var(--success));
+  }
 
   .pulse-dot::before {
     content: '';
-    @apply absolute inset-0 rounded-full bg-success;
+    @apply absolute inset-0 rounded-full;
+    background-color: rgb(var(--success));
     animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
   }
 
   /* Chat Bubbles */
   .chat-bubble-user {
-    @apply bg-primary-50 border border-primary-100 rounded-2xl rounded-br-md;
+    background-color: rgb(var(--primary) / 0.08);
+    border: 1px solid rgb(var(--primary) / 0.2);
+    @apply rounded-2xl rounded-br-md;
   }
 
   .chat-bubble-ai {
-    @apply bg-white border border-border rounded-2xl rounded-bl-md;
+    background-color: rgb(var(--bg));
+    border: 1px solid rgb(var(--border));
+    @apply rounded-2xl rounded-bl-md;
     box-shadow: 0 1px 3px rgba(0,0,0,0.06);
   }
 }
 
+/* ── Utilities layer ────────────────────────────────────────────────────────── */
+
 @layer utilities {
+  /* Tailwind CSS-var aliases */
+  .bg-background         { background-color: rgb(var(--bg)); }
+  .bg-background-paper   { background-color: rgb(var(--bg-paper)); }
+  .bg-background-elevated{ background-color: rgb(var(--bg-elevated)); }
+  .bg-background-hover   { background-color: rgb(var(--bg-hover)); }
+  .text-foreground       { color: rgb(var(--fg)); }
+  .text-foreground-muted { color: rgb(var(--fg-muted)); }
+  .text-foreground-subtle{ color: rgb(var(--fg-subtle)); }
+  .text-primary          { color: rgb(var(--primary)); }
+  .border-border         { border-color: rgb(var(--border)); }
+
+  /* Stagger animation delays */
   .stagger-1 { animation-delay: 0.1s; }
   .stagger-2 { animation-delay: 0.2s; }
   .stagger-3 { animation-delay: 0.3s; }
@@ -194,18 +295,22 @@
   .stagger-5 { animation-delay: 0.5s; }
 }
 
+/* ── Global styles ──────────────────────────────────────────────────────────── */
+
 /* Selection */
 ::selection {
-  @apply bg-primary-100 text-foreground;
+  background-color: rgb(var(--primary) / 0.15);
+  color: rgb(var(--fg));
 }
 
 /* Focus Visible */
 :focus-visible {
-  @apply outline-none ring-2 ring-primary ring-offset-2 ring-offset-background;
+  outline: none;
+  box-shadow: 0 0 0 2px rgb(var(--primary)), 0 0 0 4px rgb(var(--bg));
 }
 
-/* Scrollbar global */
+/* Global scrollbar */
 ::-webkit-scrollbar       { width: 6px; }
-::-webkit-scrollbar-track { background: #F1F5F9; }
-::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+::-webkit-scrollbar-track { background: rgb(var(--bg-paper)); }
+::-webkit-scrollbar-thumb { background: rgb(var(--border-hover)); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgb(var(--fg-subtle)); }

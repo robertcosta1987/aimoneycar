@@ -410,7 +410,7 @@ function buildSystemPrompt(ctx: FullDealershipContext): string {
 
   lines.push(`\n## Resumo Geral`)
   lines.push(`- Estoque: ${s.availableCount} disponíveis | ${s.soldCount} vendidos | ${s.totalVehicles} total`)
-  lines.push(`- Críticos (>60 dias parados): ${s.criticalCount}`)
+  lines.push(`- Críticos (>90 dias parados): ${s.criticalCount}`)
   lines.push(`- Tempo médio em estoque (disponíveis): ${s.avgDaysAvailable} dias`)
   lines.push(`- Tempo médio até venda (vendidos): ${s.avgDaysSold} dias`)
   lines.push(`- Faturamento total: R$ ${brl(s.totalRevenue)}`)
@@ -439,7 +439,7 @@ function buildSystemPrompt(ctx: FullDealershipContext): string {
     lines.push(`|---|---------|-------|-----|--------|-------|----------|------|--------|`)
     ctx.availableVehicles.forEach((v, i) => {
       const label = `${v.brand} ${v.model}${v.version ? ' ' + v.version : ''}`
-      const status = (v.days_in_stock ?? 0) > 60 ? '🔴 CRÍTICO' : (v.days_in_stock ?? 0) > 30 ? '🟡 ATENÇÃO' : '🟢 OK'
+      const status = (v.days_in_stock ?? 0) > 90 ? '🔴 CRÍTICO' : (v.days_in_stock ?? 0) > 45 ? '🟡 ATENÇÃO' : '🟢 OK'
       lines.push(
         `| ${i + 1} | ${label} | ${v.plate ?? '—'} | ${v.year_model ?? v.year_fab} ` +
         `| R$ ${brl(v.purchase_price)} | R$ ${brl(v.sale_price ?? 0)} ` +

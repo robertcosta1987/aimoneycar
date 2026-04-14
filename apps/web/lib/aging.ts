@@ -8,8 +8,8 @@
 import type { AgingStatus, AgingThresholds, Suggestion } from '@/types/aging'
 
 export const DEFAULT_THRESHOLDS: AgingThresholds = {
-  attention: 30,
-  critical: 60,
+  attention: 45,
+  critical: 90,
 }
 
 const THRESHOLDS_KEY = 'moneycar_aging_thresholds'
@@ -82,9 +82,9 @@ function brl(value: number): string {
  * Returns a prioritised list of actionable suggestions based on aging days.
  *
  * Tiers:
- *   30–44d  → Early Attention (3 suggestions)
- *   45–59d  → Late Attention  (above + 3 more)
- *   60d+    → Critical        (above + 4 more)
+ *   45–89d  → Early/Late Attention (suggestions)
+ *   45–89d  → Late Attention  (above + 3 more)
+ *   90d+    → Critical        (above + 4 more)
  */
 export function generateSuggestions(
   vehicle: {
@@ -95,7 +95,7 @@ export function generateSuggestions(
   },
   agingDays: number
 ): Suggestion[] {
-  if (agingDays < 30) return []
+  if (agingDays < 45) return []
 
   const salePrice = vehicle.sale_price ?? 0
   const totalExpenses = vehicle.totalExpenses ?? 0
@@ -104,7 +104,7 @@ export function generateSuggestions(
     : 0
 
   const suggestions: Suggestion[] = [
-    // ── 30-44d Early Attention ───────────────────────────────────────────────
+    // ── 45-89d Attention ─────────────────────────────────────────────────────
     {
       id: `${vehicle.id}-photos`,
       icon: '📸',
@@ -132,7 +132,7 @@ export function generateSuggestions(
   ]
 
   if (agingDays >= 45) {
-    // ── 45-59d Late Attention ────────────────────────────────────────────────
+    // ── 45-89d Late Attention ────────────────────────────────────────────────
     const suggested5pct = salePrice > 0 ? Math.round(salePrice * 0.05) : 0
     suggestions.push(
       {
@@ -160,8 +160,8 @@ export function generateSuggestions(
     )
   }
 
-  if (agingDays >= 60) {
-    // ── 60d+ Critical ────────────────────────────────────────────────────────
+  if (agingDays >= 90) {
+    // ── 90d+ Critical ────────────────────────────────────────────────────────
     const suggested10pct = salePrice > 0 ? Math.round(salePrice * 0.10) : 0
     suggestions.push(
       {

@@ -1,6 +1,8 @@
 'use client'
-import { Bell } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Bell, Sun, Moon } from 'lucide-react'
 import Link from 'next/link'
+import { useTheme } from 'next-themes'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { getInitials } from '@/lib/utils'
@@ -12,6 +14,11 @@ interface HeaderProps {
 }
 
 export function Header({ dealershipName = 'Minha Revenda', userName = 'Usuário', alertCount = 0 }: HeaderProps) {
+  const { theme, setTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => setMounted(true), [])
+
   return (
     <header className="h-32 border-b border-border bg-background-paper px-4 md:px-6 flex items-center justify-between gap-3">
       {/* Mobile: app name */}
@@ -26,6 +33,17 @@ export function Header({ dealershipName = 'Minha Revenda', userName = 'Usuário'
           <span className="text-primary font-medium not-italic">Sua revenda vira máquina.</span>
         </p>
       </div>
+
+      {/* Theme toggle */}
+      {mounted && (
+        <button
+          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          className="p-2 rounded-lg text-foreground-muted hover:text-foreground hover:bg-background-hover transition-colors"
+          title={theme === 'dark' ? 'Modo claro' : 'Modo escuro'}
+        >
+          {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+        </button>
+      )}
 
       <div className="flex items-center gap-2 md:gap-3">
         <Link href="/dashboard/alertas" className="hidden md:block">
