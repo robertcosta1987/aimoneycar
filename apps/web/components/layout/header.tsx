@@ -21,7 +21,7 @@ export function Header({ dealershipName = 'Minha Revenda', userName = 'Usuário'
 
       {/* Slogan — centered */}
       <div className="flex-1 flex justify-center">
-        <p className="text-sm text-foreground-muted italic text-center hidden sm:block">
+        <p className="text-[20px] text-foreground-muted italic text-center hidden sm:block">
           Seus dados viram decisões.{' '}
           <span className="text-primary font-medium not-italic">Sua revenda vira máquina.</span>
         </p>
