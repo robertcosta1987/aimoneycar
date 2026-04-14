@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import MDBReader from 'mdb-reader'
+import { del } from '@vercel/blob'
+
+export const maxDuration = 300 // Allow up to 5 min for large MDB imports (Vercel Pro)
 
 // ─── Parse helpers ─────────────────────────────────────────────────────────────
 
@@ -247,17 +250,44 @@ export async function POST(req: NextRequest) {
   const dealershipId = profile.dealership_id
   const D = dealershipId
 
-  const formData = await req.formData()
-  const file = formData.get('file') as File | null
-  if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 })
+  // Support both direct FormData upload (small files) and Vercel Blob URL (large files)
+  const contentType = req.headers.get('content-type') ?? ''
+  let filename = 'upload'
+  let fileType = 'application/octet-stream'
+  let fileSize = 0
+  let buffer: Buffer
+  let blobUrl: string | null = null
+
+  if (contentType.includes('application/json')) {
+    // Large file path: file already uploaded to Vercel Blob by client
+    const body = await req.json()
+    blobUrl = body.blobUrl as string
+    filename = body.filename as string ?? 'upload'
+    fileType = body.fileType as string ?? 'application/octet-stream'
+    if (!blobUrl) return NextResponse.json({ error: 'No blobUrl provided' }, { status: 400 })
+    const blobRes = await fetch(blobUrl)
+    if (!blobRes.ok) return NextResponse.json({ error: 'Failed to fetch uploaded file' }, { status: 400 })
+    const arrayBuffer = await blobRes.arrayBuffer()
+    buffer = Buffer.from(arrayBuffer)
+    fileSize = buffer.length
+  } else {
+    // Small file path: direct FormData upload
+    const formData = await req.formData()
+    const file = formData.get('file') as File | null
+    if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 })
+    filename = file.name
+    fileType = file.type || 'application/octet-stream'
+    fileSize = file.size
+    buffer = Buffer.from(await file.arrayBuffer())
+  }
 
   const { data: importRecord, error: importErr } = await svc
     .from('imports')
     .insert({
       dealership_id: D,
-      filename: file.name,
-      file_type: file.type || 'application/octet-stream',
-      file_size: file.size,
+      filename,
+      file_type: fileType,
+      file_size: fileSize,
       status: 'processing',
       records_imported: 0,
       errors: [],
@@ -266,11 +296,9 @@ export async function POST(req: NextRequest) {
     .select().single()
 
   if (importErr) return NextResponse.json({ error: importErr.message }, { status: 500 })
-
-  const buffer = Buffer.from(await file.arrayBuffer())
   const errors: string[] = []
   const counts: Record<string, number> = {}
-  const isMdb = file.name.toLowerCase().endsWith('.mdb') || file.name.toLowerCase().endsWith('.accdb')
+  const isMdb = filename.toLowerCase().endsWith('.mdb') || filename.toLowerCase().endsWith('.accdb')
   let mdbData: MDBData | null = null
 
   if (isMdb) {
@@ -788,7 +816,7 @@ export async function POST(req: NextRequest) {
     // CSV / JSON legacy path (vehicles only)
     let vehicleRawRows: Record<string, any>[] = []
     try {
-      vehicleRawRows = file.name.toLowerCase().endsWith('.json')
+      vehicleRawRows = filename.toLowerCase().endsWith('.json')
         ? JSON.parse(buffer.toString('utf-8'))
         : parseCSV(buffer.toString('utf-8'))
     } catch (e: any) { errors.push(`Parse error: ${e.message}`) }
@@ -812,6 +840,11 @@ export async function POST(req: NextRequest) {
       completed_at: new Date().toISOString(),
     })
     .eq('id', (importRecord as any).id)
+
+  // Clean up temporary blob after processing
+  if (blobUrl) {
+    try { await del(blobUrl) } catch { /* non-critical */ }
+  }
 
   return NextResponse.json({
     import_id: (importRecord as any).id,

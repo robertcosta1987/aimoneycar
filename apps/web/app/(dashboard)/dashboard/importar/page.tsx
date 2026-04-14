@@ -1,5 +1,6 @@
 'use client'
 import { useState, useCallback } from 'react'
+import { upload as blobUpload } from '@vercel/blob/client'
 import { Upload, FileText, CheckCircle, AlertCircle, Loader2, Search, Trash2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -47,13 +48,34 @@ export default function ImportarPage() {
     setState('uploading')
     setProgress(10)
 
-    const formData = new FormData()
-    formData.append('file', file)
-
     try {
-      setProgress(40)
-      setState('processing')
-      const res = await fetch('/api/upload', { method: 'POST', body: formData })
+      let res: Response
+
+      if (file.size > 4 * 1024 * 1024) {
+        // Large file: upload directly to Vercel Blob, then process via URL
+        const blob = await blobUpload(file.name, file, {
+          access: 'public',
+          handleUploadUrl: '/api/upload/blob',
+          onUploadProgress: ({ percentage }) => {
+            setProgress(10 + Math.round(percentage * 0.5)) // 10–60%
+          },
+        })
+        setProgress(65)
+        setState('processing')
+        res = await fetch('/api/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ blobUrl: blob.url, filename: file.name, fileType: file.type }),
+        })
+      } else {
+        // Small file: direct FormData upload
+        const formData = new FormData()
+        formData.append('file', file)
+        setProgress(40)
+        setState('processing')
+        res = await fetch('/api/upload', { method: 'POST', body: formData })
+      }
+
       setProgress(80)
       const data = await res.json()
 
