@@ -1,6 +1,5 @@
 'use client'
 import { useState, useCallback } from 'react'
-import { upload as blobUpload } from '@vercel/blob/client'
 import { Upload, FileText, CheckCircle, AlertCircle, Loader2, Search, Trash2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -52,20 +51,26 @@ export default function ImportarPage() {
       let res: Response
 
       if (file.size > 4 * 1024 * 1024) {
-        // Large file: upload directly to Vercel Blob, then process via URL
-        const blob = await blobUpload(file.name, file, {
-          access: 'public',
-          handleUploadUrl: '/api/upload/blob',
-          onUploadProgress: ({ percentage }) => {
-            setProgress(10 + Math.round(percentage * 0.5)) // 10–60%
-          },
+        // Large file: get presigned URL, upload directly to Supabase Storage, then process
+        const presignRes = await fetch('/api/upload/presign', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename: file.name }),
         })
+        if (!presignRes.ok) throw new Error('Falha ao gerar URL de upload')
+        const { signedUrl, path: storagePath } = await presignRes.json()
+
+        setProgress(20)
+        // Upload file directly to Supabase Storage (bypasses Vercel's 4.5MB function limit)
+        const putRes = await fetch(signedUrl, { method: 'PUT', body: file, headers: { 'content-type': file.type || 'application/octet-stream' } })
+        if (!putRes.ok) throw new Error('Falha ao enviar arquivo')
+
         setProgress(65)
         setState('processing')
         res = await fetch('/api/upload', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ blobUrl: blob.url, filename: file.name, fileType: file.type }),
+          body: JSON.stringify({ storagePath, filename: file.name, fileType: file.type }),
         })
       } else {
         // Small file: direct FormData upload

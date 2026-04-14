@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import MDBReader from 'mdb-reader'
-import { del } from '@vercel/blob'
 
 export const maxDuration = 300 // Allow up to 5 min for large MDB imports (Vercel Pro)
 
@@ -250,24 +249,24 @@ export async function POST(req: NextRequest) {
   const dealershipId = profile.dealership_id
   const D = dealershipId
 
-  // Support both direct FormData upload (small files) and Vercel Blob URL (large files)
+  // Support both direct FormData upload (small files) and Supabase Storage path (large files)
   const contentType = req.headers.get('content-type') ?? ''
   let filename = 'upload'
   let fileType = 'application/octet-stream'
   let fileSize = 0
   let buffer: Buffer
-  let blobUrl: string | null = null
+  let storagePath: string | null = null
 
   if (contentType.includes('application/json')) {
-    // Large file path: file already uploaded to Vercel Blob by client
+    // Large file path: file already uploaded to Supabase Storage by client
     const body = await req.json()
-    blobUrl = body.blobUrl as string
+    storagePath = body.storagePath as string
     filename = body.filename as string ?? 'upload'
     fileType = body.fileType as string ?? 'application/octet-stream'
-    if (!blobUrl) return NextResponse.json({ error: 'No blobUrl provided' }, { status: 400 })
-    const blobRes = await fetch(blobUrl)
-    if (!blobRes.ok) return NextResponse.json({ error: 'Failed to fetch uploaded file' }, { status: 400 })
-    const arrayBuffer = await blobRes.arrayBuffer()
+    if (!storagePath) return NextResponse.json({ error: 'No storagePath provided' }, { status: 400 })
+    const { data: storageData, error: storageErr } = await svc.storage.from('imports').download(storagePath)
+    if (storageErr || !storageData) return NextResponse.json({ error: 'Failed to fetch uploaded file' }, { status: 400 })
+    const arrayBuffer = await storageData.arrayBuffer()
     buffer = Buffer.from(arrayBuffer)
     fileSize = buffer.length
   } else {
@@ -841,9 +840,9 @@ export async function POST(req: NextRequest) {
     })
     .eq('id', (importRecord as any).id)
 
-  // Clean up temporary blob after processing
-  if (blobUrl) {
-    try { await del(blobUrl) } catch { /* non-critical */ }
+  // Clean up temporary storage file after processing
+  if (storagePath) {
+    try { await svc.storage.from('imports').remove([storagePath]) } catch { /* non-critical */ }
   }
 
   return NextResponse.json({
