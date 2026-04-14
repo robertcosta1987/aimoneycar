@@ -42,7 +42,7 @@ export function ReportInventoryHealth({ data }: Props) {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
           { label: 'Total em Estoque', value: String(totalInStock), color: 'text-primary' },
-          { label: 'Dias Médios', value: `${avgDaysInStock}d`, color: avgDaysInStock <= 30 ? 'text-success' : avgDaysInStock <= 60 ? 'text-warning' : 'text-danger' },
+          { label: 'Dias Médios', value: `${avgDaysInStock}d`, color: avgDaysInStock <= 45 ? 'text-success' : avgDaysInStock <= 90 ? 'text-warning' : 'text-danger' },
           { label: 'Zona de Atenção', value: String(attentionVehicles.length), color: 'text-warning' },
           { label: 'Situação Crítica', value: String(criticalVehicles.length), color: criticalVehicles.length > 0 ? 'text-danger' : 'text-success' },
         ].map(m => (
@@ -87,7 +87,7 @@ export function ReportInventoryHealth({ data }: Props) {
         <div className="space-y-4">
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm text-warning">Atenção (30–60 dias)</CardTitle>
+              <CardTitle className="text-sm text-warning">Atenção (46–90 dias)</CardTitle>
             </CardHeader>
             <CardContent>
               <VehicleList vehicles={attentionVehicles} emptyMsg="Nenhum veículo na zona de atenção" />
@@ -110,7 +110,7 @@ export function ReportInventoryHealth({ data }: Props) {
       {criticalVehicles.length > 0 && (
         <Card className="border-danger/30">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-danger">Críticos (&gt;60 dias)</CardTitle>
+            <CardTitle className="text-sm text-danger">Críticos (&gt;90 dias)</CardTitle>
           </CardHeader>
           <CardContent>
             <VehicleList vehicles={criticalVehicles} emptyMsg="" />

@@ -28,11 +28,11 @@ interface AgingWidgetProps {
 }
 
 const BRACKETS = [
-  { label: '0–15d', min: 0, max: 15, color: '#00E676' },
-  { label: '16–30d', min: 16, max: 30, color: '#00D9FF' },
-  { label: '31–45d', min: 31, max: 45, color: '#FFB800' },
-  { label: '46–60d', min: 46, max: 60, color: '#FF9100' },
-  { label: '60d+', min: 61, max: Infinity, color: '#FF5252' },
+  { label: '0–15d',  min: 0,  max: 15,       color: '#16A34A' },
+  { label: '16–30d', min: 16, max: 30,        color: '#22C55E' },
+  { label: '31–45d', min: 31, max: 45,        color: '#4ADE80' },
+  { label: '46–90d', min: 46, max: 90,        color: '#EAB308' },
+  { label: '90d+',   min: 91, max: Infinity,  color: '#DC2626' },
 ]
 
 export function AgingWidget({ vehicles }: AgingWidgetProps) {
@@ -104,9 +104,9 @@ export function AgingWidget({ vehicles }: AgingWidgetProps) {
                 allowDecimals={false}
               />
               <Tooltip
-                contentStyle={{ background: '#111820', border: '1px solid #1E2A3A', borderRadius: 8, fontSize: 11 }}
+                contentStyle={{ background: 'rgb(var(--bg-elevated))', border: '1px solid rgb(var(--border))', borderRadius: 8, fontSize: 11, color: 'rgb(var(--fg))' }}
                 formatter={(value: any) => [`${value} veículo${value !== 1 ? 's' : ''}`, '']}
-                labelStyle={{ color: '#8B9EB3' }}
+                labelStyle={{ color: 'rgb(var(--fg-muted))' }}
               />
               <Bar dataKey="count" radius={[3, 3, 0, 0]}>
                 {chartData.map((entry, i) => (

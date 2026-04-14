@@ -37,24 +37,35 @@ function renderChart(chart: ChartConfig) {
   if (chart.type === 'pie') {
     const dataKey = chart.series[0]?.key ?? 'value'
     return (
-      <ResponsiveContainer width="100%" height={220}>
+      <ResponsiveContainer width="100%" height={260}>
         <PieChart>
           <Pie
             data={chart.data}
             dataKey={dataKey}
             nameKey={chart.xKey}
             cx="50%"
-            cy="50%"
-            outerRadius={80}
-            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-            labelLine={false}
+            cy="45%"
+            outerRadius={85}
+            label={({ cx, cy, midAngle, outerRadius, percent, name }) => {
+              if (percent < 0.05) return null
+              const RADIAN = Math.PI / 180
+              const radius = outerRadius + 22
+              const x = cx + radius * Math.cos(-midAngle * RADIAN)
+              const y = cy + radius * Math.sin(-midAngle * RADIAN)
+              return (
+                <text x={x} y={y} textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central"
+                  style={{ fontSize: 10, fill: 'rgb(var(--fg-muted))' }}>
+                  {`${name} ${(percent * 100).toFixed(0)}%`}
+                </text>
+              )
+            }}
+            labelLine={{ stroke: 'rgb(var(--border))', strokeWidth: 1 }}
           >
             {chart.data.map((_, i) => (
               <Cell key={i} fill={PALETTE[i % PALETTE.length]} />
             ))}
           </Pie>
           <Tooltip {...TOOLTIP_STYLE} />
-          <Legend wrapperStyle={{ fontSize: 11, color: 'rgb(var(--fg-muted))' }} />
         </PieChart>
       </ResponsiveContainer>
     )

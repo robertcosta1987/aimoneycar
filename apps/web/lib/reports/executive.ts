@@ -321,15 +321,16 @@ export async function computeExecutiveReport(
     purchasePrice: v.purchase_price,
   })
 
-  const attentionVehicles  = inventory.filter((v: any) => v.days_in_stock >= 30 && v.days_in_stock <= 60).map(toInvRow)
-  const criticalVehicles   = inventory.filter((v: any) => v.days_in_stock > 60).map(toInvRow)
+  const attentionVehicles  = inventory.filter((v: any) => v.days_in_stock >= 46 && v.days_in_stock <= 90).map(toInvRow)
+  const criticalVehicles   = inventory.filter((v: any) => v.days_in_stock > 90).map(toInvRow)
   const missingPriceVehicles = inventory.filter((v: any) => !v.sale_price || v.sale_price === 0).map(toInvRow)
 
   const agingDistribution: AgingBucket[] = [
-    { label: '0–15d',  count: inventory.filter((v: any) => v.days_in_stock >= 0  && v.days_in_stock <= 15).length, color: '#00E676' },
-    { label: '16–30d', count: inventory.filter((v: any) => v.days_in_stock >= 16 && v.days_in_stock <= 30).length, color: '#00D9FF' },
-    { label: '31–60d', count: inventory.filter((v: any) => v.days_in_stock >= 31 && v.days_in_stock <= 60).length, color: '#FFB800' },
-    { label: '>60d',   count: inventory.filter((v: any) => v.days_in_stock > 60).length,                           color: '#FF5252' },
+    { label: '0–15d',  count: inventory.filter((v: any) => v.days_in_stock >= 0  && v.days_in_stock <= 15).length, color: '#16A34A' },
+    { label: '16–30d', count: inventory.filter((v: any) => v.days_in_stock >= 16 && v.days_in_stock <= 30).length, color: '#22C55E' },
+    { label: '31–45d', count: inventory.filter((v: any) => v.days_in_stock >= 31 && v.days_in_stock <= 45).length, color: '#4ADE80' },
+    { label: '46–90d', count: inventory.filter((v: any) => v.days_in_stock >= 46 && v.days_in_stock <= 90).length, color: '#EAB308' },
+    { label: '>90d',   count: inventory.filter((v: any) => v.days_in_stock > 90).length,                           color: '#DC2626' },
   ]
 
   const inventoryHealth: InventoryHealth = {

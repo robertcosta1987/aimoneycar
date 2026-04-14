@@ -167,8 +167,8 @@ function renderInventory(d: ExecutiveReportData['inventory']): string {
   const kpis = grid(
     kpiCard('Em Estoque', String(d.totalInStock)),
     kpiCard('Média em Estoque', `${d.avgDaysInStock}d`),
-    kpiCard('Atenção (30–60d)', String(d.attentionVehicles.length), undefined, '#f59e0b'),
-    kpiCard('Críticos (+60d)', String(d.criticalVehicles.length), undefined, '#dc2626'),
+    kpiCard('Atenção (46–90d)', String(d.attentionVehicles.length), undefined, '#f59e0b'),
+    kpiCard('Críticos (+90d)', String(d.criticalVehicles.length), undefined, '#dc2626'),
   )
 
   const agingChart = d.agingDistribution.length > 0
@@ -182,7 +182,7 @@ function renderInventory(d: ExecutiveReportData['inventory']): string {
     : ''
 
   const critTable = d.criticalVehicles.length > 0
-    ? `<h3 style="font-size:13px;font-weight:600;margin:16px 0 8px;color:#dc2626">🔴 Veículos Críticos (+60 dias)</h3>` +
+    ? `<h3 style="font-size:13px;font-weight:600;margin:16px 0 8px;color:#dc2626">🔴 Veículos Críticos (+90 dias)</h3>` +
       table(
         ['Veículo', 'Placa', 'Dias', 'Preço'],
         d.criticalVehicles.map(v => [v.name, v.plate ?? '—', String(v.daysInStock), brl(v.salePrice ?? 0)])
@@ -190,7 +190,7 @@ function renderInventory(d: ExecutiveReportData['inventory']): string {
     : ''
 
   const attTable = d.attentionVehicles.length > 0
-    ? `<h3 style="font-size:13px;font-weight:600;margin:16px 0 8px;color:#f59e0b">🟡 Veículos em Atenção (30–60 dias)</h3>` +
+    ? `<h3 style="font-size:13px;font-weight:600;margin:16px 0 8px;color:#f59e0b">🟡 Veículos em Atenção (46–90 dias)</h3>` +
       table(
         ['Veículo', 'Placa', 'Dias', 'Preço'],
         d.attentionVehicles.map(v => [v.name, v.plate ?? '—', String(v.daysInStock), brl(v.salePrice ?? 0)])
