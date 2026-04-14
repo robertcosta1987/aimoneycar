@@ -1,6 +1,6 @@
 'use client'
 import { useState, useCallback } from 'react'
-import { Upload, FileText, CheckCircle, AlertCircle, Loader2, Search } from 'lucide-react'
+import { Upload, FileText, CheckCircle, AlertCircle, Loader2, Search, Trash2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
@@ -25,6 +25,8 @@ export default function ImportarPage() {
   const [dragOver, setDragOver] = useState(false)
   const [inspecting, setInspecting] = useState(false)
   const [inspection, setInspection] = useState<any>(null)
+  const [clearState, setClearState] = useState<'idle' | 'confirm' | 'clearing' | 'done' | 'error'>('idle')
+  const [clearError, setClearError] = useState('')
 
   const handleFile = (f: File) => {
     if (!f) return
@@ -71,6 +73,25 @@ export default function ImportarPage() {
     } catch (err: any) {
       setState('error')
       setResult({ imported: 0, parsed: 0, errors: [err.message] })
+    }
+  }
+
+  const clearData = async () => {
+    setClearState('clearing')
+    setClearError('')
+    try {
+      const res = await fetch('/api/clear-data', { method: 'DELETE' })
+      if (!res.ok) {
+        const d = await res.json()
+        throw new Error(d.error || 'Erro ao limpar dados')
+      }
+      setClearState('done')
+      setFile(null)
+      setState('idle')
+      setResult(null)
+    } catch (err: any) {
+      setClearError(err.message)
+      setClearState('error')
     }
   }
 
@@ -289,6 +310,80 @@ export default function ImportarPage() {
             <li><span className="text-foreground font-medium">3.</span> Selecione o formato .mdb ou .xlsx</li>
             <li><span className="text-foreground font-medium">4.</span> Salve o arquivo e importe aqui</li>
           </ol>
+        </CardContent>
+      </Card>
+
+      {/* Danger zone — Limpar Dados */}
+      <Card className="border-danger/30">
+        <CardHeader>
+          <CardTitle className="text-base text-danger flex items-center gap-2">
+            <Trash2 className="w-4 h-4" />
+            Zona de Perigo
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-foreground-muted">
+            Apaga <strong>todos os veículos, despesas, clientes, financiamentos, multas e alertas</strong> da sua loja.
+            Use antes de importar um arquivo atualizado do zero.
+          </p>
+
+          {clearState === 'idle' && (
+            <Button
+              variant="outline"
+              className="gap-2 border-danger/40 text-danger hover:bg-danger/5 hover:border-danger"
+              onClick={() => setClearState('confirm')}
+            >
+              <Trash2 className="w-4 h-4" />
+              Limpar Dados
+            </Button>
+          )}
+
+          {clearState === 'confirm' && (
+            <div className="rounded-xl border border-danger/30 bg-danger/5 p-4 space-y-3">
+              <p className="text-sm font-semibold text-danger">
+                ⚠️ Tem certeza? Esta ação não pode ser desfeita.
+              </p>
+              <div className="flex gap-3">
+                <Button
+                  className="gap-2 bg-danger hover:bg-danger/90 text-white"
+                  onClick={clearData}
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Sim, apagar tudo
+                </Button>
+                <Button variant="outline" onClick={() => setClearState('idle')}>
+                  Cancelar
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {clearState === 'clearing' && (
+            <div className="flex items-center gap-2 text-sm text-foreground-muted">
+              <Loader2 className="w-4 h-4 animate-spin text-danger" />
+              Apagando dados...
+            </div>
+          )}
+
+          {clearState === 'done' && (
+            <div className="flex items-center gap-2 text-sm text-success">
+              <CheckCircle className="w-4 h-4" />
+              Dados apagados com sucesso. Você já pode importar um novo arquivo.
+              <button className="ml-2 text-xs underline text-foreground-muted" onClick={() => setClearState('idle')}>
+                fechar
+              </button>
+            </div>
+          )}
+
+          {clearState === 'error' && (
+            <div className="flex items-center gap-2 text-sm text-danger">
+              <AlertCircle className="w-4 h-4" />
+              {clearError}
+              <button className="ml-2 text-xs underline" onClick={() => setClearState('idle')}>
+                tentar novamente
+              </button>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
