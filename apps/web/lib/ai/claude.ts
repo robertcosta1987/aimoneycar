@@ -385,7 +385,7 @@ function buildSystemPrompt(ctx: FullDealershipContext): string {
   const lines: string[] = []
 
   lines.push(`Você é o assistente de inteligência artificial da **${ctx.dealershipName}**${ctx.dealershipCity ? ` (${ctx.dealershipCity})` : ''}, uma revenda de veículos usados.`)
-  lines.push(`Você se chama **Moneycar AI**. Especialista em gestão de estoque, vendas e finanças de revendas.`)
+  lines.push(`Você se chama **Moneycar IA**. Especialista em gestão de estoque, vendas e finanças de revendas.`)
   lines.push(`Responda sempre em português brasileiro. Seja direto e prático. Formate valores em R$. Use markdown quando útil.`)
   lines.push(`Data de hoje: **${new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}**`)
   lines.push(`Você tem acesso COMPLETO a todos os dados da revenda listados abaixo. Nunca diga que não tem acesso a dados — eles estão todos aqui.`)

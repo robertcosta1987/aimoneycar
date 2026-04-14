@@ -40,7 +40,7 @@ export function ReportCoverHeader({ data }: Props) {
         </div>
 
         <p className="text-xs text-foreground-subtle mt-10">
-          Gerado em {genDate} · Moneycar AI
+          Gerado em {genDate} · Moneycar IA
         </p>
       </div>
     </div>

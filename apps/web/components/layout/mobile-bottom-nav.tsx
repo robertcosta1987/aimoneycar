@@ -92,7 +92,7 @@ export function MobileBottomNav({ alertCount = 0 }: MobileBottomNavProps) {
           {/* Header */}
           <div className="sticky top-0 bg-background-paper flex items-center justify-between px-4 py-3 border-b border-border">
             <div className="flex items-center gap-2">
-              <span className="font-black text-[34px] text-primary tracking-tight">MoneyCar <span className="text-foreground">AI</span></span>
+              <span className="font-black text-[34px] text-primary tracking-tight">Moneycar <span className="text-foreground">IA</span></span>
             </div>
             <button onClick={() => setMenuOpen(false)} className="p-1 rounded-lg text-foreground-muted hover:text-foreground">
               <X className="w-5 h-5" />

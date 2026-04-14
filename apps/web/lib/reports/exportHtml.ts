@@ -329,7 +329,7 @@ export function generateReportHTML(data: ExecutiveReportData): string {
     // Footer
     `<div style="text-align:center;padding:24px 0;border-top:1px solid #e5e7eb;margin-top:32px">
       <p style="margin:0;font-size:11px;color:#9ca3af">
-        Relatório gerado automaticamente pelo <strong>Moneycar AI</strong> ·
+        Relatório gerado automaticamente pelo <strong>Moneycar IA</strong> ·
         ${data.dealershipName} ·
         ${new Date(data.generatedAt).toLocaleDateString('pt-BR', { day:'2-digit', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit' })}
       </p>

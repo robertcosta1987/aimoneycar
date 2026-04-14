@@ -19,7 +19,7 @@ export default function DemoLayout({ children }: { children: React.ReactNode }) 
     <div className="flex h-screen bg-background overflow-hidden">
       <aside className="flex flex-col w-64 h-full bg-background-paper border-r border-border">
         <div className="flex items-center justify-between px-4 py-3 h-32 border-b border-border">
-          <span className="font-black text-[34px] text-primary tracking-tight">MoneyCar <span className="text-foreground">AI</span></span>
+          <span className="font-black text-[34px] text-primary tracking-tight">Moneycar <span className="text-foreground">IA</span></span>
           <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full">Demo</span>
         </div>
         <nav className="flex-1 px-3 py-4 space-y-1">

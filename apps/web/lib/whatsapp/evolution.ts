@@ -61,7 +61,7 @@ export function formatDailyAlertMessage(
   })
 
   const lines: string[] = [
-    `🚗 *${dealershipName} — Moneycar AI*`,
+    `🚗 *${dealershipName} — Moneycar IA*`,
     `📅 ${date}`,
     '',
     '*Alertas do dia:*',

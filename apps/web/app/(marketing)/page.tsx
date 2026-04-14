@@ -50,7 +50,7 @@ export default function LandingPage() {
       {/* Navbar */}
       <nav className="border-b border-border bg-background-paper/80 backdrop-blur-xl sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-6 h-40 flex items-center justify-between">
-          <span className="font-black text-[34px] text-primary tracking-tight">MoneyCar <span className="text-foreground">AI</span></span>
+          <span className="font-black text-[34px] text-primary tracking-tight">Moneycar <span className="text-foreground">IA</span></span>
           <div className="flex items-center gap-3">
             <Link href="/login"><Button variant="ghost" size="sm">Entrar</Button></Link>
             <Link href="/register"><Button size="sm">Criar conta</Button></Link>
@@ -140,7 +140,7 @@ export default function LandingPage() {
 
       {/* Footer */}
       <footer className="border-t border-border bg-background-paper py-8 text-center text-sm text-foreground-muted">
-        <p>© {new Date().getFullYear()} MoneyCar AI. Todos os direitos reservados.</p>
+        <p>© {new Date().getFullYear()} Moneycar IA. Todos os direitos reservados.</p>
       </footer>
     </div>
   )

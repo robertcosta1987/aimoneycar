@@ -129,7 +129,7 @@ export default function RoiValorAgregadoPage() {
         </div>
         <h1 className="text-3xl font-black mb-2">ROI e Valor Agregado</h1>
         <p className="text-sm text-white/70 max-w-xl mx-auto leading-relaxed">
-          Análise consolidada de todas as funcionalidades do Moneycar AI com retorno sobre investimento,
+          Análise consolidada de todas as funcionalidades do Moneycar IA com retorno sobre investimento,
           benefícios operacionais e impacto direto no resultado da revenda.
         </p>
 
@@ -155,7 +155,7 @@ export default function RoiValorAgregadoPage() {
           <h2 className="font-bold text-green-800 text-sm uppercase tracking-wide">Resumo Executivo</h2>
         </div>
         <p className="text-sm text-green-900 leading-relaxed mb-3">
-          O <strong>Moneycar AI</strong> é uma plataforma integrada de inteligência artificial e gestão
+          O <strong>Moneycar IA</strong> é uma plataforma integrada de inteligência artificial e gestão
           operacional desenvolvida especificamente para revendas de veículos. Cada funcionalidade endereça
           um problema real do dia a dia: leads perdidos, capital imobilizado, margens mal calculadas,
           relatórios manuais demorados e atendimento limitado ao horário comercial.

@@ -8,164 +8,149 @@
 :root {
   --font-outfit: 'Outfit', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
-  
-  /* Custom Properties */
-  --gradient-primary: linear-gradient(135deg, #00D9FF 0%, #00A3CC 100%);
-  --gradient-gold: linear-gradient(135deg, #FFB800 0%, #FF8C00 100%);
-  --gradient-dark: linear-gradient(180deg, #0A0E14 0%, #111820 100%);
+
+  --gradient-primary: linear-gradient(135deg, #0EA5E9 0%, #0369A1 100%);
+  --gradient-gold:    linear-gradient(135deg, #F59E0B 0%, #B45309 100%);
 }
 
 @layer base {
   * {
     @apply border-border;
   }
-  
+
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-outfit);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
-  
+
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-outfit);
     @apply font-semibold tracking-tight;
   }
-  
+
   code, pre {
     font-family: var(--font-mono);
   }
 }
 
 @layer components {
-  /* Glassmorphism Card */
+  /* Card — clean white with subtle shadow */
   .glass-card {
-    @apply bg-background-paper/80 backdrop-blur-xl border border-border rounded-2xl;
-    box-shadow: 
-      0 4px 24px rgba(0, 0, 0, 0.4),
-      inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    @apply bg-white border border-border rounded-2xl;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.06);
   }
-  
-  /* Primary Button with Glow */
+
+  /* Primary Button */
   .btn-primary {
-    @apply relative px-6 py-3 bg-primary text-background font-semibold rounded-xl;
+    @apply relative px-6 py-3 bg-primary text-white font-semibold rounded-xl;
     @apply transition-all duration-300;
-    @apply hover:shadow-glow-primary hover:scale-105;
+    @apply hover:bg-primary-800 hover:shadow-glow-primary hover:scale-105;
     @apply active:scale-95;
   }
-  
+
   /* Secondary Button */
   .btn-secondary {
     @apply relative px-6 py-3 bg-transparent border-2 border-primary text-primary font-semibold rounded-xl;
     @apply transition-all duration-300;
-    @apply hover:bg-primary/10 hover:shadow-glow-primary;
+    @apply hover:bg-primary-50 hover:shadow-glow-primary;
     @apply active:scale-95;
   }
-  
+
   /* Gold Accent Button */
   .btn-gold {
-    @apply relative px-6 py-3 font-semibold rounded-xl;
+    @apply relative px-6 py-3 font-semibold rounded-xl text-white;
     @apply transition-all duration-300;
     background: var(--gradient-gold);
-    color: #0A0E14;
     @apply hover:shadow-glow-secondary hover:scale-105;
     @apply active:scale-95;
   }
-  
+
   /* Status Badge */
   .status-badge {
     @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium;
   }
-  
+
   .status-success {
-    @apply bg-success/20 text-success border border-success/30;
+    @apply bg-green-50 text-success border border-green-200;
   }
-  
+
   .status-warning {
-    @apply bg-warning/20 text-warning border border-warning/30;
+    @apply bg-amber-50 text-warning border border-amber-200;
   }
-  
+
   .status-danger {
-    @apply bg-danger/20 text-danger border border-danger/30;
+    @apply bg-red-50 text-danger border border-red-200;
   }
-  
+
   /* Metric Card */
   .metric-card {
     @apply glass-card p-6;
     @apply transition-all duration-300;
     @apply hover:border-primary/30 hover:shadow-card-hover;
   }
-  
+
   /* Navigation Link */
   .nav-link {
     @apply flex items-center gap-3 px-4 py-3 rounded-xl;
     @apply text-foreground-muted transition-all duration-200;
     @apply hover:bg-background-hover hover:text-foreground;
   }
-  
+
   .nav-link.active {
-    @apply bg-primary/10 text-primary border-l-2 border-primary;
+    @apply bg-primary-50 text-primary border-l-2 border-primary;
   }
-  
+
   /* Input Field */
   .input-field {
-    @apply w-full px-4 py-3 bg-background-paper border border-border rounded-xl;
+    @apply w-full px-4 py-3 bg-white border border-border rounded-xl;
     @apply text-foreground placeholder:text-foreground-subtle;
     @apply transition-all duration-200;
     @apply focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30;
   }
-  
-  /* Scrollbar Styling */
-  .custom-scrollbar::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-  }
-  
-  .custom-scrollbar::-webkit-scrollbar-track {
-    @apply bg-background-paper rounded-full;
-  }
-  
-  .custom-scrollbar::-webkit-scrollbar-thumb {
-    @apply bg-border rounded-full;
-    @apply hover:bg-border-hover;
-  }
-  
+
+  /* Scrollbar */
+  .custom-scrollbar::-webkit-scrollbar       { width: 6px; height: 6px; }
+  .custom-scrollbar::-webkit-scrollbar-track { @apply bg-background-paper rounded-full; }
+  .custom-scrollbar::-webkit-scrollbar-thumb { @apply bg-border rounded-full hover:bg-border-hover; }
+
   /* Gradient Text */
   .text-gradient {
     @apply bg-clip-text text-transparent;
     background-image: var(--gradient-primary);
   }
-  
+
   .text-gradient-gold {
     @apply bg-clip-text text-transparent;
     background-image: var(--gradient-gold);
   }
-  
-  /* Animated Background Grid */
+
+  /* Subtle grid background */
   .bg-grid {
-    background-image: 
-      linear-gradient(rgba(0, 217, 255, 0.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(0, 217, 255, 0.03) 1px, transparent 1px);
+    background-image:
+      linear-gradient(rgba(3, 105, 161, 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(3, 105, 161, 0.04) 1px, transparent 1px);
     background-size: 60px 60px;
   }
-  
-  /* Hero Glow Effect */
+
+  /* Hero glow */
   .hero-glow {
     position: absolute;
     width: 600px;
     height: 600px;
     border-radius: 50%;
-    background: radial-gradient(circle, rgba(0, 217, 255, 0.15) 0%, transparent 70%);
+    background: radial-gradient(circle, rgba(14, 165, 233, 0.1) 0%, transparent 70%);
     filter: blur(80px);
     pointer-events: none;
   }
-  
-  /* Card Shine Effect */
+
+  /* Card shine */
   .card-shine {
     position: relative;
     overflow: hidden;
   }
-  
+
   .card-shine::before {
     content: '';
     position: absolute;
@@ -173,69 +158,54 @@
     left: -100%;
     width: 100%;
     height: 100%;
-    background: linear-gradient(
-      90deg,
-      transparent,
-      rgba(255, 255, 255, 0.05),
-      transparent
-    );
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent);
     transition: left 0.5s ease;
   }
-  
+
   .card-shine:hover::before {
     left: 100%;
   }
-  
-  /* Pulse Dot */
-  .pulse-dot {
-    @apply relative w-2 h-2 rounded-full bg-success;
-  }
-  
+
+  /* Pulse dot */
+  .pulse-dot { @apply relative w-2 h-2 rounded-full bg-success; }
+
   .pulse-dot::before {
     content: '';
     @apply absolute inset-0 rounded-full bg-success;
     animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
   }
-  
-  /* Chat Bubble */
+
+  /* Chat Bubbles */
   .chat-bubble-user {
-    @apply bg-primary/20 border border-primary/30 rounded-2xl rounded-br-md;
+    @apply bg-primary-50 border border-primary-100 rounded-2xl rounded-br-md;
   }
-  
+
   .chat-bubble-ai {
-    @apply bg-background-elevated border border-border rounded-2xl rounded-bl-md;
+    @apply bg-white border border-border rounded-2xl rounded-bl-md;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
   }
 }
 
 @layer utilities {
-  /* Stagger animation delays */
   .stagger-1 { animation-delay: 0.1s; }
   .stagger-2 { animation-delay: 0.2s; }
   .stagger-3 { animation-delay: 0.3s; }
   .stagger-4 { animation-delay: 0.4s; }
   .stagger-5 { animation-delay: 0.5s; }
-  
-  /* Noise texture overlay */
-  .noise-overlay {
-    position: relative;
-  }
-  
-  .noise-overlay::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
-    opacity: 0.03;
-    pointer-events: none;
-  }
 }
 
-/* Selection Styling */
+/* Selection */
 ::selection {
-  @apply bg-primary/30 text-foreground;
+  @apply bg-primary-100 text-foreground;
 }
 
 /* Focus Visible */
 :focus-visible {
   @apply outline-none ring-2 ring-primary ring-offset-2 ring-offset-background;
 }
+
+/* Scrollbar global */
+::-webkit-scrollbar       { width: 6px; }
+::-webkit-scrollbar-track { background: #F1F5F9; }
+::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #94A3B8; }

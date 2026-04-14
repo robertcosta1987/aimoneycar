@@ -33,7 +33,7 @@ export function ExecutiveReportDocument({ data, printRef }: Props) {
       {/* Footer */}
       <footer className="pt-6 border-t border-border text-center print:block">
         <p className="text-xs text-foreground-subtle">
-          Relatório gerado automaticamente pelo <strong>Moneycar AI</strong> ·{' '}
+          Relatório gerado automaticamente pelo <strong>Moneycar IA</strong> ·{' '}
           {data.dealershipName} · {new Date(data.generatedAt).toLocaleDateString('pt-BR')}
         </p>
         <p className="text-xs text-foreground-subtle mt-1">

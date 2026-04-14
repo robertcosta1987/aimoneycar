@@ -112,7 +112,7 @@ export function Sidebar() {
         {collapsed ? (
           <span className="font-black text-sm text-primary leading-none">MC</span>
         ) : (
-          <span className="font-black text-[34px] text-primary tracking-tight">MoneyCar <span className="text-foreground">AI</span></span>
+          <span className="font-black text-[34px] text-primary tracking-tight">Moneycar <span className="text-foreground">IA</span></span>
         )}
       </div>
 

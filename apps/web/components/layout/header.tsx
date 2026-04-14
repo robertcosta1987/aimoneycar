@@ -17,7 +17,7 @@ export function Header({ dealershipName = 'Minha Revenda', userName = 'Usuário'
     <header className="h-32 border-b border-border bg-background-paper px-4 md:px-6 flex items-center justify-between gap-3">
       {/* Mobile: logo | Desktop: search bar */}
       <div className="flex items-center gap-2 md:hidden">
-        <span className="font-black text-[34px] text-primary tracking-tight">MoneyCar <span className="text-foreground">AI</span></span>
+        <span className="font-black text-[34px] text-primary tracking-tight">Moneycar <span className="text-foreground">IA</span></span>
       </div>
 
       <div className="hidden md:block flex-1 max-w-md">

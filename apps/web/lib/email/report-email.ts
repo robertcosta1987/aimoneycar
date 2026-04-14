@@ -24,7 +24,7 @@ export function buildReportEmail(payload: ReportPayload, chartUrls: string[]): {
   const dateLabel = new Date(payload.generated_at).toLocaleDateString('pt-BR', {
     day: '2-digit', month: 'long', year: 'numeric',
   })
-  const subject = `Moneycar AI — ${title} · ${dateLabel}`
+  const subject = `Moneycar IA — ${title} · ${dateLabel}`
 
   const kpiHtml = buildKpiSection(payload)
   const insightsHtml = buildInsightsSection(payload.insights)
@@ -89,7 +89,7 @@ export function buildReportEmail(payload: ReportPayload, chartUrls: string[]): {
         <tr>
           <td style="background:#0D1117;border-radius:0 0 16px 16px;padding:20px 32px;border-top:1px solid #1E2A3A;">
             <p style="margin:0;font-size:11px;color:#4A5568;text-align:center;">
-              Moneycar AI · Relatório automático · Não responda este e-mail
+              Moneycar IA · Relatório automático · Não responda este e-mail
             </p>
           </td>
         </tr>

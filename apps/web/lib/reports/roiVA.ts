@@ -1,7 +1,7 @@
 /**
  * lib/reports/roiVA.ts
  *
- * Gera o Relatório de ROI e Valor Agregado do Moneycar AI.
+ * Gera o Relatório de ROI e Valor Agregado do Moneycar IA.
  * Conteúdo consolidado de todas as funcionalidades da plataforma,
  * com estimativas de retorno, benefícios e impacto operacional.
  * Exportável como HTML autossuficiente.
@@ -462,7 +462,7 @@ export function generateRoiHTML(): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Moneycar AI — ROI e Valor Agregado</title>
+  <title>Moneycar IA — ROI e Valor Agregado</title>
   <style>
     *{box-sizing:border-box}
     body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;margin:0;padding:32px;background:#fff;color:#111827;max-width:960px;margin:0 auto}
@@ -478,7 +478,7 @@ export function generateRoiHTML(): string {
 <!-- CAPA -->
 <div style="text-align:center;padding:48px 24px 36px;border-radius:20px;background:linear-gradient(135deg,#0f172a 0%,#1e293b 50%,#0f172a 100%);margin-bottom:40px;color:#fff">
   <div style="display:inline-block;padding:6px 20px;border-radius:20px;background:#ffffff22;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin-bottom:16px">Relatório Estratégico</div>
-  <div style="font-size:13px;color:#94a3b8;font-weight:600;margin-bottom:8px">Moneycar AI</div>
+  <div style="font-size:13px;color:#94a3b8;font-weight:600;margin-bottom:8px">Moneycar IA</div>
   <h1 style="margin:0 0 12px;font-size:36px;font-weight:900;color:#fff;line-height:1.2">ROI e Valor Agregado</h1>
   <p style="margin:0 0 24px;font-size:16px;color:#cbd5e1;max-width:520px;margin:0 auto 24px;line-height:1.6">
     Análise consolidada de todas as funcionalidades disponíveis na plataforma,
@@ -508,7 +508,7 @@ export function generateRoiHTML(): string {
 <div style="margin-bottom:40px;padding:24px 28px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:16px">
   <h2 style="margin:0 0 12px;font-size:18px;font-weight:800;color:#14532d">Resumo Executivo</h2>
   <p style="margin:0 0 12px;font-size:14px;color:#166534;line-height:1.7">
-    O <strong>Moneycar AI</strong> é uma plataforma integrada de inteligência artificial e gestão operacional desenvolvida
+    O <strong>Moneycar IA</strong> é uma plataforma integrada de inteligência artificial e gestão operacional desenvolvida
     especificamente para revendas de veículos. Diferente de sistemas genéricos, cada funcionalidade foi projetada para endereçar
     um problema real do dia a dia da revenda: leads perdidos, capital imobilizado em estoque parado, margens mal calculadas,
     relatórios manuais demorados e atendimento limitado ao horário comercial.
@@ -570,7 +570,7 @@ export function generateRoiHTML(): string {
 
 <!-- RODAPÉ -->
 <div style="text-align:center;padding:24px 0;border-top:1px solid #e5e7eb;margin-top:16px">
-  <p style="margin:0;font-size:12px;color:#6b7280;font-weight:700">Moneycar AI — Plataforma Integrada de Gestão e Inteligência Artificial para Revendas</p>
+  <p style="margin:0;font-size:12px;color:#6b7280;font-weight:700">Moneycar IA — Plataforma Integrada de Gestão e Inteligência Artificial para Revendas</p>
   <p style="margin:4px 0 0;font-size:11px;color:#9ca3af">
     Relatório gerado em ${now} · Documento confidencial destinado ao uso interno e apresentações comerciais.
   </p>

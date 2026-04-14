@@ -156,7 +156,7 @@ export default function ChatPage() {
     {
       id: '0',
       role: 'assistant',
-      content: 'Olá! Sou o **Moneycar AI**. Analiso os dados da sua revenda em tempo real e gero dashboards interativos.\n\nPergunte sobre:\n- **Margens e lucratividade** por veículo ou período\n- **Saúde do estoque** e alertas de giro\n- **Despesas** por categoria\n- **Performance** de vendedores\n- **Comparativos** mensais\n\nComo posso ajudar?',
+      content: 'Olá! Sou o **Moneycar IA**. Analiso os dados da sua revenda em tempo real e gero dashboards interativos.\n\nPergunte sobre:\n- **Margens e lucratividade** por veículo ou período\n- **Saúde do estoque** e alertas de giro\n- **Despesas** por categoria\n- **Performance** de vendedores\n- **Comparativos** mensais\n\nComo posso ajudar?',
     },
   ])
   const [input, setInput] = useState('')

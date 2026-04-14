@@ -4,8 +4,8 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: {
-    default: 'MoneyCar AI - Inteligência Artificial para Revendas',
-    template: '%s | MoneyCar AI',
+    default: 'Moneycar IA - Inteligência Artificial para Revendas',
+    template: '%s | Moneycar IA',
   },
   description:
     'Transforme sua revenda de veículos com inteligência artificial. Alertas inteligentes, análise de margem e assistente virtual para maximizar seus lucros.',
@@ -18,14 +18,14 @@ export const metadata: Metadata = {
     'WhatsApp business',
     'moneycar',
   ],
-  authors: [{ name: 'MoneyCar AI' }],
-  creator: 'MoneyCar AI',
+  authors: [{ name: 'Moneycar IA' }],
+  creator: 'Moneycar IA',
   openGraph: {
     type: 'website',
     locale: 'pt_BR',
     url: 'https://moneycar.ai',
-    siteName: 'MoneyCar AI',
-    title: 'MoneyCar AI - Inteligência Artificial para Revendas',
+    siteName: 'Moneycar IA',
+    title: 'Moneycar IA - Inteligência Artificial para Revendas',
     description:
       'Transforme sua revenda de veículos com inteligência artificial.',
     images: [
@@ -33,13 +33,13 @@ export const metadata: Metadata = {
         url: '/logo.png',
         width: 1200,
         height: 630,
-        alt: 'MoneyCar AI',
+        alt: 'Moneycar IA',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'MoneyCar AI',
+    title: 'Moneycar IA',
     description: 'Inteligência Artificial para Revendas de Veículos',
   },
   robots: {
