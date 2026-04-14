@@ -1,6 +1,7 @@
 'use client'
 import { useState, useCallback } from 'react'
 import { Upload, FileText, CheckCircle, AlertCircle, Loader2, Search, Trash2 } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
@@ -51,19 +52,14 @@ export default function ImportarPage() {
       let res: Response
 
       if (file.size > 4 * 1024 * 1024) {
-        // Large file: get presigned URL, upload directly to Supabase Storage, then process
-        const presignRes = await fetch('/api/upload/presign', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ filename: file.name }),
-        })
-        if (!presignRes.ok) throw new Error('Falha ao gerar URL de upload')
-        const { signedUrl, path: storagePath } = await presignRes.json()
-
+        // Large file: upload directly to Supabase Storage via browser client (bypasses Vercel's 4.5MB limit)
+        const supabase = createClient()
+        const storagePath = `${Date.now()}_${file.name}`
         setProgress(20)
-        // Upload file directly to Supabase Storage (bypasses Vercel's 4.5MB function limit)
-        const putRes = await fetch(signedUrl, { method: 'PUT', body: file, headers: { 'content-type': file.type || 'application/octet-stream' } })
-        if (!putRes.ok) throw new Error('Falha ao enviar arquivo')
+        const { error: storageErr } = await supabase.storage
+          .from('imports')
+          .upload(storagePath, file, { upsert: true })
+        if (storageErr) throw new Error(`Falha ao enviar arquivo: ${storageErr.message}`)
 
         setProgress(65)
         setState('processing')
