@@ -19,8 +19,13 @@ export function Header({ dealershipName = 'Minha Revenda', userName = 'Usuário'
         <span className="font-black text-[34px] text-primary tracking-tight">Moneycar <span className="text-foreground">IA</span></span>
       </div>
 
-      {/* Desktop: spacer */}
-      <div className="hidden md:block flex-1" />
+      {/* Slogan — centered */}
+      <div className="flex-1 flex justify-center">
+        <p className="text-sm text-foreground-muted italic text-center hidden sm:block">
+          Seus dados viram decisões.{' '}
+          <span className="text-primary font-medium not-italic">Sua revenda vira máquina.</span>
+        </p>
+      </div>
 
       <div className="flex items-center gap-2 md:gap-3">
         <Link href="/dashboard/alertas" className="hidden md:block">
