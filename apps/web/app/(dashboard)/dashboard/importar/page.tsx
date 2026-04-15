@@ -219,8 +219,21 @@ export default function ImportarPage() {
     setClearState('clearing')
     setClearError('')
     try {
-      const res = await fetch('/api/clear-data', { method: 'DELETE' })
-      if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Erro ao limpar dados') }
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Sessão expirada. Faça login novamente.')
+
+      const azureBase = process.env.NEXT_PUBLIC_IMPORT_SERVICE_URL
+      if (!azureBase) throw new Error('Serviço não configurado')
+      const clearUrl = azureBase.replace('importMdb', 'clearData')
+
+      const res = await fetch(clearUrl, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
+      const d = await res.json()
+      if (!res.ok) throw new Error(d.error || 'Erro ao limpar dados')
+
       setClearState('done')
       setFile(null)
       setState('idle')
