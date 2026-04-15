@@ -12,23 +12,68 @@ export async function DELETE() {
     if (!profile?.dealership_id) return NextResponse.json({ error: 'No dealership' }, { status: 400 })
 
     const D = profile.dealership_id
+    const del = (table: string) => (svc as any).from(table).delete().eq('dealership_id', D)
 
-    // Delete in dependency order (children before parents)
-    const steps = [
-      svc.from('expenses').delete().eq('dealership_id', D),
-      svc.from('vehicle_fines').delete().eq('dealership_id', D),
-      svc.from('financings').delete().eq('dealership_id', D),
-      svc.from('ai_alerts').delete().eq('dealership_id', D),
-    ]
-    await Promise.all(steps)
-
-    // Then parent tables
-    await svc.from('vehicles').delete().eq('dealership_id', D)
-    await svc.from('customers').delete().eq('dealership_id', D)
+    // Level 1: leaf tables (no other tables in this list depend on them)
     await Promise.all([
-      svc.from('orders').delete().eq('dealership_id', D),
-      svc.from('imports').delete().eq('dealership_id', D),
+      del('order_followups'),
+      del('post_sale_expenses'),
+      del('vehicle_fines'),
+      del('vehicle_documents'),
+      del('vehicle_optionals'),
+      del('vehicle_pendencies'),
+      del('vehicle_apportionment'),
+      del('vehicle_delivery_protocols'),
+      del('vehicle_purchase_documents'),
+      del('vehicle_trades'),
+      del('expenses'),
+      del('purchase_data'),
+      del('sale_data'),
+      del('nfe_prod'),
+      del('nfe_dest'),
+      del('nfe_emit'),
+      del('nfe_ide'),
+      del('commissions'),
+      del('commission_standards'),
+      del('employee_salaries'),
+      del('insurances'),
+      del('ai_alerts'),
     ])
+
+    // Level 2: tables that depend on vehicles/customers
+    await Promise.all([
+      del('orders'),
+      del('financings'),
+    ])
+
+    // Level 3: main entities
+    await Promise.all([
+      del('vehicles'),
+      del('customers'),
+    ])
+
+    // Level 4: reference / lookup tables
+    await Promise.all([
+      del('manufacturers'),
+      del('fuel_types'),
+      del('plan_accounts'),
+      del('customer_origins'),
+      del('cancellation_reasons'),
+      del('standard_pendencies'),
+      del('standard_expenses'),
+      del('optionals'),
+      del('general_enumerations'),
+      del('text_configurations'),
+      del('banks'),
+      del('bank_accounts'),
+      del('vendors'),
+      del('employees'),
+      del('nature_of_operation'),
+      del('ncm'),
+    ])
+
+    // Level 5: import history
+    await del('imports')
 
     return NextResponse.json({ ok: true })
   } catch (err: any) {
