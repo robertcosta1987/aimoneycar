@@ -256,21 +256,29 @@ async function importMdbHandler(req: HttpRequest, ctx: InvocationContext): Promi
   if (!profile?.dealership_id) return json(400, { error: 'No dealership' }, cors)
   const D: string = profile.dealership_id
 
-  // Read the raw MDB binary
-  const filename = decodeURIComponent(req.headers.get('x-filename') ?? 'upload.mdb')
-  const fileSize = parseInt(req.headers.get('content-length') ?? '0')
+  // Parse JSON body: { storagePath, filename }
+  let storagePath: string
+  let filename: string
+  try {
+    const body = await req.json() as { storagePath: string; filename: string }
+    storagePath = body.storagePath
+    filename = body.filename ?? 'upload.mdb'
+  } catch (e: any) {
+    return json(400, { error: `Invalid request body: ${e.message}` }, cors)
+  }
+  if (!storagePath) return json(400, { error: 'Missing storagePath' }, cors)
 
-  ctx.log(`Reading body: ${filename} content-length=${fileSize} dealership=${D}`)
+  ctx.log(`Downloading MDB from storage: ${storagePath} for dealership ${D}`)
 
+  // Download file from Supabase Storage using service role
   let buffer: Buffer
   try {
-    // Read body as Uint8Array directly to avoid double-copy of ArrayBuffer → Buffer
-    const ab = await req.arrayBuffer()
-    buffer = Buffer.from(ab)
-    ctx.log(`Body read OK: ${(buffer.length / 1024 / 1024).toFixed(1)} MB, heap used: ${(process.memoryUsage().heapUsed / 1024 / 1024).toFixed(0)} MB`)
+    const { data: blob, error: dlErr } = await getSvc().storage.from('imports').download(storagePath)
+    if (dlErr) return json(500, { error: `Storage download failed: ${dlErr.message}` }, cors)
+    buffer = Buffer.from(await (blob as Blob).arrayBuffer())
+    ctx.log(`Downloaded OK: ${(buffer.length / 1024 / 1024).toFixed(1)} MB`)
   } catch (e: any) {
-    ctx.log(`Body read FAILED: ${e.message}`)
-    return json(400, { error: `Failed to read body: ${e.message}` }, cors)
+    return json(500, { error: `Failed to download file: ${e.message}` }, cors)
   }
 
   ctx.log(`Processing MDB import: ${filename} (${(buffer.length / 1024 / 1024).toFixed(1)} MB) for dealership ${D}`)
@@ -282,7 +290,7 @@ async function importMdbHandler(req: HttpRequest, ctx: InvocationContext): Promi
       dealership_id: D,
       filename,
       file_type: 'application/msaccess',
-      file_size: fileSize || buffer.length,
+      file_size: buffer.length,
       status: 'processing',
       records_imported: 0,
       errors: [],
@@ -815,6 +823,7 @@ async function importMdbHandler(req: HttpRequest, ctx: InvocationContext): Promi
   counts.nfe_prod = (phD_nfe as any).nfe_prod
 
   try { await getSvc().rpc('refresh_days_in_stock', { d_id: D }) } catch { /* non-critical */ }
+  try { await getSvc().storage.from('imports').remove([storagePath]) } catch { /* non-critical */ }
 
   const totalImported = Object.values(counts).reduce((a, b) => a + (b ?? 0), 0)
   ctx.log(`Import complete. Total: ${totalImported}, Errors: ${errors.length}`)

@@ -68,7 +68,7 @@ export default function ImportarPage() {
 
     try {
       if (isMdb(file)) {
-        // MDB → Azure Function (raw binary + Bearer token, XHR for upload progress)
+        // MDB → upload to Supabase Storage first, then call Azure with the path
         const supabase = createClient()
         const { data: { session } } = await supabase.auth.getSession()
         if (!session) throw new Error('Sessão expirada. Faça login novamente.')
@@ -76,38 +76,49 @@ export default function ImportarPage() {
         const azureUrl = process.env.NEXT_PUBLIC_IMPORT_SERVICE_URL
         if (!azureUrl) throw new Error('Serviço de importação não configurado (NEXT_PUBLIC_IMPORT_SERVICE_URL)')
 
+        // Step 1: get presigned upload URL
+        setStatusLabel('Preparando upload...')
+        const presignRes = await fetch('/api/upload/presign', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename: file.name }),
+        })
+        if (!presignRes.ok) throw new Error('Falha ao preparar upload')
+        const { path: storagePath, token: uploadToken } = await presignRes.json()
+
+        // Step 2: upload file to Supabase Storage with progress
         setStatusLabel('Enviando arquivo...')
-
-        const data = await new Promise<any>((resolve, reject) => {
+        await new Promise<void>((resolve, reject) => {
           const xhr = new XMLHttpRequest()
-
           xhr.upload.onprogress = (e) => {
             if (e.lengthComputable) {
-              const pct = Math.round((e.loaded / e.total) * 70)
-              setProgress(pct)
-              if (pct >= 70) {
-                setState('processing')
-                setStatusLabel('Processando no servidor...')
-              }
+              setProgress(Math.round((e.loaded / e.total) * 60))
             }
           }
-
-          xhr.onload = () => {
-            let parsed: any
-            try { parsed = JSON.parse(xhr.responseText) } catch { parsed = { error: xhr.responseText.slice(0, 200) } }
-            if (xhr.status >= 200 && xhr.status < 300) resolve(parsed)
-            else reject(new Error(parsed?.error ?? `HTTP ${xhr.status}`))
-          }
-
-          xhr.onerror = () => reject(new Error(`Falha de rede ao conectar ao serviço de importação (status: ${xhr.status}, readyState: ${xhr.readyState})`))
-          xhr.ontimeout = () => reject(new Error('Timeout ao conectar ao serviço de importação'))
-
-          xhr.open('POST', azureUrl)
-          xhr.setRequestHeader('Authorization', `Bearer ${session.access_token}`)
+          xhr.onload = () => xhr.status < 300 ? resolve() : reject(new Error(`Upload storage falhou: HTTP ${xhr.status}`))
+          xhr.onerror = () => reject(new Error('Falha de rede ao enviar arquivo'))
+          xhr.open('PUT', `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/imports/${storagePath}?token=${uploadToken}`)
           xhr.setRequestHeader('Content-Type', 'application/octet-stream')
-          xhr.setRequestHeader('X-Filename', encodeURIComponent(file.name))
           xhr.send(file)
         })
+
+        // Step 3: call Azure Function with just the storage path (tiny JSON payload)
+        setProgress(65)
+        setState('processing')
+        setStatusLabel('Processando no servidor...')
+        const res = await fetch(azureUrl, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ storagePath, filename: file.name }),
+        })
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+          throw new Error(err.error ?? `HTTP ${res.status}`)
+        }
+        const data = await res.json()
 
         setProgress(100)
         setResult({
