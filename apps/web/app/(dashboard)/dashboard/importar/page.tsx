@@ -142,12 +142,40 @@ export default function ImportarPage() {
     if (!file) return
     setInspecting(true)
     setInspection(null)
-    const formData = new FormData()
-    formData.append('file', file)
     try {
-      const res = await fetch('/api/mdb-inspect', { method: 'POST', body: formData })
-      const data = await res.json()
-      setInspection(data)
+      let res: Response
+      if (file.size > 4 * 1024 * 1024) {
+        const presignRes = await fetch('/api/upload/presign', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename: file.name }),
+        })
+        const presignText = await presignRes.text()
+        if (!presignRes.ok) throw new Error(`Falha ao gerar token (${presignRes.status}): ${presignText.slice(0, 200)}`)
+        const { path: storagePath, token } = JSON.parse(presignText)
+        const supabase = createClient()
+        try {
+          const result = await supabase.storage.from('imports').uploadToSignedUrl(storagePath, token, file)
+          if (result.error) throw new Error(result.error.message)
+        } catch (e: any) {
+          throw new Error(`Falha ao enviar arquivo: ${e?.message ?? e}`)
+        }
+        res = await fetch('/api/mdb-inspect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ storagePath }),
+        })
+      } else {
+        const formData = new FormData()
+        formData.append('file', file)
+        res = await fetch('/api/mdb-inspect', { method: 'POST', body: formData })
+      }
+      const text = await res.text()
+      try {
+        setInspection(JSON.parse(text))
+      } catch {
+        setInspection({ error: `Erro do servidor (${res.status}): ${text.slice(0, 200)}` })
+      }
     } catch (e: any) {
       setInspection({ error: e.message })
     }

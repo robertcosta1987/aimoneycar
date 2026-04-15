@@ -2,16 +2,31 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import MDBReader from 'mdb-reader'
 
+export const maxDuration = 60
+
 export async function POST(req: NextRequest) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const formData = await req.formData()
-  const file = formData.get('file') as File | null
-  if (!file) return NextResponse.json({ error: 'No file' }, { status: 400 })
+  const svc = createServiceClient()
+  let buffer: Buffer
 
-  const buffer = Buffer.from(await file.arrayBuffer())
+  const contentType = req.headers.get('content-type') ?? ''
+  if (contentType.includes('application/json')) {
+    const { storagePath } = await req.json()
+    if (!storagePath) return NextResponse.json({ error: 'No storagePath' }, { status: 400 })
+    const { data, error } = await svc.storage.from('imports').download(storagePath)
+    if (error || !data) return NextResponse.json({ error: 'Failed to fetch file' }, { status: 400 })
+    buffer = Buffer.from(await data.arrayBuffer())
+    // Clean up temp file
+    svc.storage.from('imports').remove([storagePath]).catch(() => {})
+  } else {
+    const formData = await req.formData()
+    const file = formData.get('file') as File | null
+    if (!file) return NextResponse.json({ error: 'No file' }, { status: 400 })
+    buffer = Buffer.from(await file.arrayBuffer())
+  }
   const reader = new MDBReader(buffer)
   const tableNames = reader.getTableNames().filter(t => !t.startsWith('MSys'))
 
