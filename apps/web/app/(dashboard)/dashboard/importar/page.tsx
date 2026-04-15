@@ -85,7 +85,13 @@ export default function ImportarPage() {
       }
 
       setProgress(80)
-      const data = await res.json()
+      const rawText = await res.text()
+      let data: any
+      try {
+        data = JSON.parse(rawText)
+      } catch {
+        throw new Error(`Erro do servidor (${res.status}): ${rawText.slice(0, 200)}`)
+      }
 
       if (res.ok) {
         setResult({
