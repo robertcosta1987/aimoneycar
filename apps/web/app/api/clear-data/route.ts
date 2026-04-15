@@ -18,9 +18,24 @@ export async function DELETE() {
       if (error) throw new Error(`Failed to delete from ${table}: ${error.message}`)
     }
 
+    // Delete a table in batches of `size` rows to avoid trigger-induced timeouts
+    const delBatched = async (table: string, idCol = 'id', size = 100) => {
+      while (true) {
+        const { data, error: fetchErr } = await (svc as any)
+          .from(table).select(idCol).eq('dealership_id', D).limit(size)
+        if (fetchErr) throw new Error(`Failed to fetch from ${table}: ${fetchErr.message}`)
+        if (!data || data.length === 0) break
+        const ids = data.map((r: any) => r[idCol])
+        const { error: delErr } = await (svc as any)
+          .from(table).delete().in(idCol, ids)
+        if (delErr) throw new Error(`Failed to delete batch from ${table}: ${delErr.message}`)
+        if (data.length < size) break
+      }
+    }
+
     const delAll = (...tables: string[]) => Promise.all(tables.map(del))
 
-    // Level 1: deepest leaf tables (nothing else references these)
+    // Level 1: deepest leaf tables
     await delAll(
       'order_followups',
       'post_sale_expenses',
@@ -44,18 +59,13 @@ export async function DELETE() {
       'ai_alerts',
     )
 
-    // Level 2: tables that may reference vehicles/customers but not each other
-    await delAll(
-      'expenses',
-      'insurances',
-      'financings',
-      'orders',
-    )
+    // Level 2: tables that may reference vehicles/customers
+    await delAll('expenses', 'insurances', 'financings', 'orders')
 
-    // Level 3: main entities
-    await delAll('vehicles', 'customers')
+    // Level 3: main entities — batched to avoid trigger timeouts
+    await Promise.all([delBatched('vehicles'), delBatched('customers')])
 
-    // Level 4: reference / lookup tables (no FK deps within the list)
+    // Level 4: reference / lookup tables
     await delAll(
       'manufacturers',
       'fuel_types',
