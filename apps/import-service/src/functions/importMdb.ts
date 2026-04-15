@@ -211,7 +211,7 @@ function corsHeaders(origin: string): Record<string, string> {
   const allowedOrigin = allowed.includes(origin) ? origin : (allowed[0] ?? '*')
   return {
     'Access-Control-Allow-Origin': allowedOrigin,
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'POST, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Filename',
     'Access-Control-Max-Age': '86400',
   }
