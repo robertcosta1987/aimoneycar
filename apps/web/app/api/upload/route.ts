@@ -57,7 +57,7 @@ function parseMDB(buffer: Buffer): MDBData {
   const reader = new MDBReader(buffer)
   const tableNames = reader.getTableNames()
 
-  // Lazy table loader — reads each table once on demand, does NOT pre-load all tables
+  // Lazy table loader — reads each table once on demand, caches result
   const tableCache: Record<string, Record<string, any>[]> = {}
   const t = (name: string): Record<string, any>[] => {
     if (!(name in tableCache)) {
@@ -66,39 +66,45 @@ function parseMDB(buffer: Buffer): MDBData {
     return tableCache[name]
   }
 
-  // Build compact lookup maps from small reference tables only
+  // Build compact lookup maps from small reference tables (do NOT delete — route needs them too)
   const brandMap: Record<number, string> = {}
   t('tbFabricantes').forEach((r: any) => {
     if (r.fabID !== undefined && r.fabNome) brandMap[r.fabID] = String(r.fabNome)
   })
-  delete tableCache['tbFabricantes']
 
   const fuelMap: Record<number, string> = {}
   t('tbCombustivel').forEach((r: any) => {
     if (r.gazID !== undefined && r.gazDescri) fuelMap[r.gazID] = String(r.gazDescri)
   })
-  delete tableCache['tbCombustivel']
 
   const planMap: Record<number, string> = {}
   t('tbPlanoContas').forEach((r: any) => {
     if (r.plaID !== undefined && r.PlaNome) planMap[r.plaID] = String(r.PlaNome)
   })
-  delete tableCache['tbPlanoContas']
 
   const purchaseMap: Record<number, { date: any; km: any; valor: any }> = {}
   t('tbDadosCompra').forEach((r: any) => {
     if (r.carID) purchaseMap[r.carID] = { date: r.cData, km: r.cKM, valor: r.cValor }
   })
-  delete tableCache['tbDadosCompra']
 
   const saleMap: Record<number, { date: any; km: any; valor: any; cliID: any }> = {}
   t('tbDadosVenda').forEach((r: any) => {
     if (r.carID) saleMap[r.carID] = { date: r.vData, km: r.vKM, valor: r.vValorVenda, cliID: r.cliID }
   })
-  delete tableCache['tbDadosVenda']
 
+  // Only extract fields used by mapVehicleRow — avoids spreading all 50+ MDB columns
   const vehicleRows = t('tbVeiculo').map(r => ({
-    ...r,
+    carID: r.carID,
+    carPlaca: r.carPlaca,
+    carDescri: r.carDescri,
+    carAno: r.carAno,
+    carAnoModelo: r.carAnoModelo,
+    carValorCompra: r.carValorCompra,
+    carValorTabela: r.carValorTabela,
+    carChassi: r.carChassi,
+    carRenavan: r.carRenavan,
+    carCor: r.carCor,
+    carMotor: r.carMotor,
     _brand: r.fabID !== undefined ? (brandMap[r.fabID] ?? null) : null,
     _fuel: r.gazID !== undefined ? (fuelMap[r.gazID] ?? null) : null,
     _purchase: purchaseMap[r.carID] ?? null,
@@ -107,6 +113,7 @@ function parseMDB(buffer: Buffer): MDBData {
   delete tableCache['tbVeiculo']
 
   const EXCLUDE_PLANS = ['VEICULO', 'VEÍCULO', 'COMPRA', 'VENDA']
+  // Only extract fields used by mapExpenseRow — avoids spreading all 30+ MDB columns
   const expenseRows = t('tbMovimento')
     .filter((r: any) => {
       if (!r.carReferencia || r.carReferencia === 0) return false
@@ -115,10 +122,25 @@ function parseMDB(buffer: Buffer): MDBData {
       if (EXCLUDE_PLANS.some(ex => plan.includes(ex))) return false
       return true
     })
-    .map((r: any) => ({ ...r, _planName: planMap[r.plaID] ?? 'Outros' }))
+    .map((r: any) => ({
+      movID: r.movID,
+      movValor: r.movValor,
+      carReferencia: r.carReferencia,
+      movData: r.movData,
+      movDescri: r.movDescri,
+      _planName: planMap[r.plaID] ?? 'Outros',
+    }))
   delete tableCache['tbMovimento']
 
-  return { vehicleRows, expenseRows, rawTables: tableCache, tableNames }
+  // rawTables is a Proxy: any key access lazily loads that table from the reader and caches it.
+  // This means the route can use rawTables['tbCliente'] etc. without pre-loading everything at once.
+  // Tables already in tableCache (lookup tables) are returned from cache instantly.
+  // tbVeiculo and tbMovimento are excluded (already extracted into compact vehicleRows/expenseRows).
+  const rawTables = new Proxy<Record<string, Record<string, any>[]>>({}, {
+    get: (_, name) => typeof name === 'string' ? t(name) : undefined,
+  })
+
+  return { vehicleRows, expenseRows, rawTables, tableNames }
 }
 
 // ─── Row mappers ──────────────────────────────────────────────────────────────
@@ -202,12 +224,20 @@ async function upsertBatch(
   errors: string[]
 ): Promise<number> {
   if (!rows.length) return 0
+  const BATCH_SIZE = 1000
+  const CONCURRENCY = 3
+  const batches: Record<string, any>[][] = []
+  for (let i = 0; i < rows.length; i += BATCH_SIZE) batches.push(rows.slice(i, i + BATCH_SIZE))
+
   let count = 0
-  for (let i = 0; i < rows.length; i += 500) {
-    const chunk = rows.slice(i, i + 500)
-    const { error } = await svc.from(table).upsert(chunk, { onConflict: conflictKey, ignoreDuplicates: false })
-    if (error) errors.push(`${table} batch ${Math.floor(i / 500) + 1}: ${error.message}`)
-    else count += chunk.length
+  for (let i = 0; i < batches.length; i += CONCURRENCY) {
+    const group = batches.slice(i, i + CONCURRENCY)
+    const results = await Promise.all(group.map(async (chunk, j) => {
+      const { error } = await svc.from(table).upsert(chunk, { onConflict: conflictKey, ignoreDuplicates: false })
+      if (error) { errors.push(`${table} batch ${i + j + 1}: ${error.message}`); return 0 }
+      return chunk.length
+    }))
+    count += results.reduce((a, b) => a + b, 0)
   }
   return count
 }
@@ -317,6 +347,8 @@ export async function POST(req: NextRequest) {
       await svc.from('imports').update({ status: 'error', errors, completed_at: new Date().toISOString() }).eq('id', (importRecord as any).id)
       return NextResponse.json({ error: errors[0] }, { status: 400 })
     }
+    // Free the raw buffer — parseMDB has extracted what it needs
+    ;(buffer as any) = null
 
     const { rawTables } = mdbData!
 
@@ -408,6 +440,8 @@ export async function POST(req: NextRequest) {
     const mappedVehicles = mdbData.vehicleRows
       .map(r => mapVehicleRow(r, D))
       .filter((r): r is Record<string, any> => r !== null)
+    // Free vehicleRows — no longer needed
+    mdbData.vehicleRows = []
 
     ;[counts.customers, counts.vendors, counts.employees, counts.bank_accounts, counts.vehicles] =
       await Promise.all([
@@ -565,9 +599,11 @@ export async function POST(req: NextRequest) {
         })), 'dealership_id,vehicle_external_id', errors),
       // Expenses
       (async () => {
-        const mappedExpenses = mdbData.expenseRows
+        const mappedExpenses = mdbData!.expenseRows
           .map(r => mapExpenseRow(r, D, vehicleIdByExternal))
           .filter((r): r is Record<string, any> => r !== null)
+        // Free expenseRows — no longer needed
+        mdbData!.expenseRows = []
         const withId = mappedExpenses.filter(e => e.external_id)
         const withoutId = mappedExpenses.filter(e => !e.external_id)
         let expCount = await upsertBatch(svc, 'expenses', withId, 'dealership_id,external_id', errors)
