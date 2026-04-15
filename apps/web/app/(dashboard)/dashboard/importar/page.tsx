@@ -58,8 +58,9 @@ export default function ImportarPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ filename: file.name }),
         })
-        if (!presignRes.ok) throw new Error('Falha ao gerar token de upload')
-        const { path: storagePath, token } = await presignRes.json()
+        const presignText = await presignRes.text()
+        if (!presignRes.ok) throw new Error(`Falha ao gerar token de upload (${presignRes.status}): ${presignText.slice(0, 200)}`)
+        const { path: storagePath, token } = JSON.parse(presignText)
 
         setProgress(20)
         const supabase = createClient()
