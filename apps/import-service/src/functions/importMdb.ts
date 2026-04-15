@@ -867,19 +867,24 @@ async function clearDataHandler(req: HttpRequest, ctx: InvocationContext): Promi
     if (!profile?.dealership_id) return json(400, { error: 'No dealership' }, cors)
     const D: string = profile.dealership_id
 
-    const del = async (table: string) => {
-      const { error } = await getSvc().from(table).delete().eq('dealership_id', D)
-      if (error) throw new Error(`Failed to delete from ${table}: ${error.message}`)
-    }
+    // Returns true if error means the table simply doesn't exist — safe to skip
+    const isNotFound = (msg: string) =>
+      msg.includes('does not exist') || msg.includes('relation') || msg.includes('PGRST116')
 
     const delBatched = async (table: string, size = 100) => {
       while (true) {
         const { data, error: fetchErr } = await getSvc().from(table).select('id').eq('dealership_id', D).limit(size)
-        if (fetchErr) throw new Error(`Failed to fetch from ${table}: ${fetchErr.message}`)
+        if (fetchErr) {
+          if (isNotFound(fetchErr.message)) return // table doesn't exist — skip
+          throw new Error(`Failed to delete from ${table}: ${fetchErr.message}`)
+        }
         if (!data || data.length === 0) break
         const ids = (data as any[]).map(r => r.id)
         const { error: delErr } = await getSvc().from(table).delete().in('id', ids)
-        if (delErr) throw new Error(`Failed to delete batch from ${table}: ${delErr.message}`)
+        if (delErr) {
+          if (isNotFound(delErr.message)) return
+          throw new Error(`Failed to delete batch from ${table}: ${delErr.message}`)
+        }
         if (data.length < size) break
       }
     }
