@@ -301,6 +301,26 @@ async function importMdbHandler(req: HttpRequest, ctx: InvocationContext): Promi
   if (importErr) return json(500, { error: importErr.message }, cors)
   const importId = (importRecord as any).id
 
+  // Return 202 immediately — process in background to avoid load balancer timeout
+  // The Node.js worker continues running after the HTTP response is sent
+  processImportInBackground(importId, buffer, storagePath, D, ctx).catch(e =>
+    ctx.log(`Background processing error: ${e?.message ?? e}`)
+  )
+  return json(202, { import_id: importId, status: 'processing' }, cors)
+
+  } catch (e: any) {
+    ctx.log(`Unhandled error: ${e?.message ?? e}`)
+    return json(500, { error: e?.message ?? 'Internal server error' }, cors)
+  }
+}
+
+async function processImportInBackground(
+  importId: string,
+  buffer: Buffer,
+  storagePath: string,
+  D: string,
+  ctx: InvocationContext
+): Promise<void> {
   const errors: string[] = []
   const counts: Record<string, number> = {}
 
@@ -312,7 +332,7 @@ async function importMdbHandler(req: HttpRequest, ctx: InvocationContext): Promi
   } catch (e: any) {
     errors.push(`Parse error: ${e.message}`)
     await getSvc().from('imports').update({ status: 'error', errors, completed_at: new Date().toISOString() }).eq('id', importId)
-    return json(400, { error: errors[0] }, cors)
+    return
   }
 
   ctx.log(`MDB parsed. Tables: ${mdbData.tableNames.length}, Vehicles: ${mdbData.vehicleRows.length}, Expenses: ${mdbData.expenseRows.length}`)
@@ -834,21 +854,6 @@ async function importMdbHandler(req: HttpRequest, ctx: InvocationContext): Promi
     errors,
     completed_at: new Date().toISOString(),
   }).eq('id', importId)
-
-  return json(200, {
-    import_id: importId,
-    vehicles_imported: counts.vehicles ?? 0,
-    expenses_imported: counts.expenses ?? 0,
-    records_imported: totalImported,
-    total_imported: totalImported,
-    counts,
-    errors,
-  }, cors)
-
-  } catch (e: any) {
-    ctx.log(`Unhandled error: ${e?.message ?? e}`)
-    return json(500, { error: e?.message ?? 'Internal server error' }, cors)
-  }
 }
 
 // ─── Register function ───────────────────────────────────────────────────────

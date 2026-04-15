@@ -102,11 +102,11 @@ export default function ImportarPage() {
           xhr.send(file)
         })
 
-        // Step 3: call Azure Function with just the storage path (tiny JSON payload)
+        // Step 3: kick off Azure processing (returns 202 immediately)
         setProgress(65)
         setState('processing')
         setStatusLabel('Processando no servidor...')
-        const res = await fetch(azureUrl, {
+        const triggerRes = await fetch(azureUrl, {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${session.access_token}`,
@@ -114,17 +114,37 @@ export default function ImportarPage() {
           },
           body: JSON.stringify({ storagePath, filename: file.name }),
         })
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
-          throw new Error(err.error ?? `HTTP ${res.status}`)
+        if (!triggerRes.ok) {
+          const err = await triggerRes.json().catch(() => ({ error: `HTTP ${triggerRes.status}` }))
+          throw new Error(err.error ?? `HTTP ${triggerRes.status}`)
         }
-        const data = await res.json()
+        const { import_id: importId } = await triggerRes.json()
+
+        // Step 4: poll /api/import-status until complete or error
+        const data = await new Promise<any>((resolve, reject) => {
+          let dots = 0
+          const interval = setInterval(async () => {
+            try {
+              dots = (dots + 1) % 4
+              setStatusLabel(`Processando no servidor${'.'.repeat(dots + 1)}`)
+              const statusRes = await fetch(`/api/import-status?importId=${importId}`)
+              if (!statusRes.ok) return
+              const imp = await statusRes.json()
+              if (imp.status === 'complete' || imp.status === 'error') {
+                clearInterval(interval)
+                if (imp.status === 'error') reject(new Error((imp.errors ?? ['Erro desconhecido'])[0]))
+                else resolve(imp)
+              }
+              setProgress(Math.min(95, (progress || 65) + 2))
+            } catch { /* keep polling */ }
+          }, 4000)
+        })
 
         setProgress(100)
         setResult({
-          imported: data.total_imported ?? data.records_imported ?? 0,
+          imported: data.records_imported ?? 0,
           errors: data.errors ?? [],
-          counts: data.counts ?? {},
+          counts: {},
         })
         setState('done')
 
