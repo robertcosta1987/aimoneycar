@@ -52,13 +52,20 @@ export default function ImportarPage() {
       let res: Response
 
       if (file.size > 4 * 1024 * 1024) {
-        // Large file: upload directly to Supabase Storage via browser client (bypasses Vercel's 4.5MB limit)
-        const supabase = createClient()
-        const storagePath = `${Date.now()}_${file.name}`
+        // Large file: get a signed upload token (bypasses RLS), upload directly to Supabase Storage
+        const presignRes = await fetch('/api/upload/presign', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename: file.name }),
+        })
+        if (!presignRes.ok) throw new Error('Falha ao gerar token de upload')
+        const { path: storagePath, token } = await presignRes.json()
+
         setProgress(20)
+        const supabase = createClient()
         const { error: storageErr } = await supabase.storage
           .from('imports')
-          .upload(storagePath, file, { upsert: true })
+          .uploadToSignedUrl(storagePath, token, file)
         if (storageErr) throw new Error(`Falha ao enviar arquivo: ${storageErr.message}`)
 
         setProgress(65)
