@@ -258,11 +258,16 @@ async function importMdbHandler(req: HttpRequest, ctx: InvocationContext): Promi
   const filename = decodeURIComponent(req.headers.get('x-filename') ?? 'upload.mdb')
   const fileSize = parseInt(req.headers.get('content-length') ?? '0')
 
+  ctx.log(`Reading body: ${filename} content-length=${fileSize} dealership=${D}`)
+
   let buffer: Buffer
   try {
+    // Read body as Uint8Array directly to avoid double-copy of ArrayBuffer → Buffer
     const ab = await req.arrayBuffer()
     buffer = Buffer.from(ab)
+    ctx.log(`Body read OK: ${(buffer.length / 1024 / 1024).toFixed(1)} MB, heap used: ${(process.memoryUsage().heapUsed / 1024 / 1024).toFixed(0)} MB`)
   } catch (e: any) {
+    ctx.log(`Body read FAILED: ${e.message}`)
     return json(400, { error: `Failed to read body: ${e.message}` }, cors)
   }
 
