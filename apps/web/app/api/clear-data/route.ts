@@ -1,94 +1,23 @@
 import { NextResponse } from 'next/server'
-import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/supabase/server'
 
 export async function DELETE() {
   try {
     const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const svc = createServiceClient()
-    const { data: profile } = await svc.from('users').select('dealership_id').eq('id', user.id).single()
-    if (!profile?.dealership_id) return NextResponse.json({ error: 'No dealership' }, { status: 400 })
+    const azureUrl = process.env.NEXT_PUBLIC_IMPORT_SERVICE_URL?.replace('importMdb', 'clearData')
+    if (!azureUrl) return NextResponse.json({ error: 'Import service not configured' }, { status: 500 })
 
-    const D = profile.dealership_id
+    const res = await fetch(azureUrl, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    })
 
-    const del = async (table: string) => {
-      const { error } = await (svc as any).from(table).delete().eq('dealership_id', D)
-      if (error) throw new Error(`Failed to delete from ${table}: ${error.message}`)
-    }
-
-    // Delete a table in batches of `size` rows to avoid trigger-induced timeouts
-    const delBatched = async (table: string, idCol = 'id', size = 100) => {
-      while (true) {
-        const { data, error: fetchErr } = await (svc as any)
-          .from(table).select(idCol).eq('dealership_id', D).limit(size)
-        if (fetchErr) throw new Error(`Failed to fetch from ${table}: ${fetchErr.message}`)
-        if (!data || data.length === 0) break
-        const ids = data.map((r: any) => r[idCol])
-        const { error: delErr } = await (svc as any)
-          .from(table).delete().in(idCol, ids)
-        if (delErr) throw new Error(`Failed to delete batch from ${table}: ${delErr.message}`)
-        if (data.length < size) break
-      }
-    }
-
-    const delAll = (...tables: string[]) => Promise.all(tables.map(del))
-
-    // Level 1: deepest leaf tables
-    await delAll(
-      'order_followups',
-      'post_sale_expenses',
-      'vehicle_fines',
-      'vehicle_documents',
-      'vehicle_optionals',
-      'vehicle_pendencies',
-      'vehicle_apportionment',
-      'vehicle_delivery_protocols',
-      'vehicle_purchase_documents',
-      'vehicle_trades',
-      'purchase_data',
-      'sale_data',
-      'nfe_prod',
-      'nfe_dest',
-      'nfe_emit',
-      'nfe_ide',
-      'commissions',
-      'commission_standards',
-      'employee_salaries',
-      'ai_alerts',
-    )
-
-    // Level 2: tables that may reference vehicles/customers
-    await delAll('expenses', 'insurances', 'financings', 'orders')
-
-    // Level 3: main entities — batched to avoid trigger timeouts
-    await Promise.all([delBatched('vehicles'), delBatched('customers')])
-
-    // Level 4: reference / lookup tables
-    await delAll(
-      'manufacturers',
-      'fuel_types',
-      'plan_accounts',
-      'customer_origins',
-      'cancellation_reasons',
-      'standard_pendencies',
-      'standard_expenses',
-      'optionals',
-      'general_enumerations',
-      'text_configurations',
-      'banks',
-      'bank_accounts',
-      'vendors',
-      'employees',
-      'nature_of_operation',
-      'ncm',
-    )
-
-    // Level 5: import history
-    await del('imports')
-
-    return NextResponse.json({ ok: true })
+    const data = await res.json()
+    if (!res.ok) return NextResponse.json(data, { status: res.status })
+    return NextResponse.json(data)
   } catch (err: any) {
     console.error('[clear-data]', err)
     return NextResponse.json({ error: err.message ?? 'Internal error' }, { status: 500 })
