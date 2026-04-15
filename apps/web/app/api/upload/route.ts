@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import MDBReader from 'mdb-reader'
 
-export const maxDuration = 300 // Allow up to 5 min for large MDB imports (Vercel Pro)
+export const maxDuration = 60
 export const dynamic = 'force-dynamic'
 
 // ─── Parse helpers ─────────────────────────────────────────────────────────────
