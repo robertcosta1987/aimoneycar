@@ -64,9 +64,15 @@ export default function ImportarPage() {
 
         setProgress(20)
         const supabase = createClient()
-        const { error: storageErr } = await supabase.storage
-          .from('imports')
-          .uploadToSignedUrl(storagePath, token, file)
+        let storageErr: any
+        try {
+          const result = await supabase.storage
+            .from('imports')
+            .uploadToSignedUrl(storagePath, token, file)
+          storageErr = result.error
+        } catch (e: any) {
+          throw new Error(`Falha ao enviar arquivo para storage: ${e?.message ?? e}`)
+        }
         if (storageErr) throw new Error(`Falha ao enviar arquivo: ${storageErr.message}`)
 
         setProgress(65)
