@@ -57,47 +57,54 @@ function parseMDB(buffer: Buffer): MDBData {
   const reader = new MDBReader(buffer)
   const tableNames = reader.getTableNames()
 
-  // Build raw tables map — single read per table, reused throughout
-  const rawTables: Record<string, Record<string, any>[]> = {}
-  for (const name of tableNames) {
-    try { rawTables[name] = reader.getTable(name).getData() as Record<string, any>[] } catch { rawTables[name] = [] }
+  // Lazy table loader — reads each table once on demand, does NOT pre-load all tables
+  const tableCache: Record<string, Record<string, any>[]> = {}
+  const t = (name: string): Record<string, any>[] => {
+    if (!(name in tableCache)) {
+      try { tableCache[name] = reader.getTable(name).getData() as Record<string, any>[] } catch { tableCache[name] = [] }
+    }
+    return tableCache[name]
   }
-  const t = (name: string) => rawTables[name] ?? []
 
-  // Lookup maps (use already-loaded rawTables — no second read)
+  // Build compact lookup maps from small reference tables only
   const brandMap: Record<number, string> = {}
   t('tbFabricantes').forEach((r: any) => {
     if (r.fabID !== undefined && r.fabNome) brandMap[r.fabID] = String(r.fabNome)
   })
+  delete tableCache['tbFabricantes']
 
   const fuelMap: Record<number, string> = {}
   t('tbCombustivel').forEach((r: any) => {
     if (r.gazID !== undefined && r.gazDescri) fuelMap[r.gazID] = String(r.gazDescri)
   })
+  delete tableCache['tbCombustivel']
 
   const planMap: Record<number, string> = {}
   t('tbPlanoContas').forEach((r: any) => {
     if (r.plaID !== undefined && r.PlaNome) planMap[r.plaID] = String(r.PlaNome)
   })
+  delete tableCache['tbPlanoContas']
 
   const purchaseMap: Record<number, { date: any; km: any; valor: any }> = {}
   t('tbDadosCompra').forEach((r: any) => {
     if (r.carID) purchaseMap[r.carID] = { date: r.cData, km: r.cKM, valor: r.cValor }
   })
+  delete tableCache['tbDadosCompra']
 
   const saleMap: Record<number, { date: any; km: any; valor: any; cliID: any }> = {}
   t('tbDadosVenda').forEach((r: any) => {
     if (r.carID) saleMap[r.carID] = { date: r.vData, km: r.vKM, valor: r.vValorVenda, cliID: r.cliID }
   })
+  delete tableCache['tbDadosVenda']
 
-  const rawVehicles = t('tbVeiculo')
-  const vehicleRows = rawVehicles.map(r => ({
+  const vehicleRows = t('tbVeiculo').map(r => ({
     ...r,
     _brand: r.fabID !== undefined ? (brandMap[r.fabID] ?? null) : null,
     _fuel: r.gazID !== undefined ? (fuelMap[r.gazID] ?? null) : null,
     _purchase: purchaseMap[r.carID] ?? null,
     _sale: saleMap[r.carID] ?? null,
   }))
+  delete tableCache['tbVeiculo']
 
   const EXCLUDE_PLANS = ['VEICULO', 'VEÍCULO', 'COMPRA', 'VENDA']
   const expenseRows = t('tbMovimento')
@@ -109,8 +116,9 @@ function parseMDB(buffer: Buffer): MDBData {
       return true
     })
     .map((r: any) => ({ ...r, _planName: planMap[r.plaID] ?? 'Outros' }))
+  delete tableCache['tbMovimento']
 
-  return { vehicleRows, expenseRows, rawTables, tableNames }
+  return { vehicleRows, expenseRows, rawTables: tableCache, tableNames }
 }
 
 // ─── Row mappers ──────────────────────────────────────────────────────────────
