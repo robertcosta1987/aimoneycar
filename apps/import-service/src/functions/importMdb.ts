@@ -886,19 +886,21 @@ async function clearDataHandler(req: HttpRequest, ctx: InvocationContext): Promi
 
     ctx.log(`Clearing data for dealership ${D}`)
 
-    // Level 1: leaf tables
+    // All tables are batched — some have triggers that cause full-table deletes to time out
+
+    // Level 1: leaf tables (sequential within each, parallel across)
     await Promise.all([
       'order_followups', 'post_sale_expenses', 'vehicle_fines', 'vehicle_documents',
       'vehicle_optionals', 'vehicle_pendencies', 'vehicle_apportionment',
       'vehicle_delivery_protocols', 'vehicle_purchase_documents', 'vehicle_trades',
       'purchase_data', 'sale_data', 'nfe_prod', 'nfe_dest', 'nfe_emit', 'nfe_ide',
       'commissions', 'commission_standards', 'employee_salaries', 'ai_alerts',
-    ].map(del))
+    ].map(t => delBatched(t)))
 
     // Level 2: depend on vehicles/customers
-    await Promise.all(['expenses', 'insurances', 'financings', 'orders'].map(del))
+    await Promise.all(['expenses', 'insurances', 'financings', 'orders'].map(t => delBatched(t)))
 
-    // Level 3: main entities (batched — triggers cause timeout on full-table delete)
+    // Level 3: main entities
     await Promise.all([delBatched('vehicles'), delBatched('customers')])
 
     // Level 4: reference tables
@@ -907,10 +909,10 @@ async function clearDataHandler(req: HttpRequest, ctx: InvocationContext): Promi
       'cancellation_reasons', 'standard_pendencies', 'standard_expenses', 'optionals',
       'general_enumerations', 'text_configurations', 'banks', 'bank_accounts',
       'vendors', 'employees', 'nature_of_operation', 'ncm',
-    ].map(del))
+    ].map(t => delBatched(t)))
 
     // Level 5: import history
-    await del('imports')
+    await delBatched('imports')
 
     ctx.log(`Clear complete for dealership ${D}`)
     return json(200, { ok: true }, cors)
