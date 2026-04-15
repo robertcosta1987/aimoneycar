@@ -84,7 +84,7 @@ export default function ImportarPage() {
           body: JSON.stringify({ filename: file.name }),
         })
         if (!presignRes.ok) throw new Error('Falha ao preparar upload')
-        const { path: storagePath, token: uploadToken } = await presignRes.json()
+        const { path: storagePath, signedUrl } = await presignRes.json()
 
         // Step 2: upload file to Supabase Storage with progress
         setStatusLabel('Enviando arquivo...')
@@ -97,7 +97,7 @@ export default function ImportarPage() {
           }
           xhr.onload = () => xhr.status < 300 ? resolve() : reject(new Error(`Upload storage falhou: HTTP ${xhr.status}`))
           xhr.onerror = () => reject(new Error('Falha de rede ao enviar arquivo'))
-          xhr.open('PUT', `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/imports/${storagePath}?token=${uploadToken}`)
+          xhr.open('PUT', signedUrl)
           xhr.setRequestHeader('Content-Type', 'application/octet-stream')
           xhr.send(file)
         })
