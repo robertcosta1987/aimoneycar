@@ -1,6 +1,6 @@
 'use client'
 import { useState, useCallback } from 'react'
-import { Upload, FileText, CheckCircle, AlertCircle, Loader2, Search, Trash2 } from 'lucide-react'
+import { Upload, CheckCircle, AlertCircle, Loader2, Search, Trash2, ChevronDown, ChevronUp } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -12,28 +12,44 @@ type UploadState = 'idle' | 'uploading' | 'processing' | 'done' | 'error'
 
 type ImportResult = {
   imported: number
-  parsed: number
   errors: string[]
-  sample?: Record<string, any>[]
-  debug?: Record<string, any>
+  counts: Record<string, number>
+}
+
+// ─── Parse helpers (for client-side inspect only) ────────────────────────────
+
+function parseDate(v: any): string | null {
+  if (!v) return null
+  if (v instanceof Date) {
+    if (isNaN(v.getTime()) || v.getFullYear() < 1990) return null
+    return v.toISOString().split('T')[0]
+  }
+  const s = String(v).trim()
+  if (!s || s === 'null') return null
+  const br = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+  if (br) return parseInt(br[3]) < 1990 ? null : `${br[3]}-${br[2].padStart(2, '0')}-${br[1].padStart(2, '0')}`
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return parseInt(s.slice(0, 4)) < 1990 ? null : s.slice(0, 10)
+  return null
 }
 
 export default function ImportarPage() {
   const [file, setFile] = useState<File | null>(null)
   const [state, setState] = useState<UploadState>('idle')
   const [progress, setProgress] = useState(0)
+  const [statusLabel, setStatusLabel] = useState('')
   const [result, setResult] = useState<ImportResult | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const [inspecting, setInspecting] = useState(false)
   const [inspection, setInspection] = useState<any>(null)
+  const [showCounts, setShowCounts] = useState(false)
   const [clearState, setClearState] = useState<'idle' | 'confirm' | 'clearing' | 'done' | 'error'>('idle')
   const [clearError, setClearError] = useState('')
 
   const handleFile = (f: File) => {
-    if (!f) return
     setFile(f)
     setState('idle')
     setResult(null)
+    setInspection(null)
   }
 
   const onDrop = useCallback((e: React.DragEvent) => {
@@ -43,98 +59,112 @@ export default function ImportarPage() {
     if (f) handleFile(f)
   }, [])
 
+  const isMdb = (f: File) => /\.(mdb|accdb)$/i.test(f.name)
+
   const upload = async () => {
     if (!file) return
     setState('uploading')
-    setProgress(10)
+    setProgress(0)
 
     try {
-      let res: Response
-
-      if (file.size > 4 * 1024 * 1024) {
-        // Large file: get a signed upload token (bypasses RLS), upload directly to Supabase Storage
-        const presignRes = await fetch('/api/upload/presign', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ filename: file.name }),
-        })
-        const presignText = await presignRes.text()
-        if (!presignRes.ok) throw new Error(`Falha ao gerar token de upload (${presignRes.status}): ${presignText.slice(0, 200)}`)
-        const { path: storagePath, token } = JSON.parse(presignText)
-
-        setProgress(20)
+      if (isMdb(file)) {
+        // MDB → Azure Function (raw binary + Bearer token, XHR for upload progress)
         const supabase = createClient()
-        let storageErr: any
-        try {
-          const result = await supabase.storage
-            .from('imports')
-            .uploadToSignedUrl(storagePath, token, file)
-          storageErr = result.error
-        } catch (e: any) {
-          throw new Error(`Falha ao enviar arquivo para storage: ${e?.message ?? e}`)
-        }
-        if (storageErr) throw new Error(`Falha ao enviar arquivo: ${storageErr.message}`)
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) throw new Error('Sessão expirada. Faça login novamente.')
 
-        setProgress(65)
-        setState('processing')
-        res = await fetch('/api/upload', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ storagePath, filename: file.name, fileType: file.type }),
+        const azureUrl = process.env.NEXT_PUBLIC_IMPORT_SERVICE_URL
+        if (!azureUrl) throw new Error('Serviço de importação não configurado (NEXT_PUBLIC_IMPORT_SERVICE_URL)')
+
+        setStatusLabel('Enviando arquivo...')
+
+        const data = await new Promise<any>((resolve, reject) => {
+          const xhr = new XMLHttpRequest()
+
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) {
+              const pct = Math.round((e.loaded / e.total) * 70)
+              setProgress(pct)
+              if (pct >= 70) {
+                setState('processing')
+                setStatusLabel('Processando no servidor...')
+              }
+            }
+          }
+
+          xhr.onload = () => {
+            let parsed: any
+            try { parsed = JSON.parse(xhr.responseText) } catch { parsed = { error: xhr.responseText.slice(0, 200) } }
+            if (xhr.status >= 200 && xhr.status < 300) resolve(parsed)
+            else reject(new Error(parsed?.error ?? `HTTP ${xhr.status}`))
+          }
+
+          xhr.onerror = () => reject(new Error(`Falha de rede ao conectar ao serviço de importação (status: ${xhr.status}, readyState: ${xhr.readyState})`))
+          xhr.ontimeout = () => reject(new Error('Timeout ao conectar ao serviço de importação'))
+
+          xhr.open('POST', azureUrl)
+          xhr.setRequestHeader('Authorization', `Bearer ${session.access_token}`)
+          xhr.setRequestHeader('Content-Type', 'application/octet-stream')
+          xhr.setRequestHeader('X-Filename', encodeURIComponent(file.name))
+          xhr.send(file)
         })
-      } else {
-        // Small file: direct FormData upload
-        const formData = new FormData()
-        formData.append('file', file)
-        setProgress(40)
-        setState('processing')
-        res = await fetch('/api/upload', { method: 'POST', body: formData })
-      }
 
-      setProgress(80)
-      const rawText = await res.text()
-      let data: any
-      try {
-        data = JSON.parse(rawText)
-      } catch {
-        throw new Error(`Erro do servidor (${res.status}): ${rawText.slice(0, 200)}`)
-      }
-
-      if (res.ok) {
+        setProgress(100)
         setResult({
-          imported: data.vehicles_imported || data.records_imported || 0,
-          parsed: data.total_rows_parsed || 0,
-          errors: data.errors || [],
-          sample: data.sample,
-          debug: { ...data.debug, expenses_imported: data.expenses_imported || 0, vehicles_mapped: data.vehicles_mapped || 0 },
+          imported: data.total_imported ?? data.records_imported ?? 0,
+          errors: data.errors ?? [],
+          counts: data.counts ?? {},
+        })
+        setState('done')
+
+      } else {
+        // CSV / JSON → existing /api/upload route
+        let res: Response
+        setStatusLabel('Enviando arquivo...')
+
+        if (file.size > 4 * 1024 * 1024) {
+          const presignRes = await fetch('/api/upload/presign', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filename: file.name }),
+          })
+          if (!presignRes.ok) throw new Error('Falha ao gerar token de upload')
+          const { path: storagePath, token } = await presignRes.json()
+          setProgress(30)
+          const supabase = createClient()
+          const { error: storageErr } = await supabase.storage.from('imports').uploadToSignedUrl(storagePath, token, file)
+          if (storageErr) throw new Error(storageErr.message)
+          setProgress(60)
+          setState('processing')
+          setStatusLabel('Processando...')
+          res = await fetch('/api/upload', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ storagePath, filename: file.name, fileType: file.type }),
+          })
+        } else {
+          const formData = new FormData()
+          formData.append('file', file)
+          setProgress(40)
+          setState('processing')
+          setStatusLabel('Processando...')
+          res = await fetch('/api/upload', { method: 'POST', body: formData })
+        }
+
+        setProgress(90)
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || 'Upload failed')
+        setResult({
+          imported: data.records_imported ?? 0,
+          errors: data.errors ?? [],
+          counts: data.counts ?? {},
         })
         setState('done')
         setProgress(100)
-      } else {
-        throw new Error(data.error || 'Upload failed')
       }
     } catch (err: any) {
       setState('error')
-      setResult({ imported: 0, parsed: 0, errors: [err.message] })
-    }
-  }
-
-  const clearData = async () => {
-    setClearState('clearing')
-    setClearError('')
-    try {
-      const res = await fetch('/api/clear-data', { method: 'DELETE' })
-      if (!res.ok) {
-        const d = await res.json()
-        throw new Error(d.error || 'Erro ao limpar dados')
-      }
-      setClearState('done')
-      setFile(null)
-      setState('idle')
-      setResult(null)
-    } catch (err: any) {
-      setClearError(err.message)
-      setClearState('error')
+      setResult({ imported: 0, errors: [err.message], counts: {} })
     }
   }
 
@@ -143,43 +173,62 @@ export default function ImportarPage() {
     setInspecting(true)
     setInspection(null)
     try {
-      let res: Response
-      if (file.size > 4 * 1024 * 1024) {
-        const presignRes = await fetch('/api/upload/presign', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ filename: file.name }),
-        })
-        const presignText = await presignRes.text()
-        if (!presignRes.ok) throw new Error(`Falha ao gerar token (${presignRes.status}): ${presignText.slice(0, 200)}`)
-        const { path: storagePath, token } = JSON.parse(presignText)
-        const supabase = createClient()
-        try {
-          const result = await supabase.storage.from('imports').uploadToSignedUrl(storagePath, token, file)
-          if (result.error) throw new Error(result.error.message)
-        } catch (e: any) {
-          throw new Error(`Falha ao enviar arquivo: ${e?.message ?? e}`)
+      if (isMdb(file)) {
+        // Client-side inspect for MDB — read structure without parsing all rows
+        const { default: MDBReader } = await import('mdb-reader')
+        const buf = Buffer.from(await file.arrayBuffer())
+        const reader = new MDBReader(buf)
+        const tableNames = reader.getTableNames().filter((t: string) => !t.startsWith('MSys'))
+        const samples: Record<string, any> = {}
+        for (const table of tableNames) {
+          try {
+            const rows = reader.getTable(table).getData() as Record<string, any>[]
+            if (!rows.length) { samples[table] = { count: 0, columns: [], firstRow: null }; continue }
+            const columns = Object.entries(rows[0]).map(([col, val]) => ({
+              col,
+              type: val instanceof Date ? 'Date' : typeof val,
+              value: val instanceof Date
+                ? `${val.toISOString().slice(0, 10)} (year: ${val.getFullYear()})`
+                : val === null ? 'null' : String(val).slice(0, 80),
+            }))
+            samples[table] = {
+              count: rows.length, columns,
+              secondRow: rows[1] ? Object.entries(rows[1]).map(([col, val]) => ({
+                col,
+                value: val instanceof Date
+                  ? `${val.toISOString().slice(0, 10)} (year: ${val.getFullYear()})`
+                  : val === null ? 'null' : String(val).slice(0, 80),
+              })) : null,
+            }
+          } catch (e: any) { samples[table] = { error: e.message } }
         }
-        res = await fetch('/api/mdb-inspect', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ storagePath }),
-        })
+        setInspection({ tables: tableNames, samples })
       } else {
         const formData = new FormData()
         formData.append('file', file)
-        res = await fetch('/api/mdb-inspect', { method: 'POST', body: formData })
-      }
-      const text = await res.text()
-      try {
-        setInspection(JSON.parse(text))
-      } catch {
-        setInspection({ error: `Erro do servidor (${res.status}): ${text.slice(0, 200)}` })
+        const res = await fetch('/api/mdb-inspect', { method: 'POST', body: formData })
+        setInspection(await res.json())
       }
     } catch (e: any) {
       setInspection({ error: e.message })
     }
     setInspecting(false)
+  }
+
+  const clearData = async () => {
+    setClearState('clearing')
+    setClearError('')
+    try {
+      const res = await fetch('/api/clear-data', { method: 'DELETE' })
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Erro ao limpar dados') }
+      setClearState('done')
+      setFile(null)
+      setState('idle')
+      setResult(null)
+    } catch (err: any) {
+      setClearError(err.message)
+      setClearState('error')
+    }
   }
 
   return (
@@ -216,7 +265,7 @@ export default function ImportarPage() {
             <p className="text-xs text-foreground-muted mt-2">Suporta: .mdb (Moneycar), .xlsx, .csv</p>
             {file && (
               <Badge variant="secondary" className="mt-3">
-                {(file.size / 1024).toFixed(0)} KB
+                {(file.size / 1024 / 1024).toFixed(1)} MB
               </Badge>
             )}
           </div>
@@ -240,14 +289,17 @@ export default function ImportarPage() {
       {/* Progress */}
       {(state === 'uploading' || state === 'processing') && (
         <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center gap-3 mb-3">
-              <Loader2 className="w-5 h-5 text-primary animate-spin" />
-              <p className="text-sm font-medium text-foreground">
-                {state === 'uploading' ? 'Enviando arquivo...' : 'Processando dados...'}
-              </p>
+          <CardContent className="p-6 space-y-3">
+            <div className="flex items-center gap-3">
+              <Loader2 className="w-5 h-5 text-primary animate-spin flex-shrink-0" />
+              <p className="text-sm font-medium text-foreground">{statusLabel}</p>
             </div>
             <Progress value={progress} />
+            {state === 'processing' && (
+              <p className="text-xs text-foreground-muted">
+                O arquivo está sendo processado no servidor. Isso pode levar alguns minutos para arquivos grandes — não feche esta janela.
+              </p>
+            )}
           </CardContent>
         </Card>
       )}
@@ -256,44 +308,48 @@ export default function ImportarPage() {
       {state === 'done' && result && (
         <Card className="border-success/30 bg-success/5">
           <CardContent className="p-6">
-            <div className="flex items-center gap-3 mb-3">
+            <div className="flex items-center gap-3 mb-2">
               <CheckCircle className="w-6 h-6 text-success" />
               <p className="font-semibold text-success">Importação concluída!</p>
             </div>
             <p className="text-sm text-foreground-muted">
-              {result.imported} veículos importados de {result.parsed} linhas lidas
-              {(result.debug?.vehicles_mapped ?? 0) > 0 && result.debug!.vehicles_mapped !== result.imported && ` (${result.debug!.vehicles_mapped} mapeados)`}.
-              {(result.debug?.expenses_imported ?? 0) > 0 && ` · ${result.debug!.expenses_imported} despesas importadas.`}
+              {result.imported.toLocaleString('pt-BR')} registros importados.
+              {result.counts.vehicles ? ` · ${result.counts.vehicles} veículos` : ''}
+              {result.counts.customers ? ` · ${result.counts.customers} clientes` : ''}
+              {result.counts.expenses ? ` · ${result.counts.expenses} despesas` : ''}
             </p>
-            {result.debug && (
-              <p className="text-xs text-foreground-muted mt-2">
-                Tabela: <span className="font-medium">{result.debug.targetTable}</span>
-                {result.debug.expenseTable && <> · Despesas: <span className="font-medium">{result.debug.expenseTable}</span></>}
-                {result.debug.brandMapSize > 0 && <> · Marcas: {result.debug.brandMapSize}</>}
-              </p>
-            )}
             {result.errors.length > 0 && (
               <div className="mt-3 space-y-1">
-                {result.errors.map((e, i) => (
+                {result.errors.slice(0, 5).map((e, i) => (
                   <p key={i} className="text-xs text-warning">⚠️ {e}</p>
                 ))}
+                {result.errors.length > 5 && (
+                  <p className="text-xs text-foreground-muted">+ {result.errors.length - 5} avisos adicionais</p>
+                )}
               </div>
             )}
-            {result.sample && result.sample.length > 0 && (
-              <div className="mt-4">
-                <p className="text-xs font-medium text-foreground-muted mb-2">Amostra dos primeiros registros importados:</p>
-                <div className="space-y-2">
-                  {result.sample.map((s, i) => (
-                    <div key={i} className="text-xs bg-background rounded-lg p-3 font-mono text-foreground-muted">
-                      <span className="text-foreground font-medium">{s.brand} {s.model}</span>
-                      {' · '}{s.year_model}/{s.year_fab}
-                      {' · '}{s.plate || 'sem placa'}
-                      {' · '}compra: {s.purchase_date}
-                      {' · '}R$ {s.purchase_price?.toLocaleString('pt-BR')}
-                      {s.fuel ? ` · ${s.fuel}` : ''}
-                    </div>
-                  ))}
-                </div>
+            {Object.keys(result.counts).length > 0 && (
+              <div className="mt-3">
+                <button
+                  onClick={() => setShowCounts(!showCounts)}
+                  className="flex items-center gap-1 text-xs text-foreground-muted hover:text-foreground"
+                >
+                  {showCounts ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                  {showCounts ? 'Ocultar detalhes' : 'Ver detalhes por tabela'}
+                </button>
+                {showCounts && (
+                  <div className="mt-2 grid grid-cols-2 gap-1">
+                    {Object.entries(result.counts)
+                      .filter(([, v]) => v > 0)
+                      .sort(([, a], [, b]) => b - a)
+                      .map(([k, v]) => (
+                        <div key={k} className="flex justify-between text-xs">
+                          <span className="text-foreground-muted font-mono">{k}</span>
+                          <span className="text-foreground">{v.toLocaleString('pt-BR')}</span>
+                        </div>
+                      ))}
+                  </div>
+                )}
               </div>
             )}
           </CardContent>
@@ -307,7 +363,9 @@ export default function ImportarPage() {
               <AlertCircle className="w-6 h-6 text-danger" />
               <div>
                 <p className="font-semibold text-danger">Erro na importação</p>
-                {result.errors.map((e, i) => <p key={i} className="text-sm text-foreground-muted mt-1">{e}</p>)}
+                {result.errors.map((e, i) => (
+                  <p key={i} className="text-sm text-foreground-muted mt-1">{e}</p>
+                ))}
               </div>
             </div>
           </CardContent>
@@ -324,11 +382,9 @@ export default function ImportarPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            {inspection.error && (
-              <p className="text-sm text-danger">{inspection.error}</p>
-            )}
+            {inspection.error && <p className="text-sm text-danger">{inspection.error}</p>}
             <p className="text-xs text-foreground-muted">
-              Tabelas encontradas: <span className="font-medium text-foreground">{inspection.tables?.join(', ')}</span>
+              Tabelas: <span className="font-medium text-foreground">{inspection.tables?.join(', ')}</span>
             </p>
             {Object.entries(inspection.samples ?? {}).map(([table, info]: [string, any]) => (
               <div key={table}>
@@ -384,7 +440,7 @@ export default function ImportarPage() {
         </CardContent>
       </Card>
 
-      {/* Danger zone — Limpar Dados */}
+      {/* Danger zone */}
       <Card className="border-danger/30">
         <CardHeader>
           <CardTitle className="text-base text-danger flex items-center gap-2">
@@ -411,20 +467,13 @@ export default function ImportarPage() {
 
           {clearState === 'confirm' && (
             <div className="rounded-xl border border-danger/30 bg-danger/5 p-4 space-y-3">
-              <p className="text-sm font-semibold text-danger">
-                ⚠️ Tem certeza? Esta ação não pode ser desfeita.
-              </p>
+              <p className="text-sm font-semibold text-danger">⚠️ Tem certeza? Esta ação não pode ser desfeita.</p>
               <div className="flex gap-3">
-                <Button
-                  className="gap-2 bg-danger hover:bg-danger/90 text-white"
-                  onClick={clearData}
-                >
+                <Button className="gap-2 bg-danger hover:bg-danger/90 text-white" onClick={clearData}>
                   <Trash2 className="w-4 h-4" />
                   Sim, apagar tudo
                 </Button>
-                <Button variant="outline" onClick={() => setClearState('idle')}>
-                  Cancelar
-                </Button>
+                <Button variant="outline" onClick={() => setClearState('idle')}>Cancelar</Button>
               </div>
             </div>
           )}
@@ -439,10 +488,8 @@ export default function ImportarPage() {
           {clearState === 'done' && (
             <div className="flex items-center gap-2 text-sm text-success">
               <CheckCircle className="w-4 h-4" />
-              Dados apagados com sucesso. Você já pode importar um novo arquivo.
-              <button className="ml-2 text-xs underline text-foreground-muted" onClick={() => setClearState('idle')}>
-                fechar
-              </button>
+              Dados apagados com sucesso.
+              <button className="ml-2 text-xs underline text-foreground-muted" onClick={() => setClearState('idle')}>fechar</button>
             </div>
           )}
 
@@ -450,9 +497,7 @@ export default function ImportarPage() {
             <div className="flex items-center gap-2 text-sm text-danger">
               <AlertCircle className="w-4 h-4" />
               {clearError}
-              <button className="ml-2 text-xs underline" onClick={() => setClearState('idle')}>
-                tentar novamente
-              </button>
+              <button className="ml-2 text-xs underline" onClick={() => setClearState('idle')}>tentar novamente</button>
             </div>
           )}
         </CardContent>
