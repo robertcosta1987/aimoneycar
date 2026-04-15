@@ -203,10 +203,10 @@ async function upsertBatch(
 ): Promise<number> {
   if (!rows.length) return 0
   let count = 0
-  for (let i = 0; i < rows.length; i += 100) {
-    const chunk = rows.slice(i, i + 100)
+  for (let i = 0; i < rows.length; i += 500) {
+    const chunk = rows.slice(i, i + 500)
     const { error } = await svc.from(table).upsert(chunk, { onConflict: conflictKey, ignoreDuplicates: false })
-    if (error) errors.push(`${table} batch ${Math.floor(i / 100) + 1}: ${error.message}`)
+    if (error) errors.push(`${table} batch ${Math.floor(i / 500) + 1}: ${error.message}`)
     else count += chunk.length
   }
   return count
@@ -320,503 +320,508 @@ export async function POST(req: NextRequest) {
 
     const { rawTables } = mdbData!
 
-    // ── Step 1: Lookup / reference tables (no FK deps) ────────────────────────
+    // ── Step 1: Lookup / reference tables (no FK deps — run in parallel) ────────
 
-    counts.manufacturers = await upsertBatch(svc, 'manufacturers',
-      (rawTables['tbFabricantes'] ?? []).filter(r => r.fabID && r.fabNome).map(r => ({
-        dealership_id: D, external_id: String(r.fabID), name: str(r.fabNome)!,
-      })), 'dealership_id,external_id', errors)
+    const step1Results = await Promise.all([
+      upsertBatch(svc, 'manufacturers',
+        (rawTables['tbFabricantes'] ?? []).filter(r => r.fabID && r.fabNome).map(r => ({
+          dealership_id: D, external_id: String(r.fabID), name: str(r.fabNome)!,
+        })), 'dealership_id,external_id', errors),
+      upsertBatch(svc, 'fuel_types',
+        (rawTables['tbCombustivel'] ?? []).filter(r => r.gazID && r.gazDescri).map(r => ({
+          dealership_id: D, external_id: String(r.gazID), name: str(r.gazDescri)!,
+        })), 'dealership_id,external_id', errors),
+      upsertBatch(svc, 'plan_accounts',
+        (rawTables['tbPlanoContas'] ?? []).filter(r => r.plaID && r.PlaNome).map(r => ({
+          dealership_id: D, external_id: String(r.plaID), name: str(r.PlaNome)!,
+          category: str(r.plaCategoria), type: str(r.plaTipo),
+        })), 'dealership_id,external_id', errors),
+      upsertBatch(svc, 'customer_origins',
+        (rawTables['tbOrigemCliente'] ?? []).filter(r => r.oriID).map(r => ({
+          dealership_id: D, external_id: String(r.oriID),
+          name: str(r.oriDescri) ?? str(r.oriNome) ?? 'Sem nome',
+        })), 'dealership_id,external_id', errors),
+      upsertBatch(svc, 'cancellation_reasons',
+        (rawTables['tbMotivoCancelamento'] ?? []).filter(r => r.mcanID).map(r => ({
+          dealership_id: D, external_id: String(r.mcanID),
+          description: str(r.mcanDescri) ?? str(r.mcanNome) ?? 'Sem descrição',
+        })), 'dealership_id,external_id', errors),
+      upsertBatch(svc, 'standard_pendencies',
+        (rawTables['tbPendenciaPadrao'] ?? []).filter(r => r.ppnID).map(r => ({
+          dealership_id: D, external_id: String(r.ppnID),
+          description: str(r.ppnDescri) ?? str(r.ppnNome) ?? 'Sem descrição',
+          category: str(r.ppnCategoria),
+        })), 'dealership_id,external_id', errors),
+      upsertBatch(svc, 'standard_expenses',
+        (rawTables['tbDespesaPadrao'] ?? []).filter(r => r.dpaID).map(r => ({
+          dealership_id: D, external_id: String(r.dpaID),
+          description: str(r.dpaDescri) ?? str(r.dpaNome) ?? 'Sem descrição',
+          plan_account_external_id: r.plaID ? String(r.plaID) : null,
+          amount: r.dpaValor ? parseNum(r.dpaValor) : null,
+        })), 'dealership_id,external_id', errors),
+      upsertBatch(svc, 'optionals',
+        (rawTables['tbOpcionais'] ?? []).filter(r => r.opcID).map(r => ({
+          dealership_id: D, external_id: String(r.opcID),
+          name: str(r.opcDescri) ?? str(r.opcNome) ?? 'Sem nome',
+          category: str(r.opcCategoria),
+        })), 'dealership_id,external_id', errors),
+      upsertBatch(svc, 'general_enumerations',
+        (rawTables['tbEnumGeral'] ?? []).filter(r => r.enuID).map(r => ({
+          dealership_id: D, external_id: String(r.enuID),
+          type: str(r.enuTipo) ?? 'GERAL',
+          code: str(r.enuCodigo),
+          description: str(r.enuDescri) ?? str(r.enuNome) ?? 'Sem descrição',
+        })), 'dealership_id,external_id', errors),
+      upsertBatch(svc, 'text_configurations',
+        (rawTables['tbCadastroTextos'] ?? []).filter(r => r.texID).map(r => ({
+          dealership_id: D, external_id: String(r.texID),
+          key: str(r.texDescri) ?? str(r.texNome) ?? String(r.texID),
+          content: str(r.texConteudo, 10000), type: str(r.texTipo),
+        })), 'dealership_id,external_id', errors),
+      upsertBatch(svc, 'ncm',
+        (rawTables['tbNCM'] ?? []).filter(r => r.ncmID).map(r => ({
+          dealership_id: D, external_id: String(r.ncmID),
+          code: str(r.ncmCodigo) ?? String(r.ncmID), description: str(r.ncmDescri),
+        })), 'dealership_id,external_id', errors),
+      upsertBatch(svc, 'nature_of_operation',
+        (rawTables['tbNaturezaOp'] ?? []).filter(r => r.natID).map(r => ({
+          dealership_id: D, external_id: String(r.natID),
+          description: str(r.natDescri) ?? str(r.natNome) ?? 'Sem descrição',
+          cfop: str(r.natCFOP),
+        })), 'dealership_id,external_id', errors),
+      upsertBatch(svc, 'banks',
+        (rawTables['tbBancosCadastro'] ?? []).filter(r => r.bancID).map(r => ({
+          dealership_id: D, external_id: String(r.bancID),
+          name: str(r.bancNome) ?? str(r.bancDescri) ?? 'Sem nome',
+          code: str(r.bancCodigo), agency: str(r.bancAgencia), account: str(r.bancConta),
+        })), 'dealership_id,external_id', errors),
+    ])
+    ;[
+      counts.manufacturers, counts.fuel_types, counts.plan_accounts,
+      counts.customer_origins, counts.cancellation_reasons, counts.standard_pendencies,
+      counts.standard_expenses, counts.optionals, counts.general_enumerations,
+      counts.text_configurations, counts.ncm, counts.nature_of_operation, counts.banks,
+    ] = step1Results
 
-    counts.fuel_types = await upsertBatch(svc, 'fuel_types',
-      (rawTables['tbCombustivel'] ?? []).filter(r => r.gazID && r.gazDescri).map(r => ({
-        dealership_id: D, external_id: String(r.gazID), name: str(r.gazDescri)!,
-      })), 'dealership_id,external_id', errors)
-
-    counts.plan_accounts = await upsertBatch(svc, 'plan_accounts',
-      (rawTables['tbPlanoContas'] ?? []).filter(r => r.plaID && r.PlaNome).map(r => ({
-        dealership_id: D, external_id: String(r.plaID), name: str(r.PlaNome)!,
-        category: str(r.plaCategoria), type: str(r.plaTipo),
-      })), 'dealership_id,external_id', errors)
-
-    counts.customer_origins = await upsertBatch(svc, 'customer_origins',
-      (rawTables['tbOrigemCliente'] ?? []).filter(r => r.oriID).map(r => ({
-        dealership_id: D, external_id: String(r.oriID),
-        name: str(r.oriDescri) ?? str(r.oriNome) ?? 'Sem nome',
-      })), 'dealership_id,external_id', errors)
-
-    counts.cancellation_reasons = await upsertBatch(svc, 'cancellation_reasons',
-      (rawTables['tbMotivoCancelamento'] ?? []).filter(r => r.mcanID).map(r => ({
-        dealership_id: D, external_id: String(r.mcanID),
-        description: str(r.mcanDescri) ?? str(r.mcanNome) ?? 'Sem descrição',
-      })), 'dealership_id,external_id', errors)
-
-    counts.standard_pendencies = await upsertBatch(svc, 'standard_pendencies',
-      (rawTables['tbPendenciaPadrao'] ?? []).filter(r => r.ppnID).map(r => ({
-        dealership_id: D, external_id: String(r.ppnID),
-        description: str(r.ppnDescri) ?? str(r.ppnNome) ?? 'Sem descrição',
-        category: str(r.ppnCategoria),
-      })), 'dealership_id,external_id', errors)
-
-    counts.standard_expenses = await upsertBatch(svc, 'standard_expenses',
-      (rawTables['tbDespesaPadrao'] ?? []).filter(r => r.dpaID).map(r => ({
-        dealership_id: D, external_id: String(r.dpaID),
-        description: str(r.dpaDescri) ?? str(r.dpaNome) ?? 'Sem descrição',
-        plan_account_external_id: r.plaID ? String(r.plaID) : null,
-        amount: r.dpaValor ? parseNum(r.dpaValor) : null,
-      })), 'dealership_id,external_id', errors)
-
-    counts.optionals = await upsertBatch(svc, 'optionals',
-      (rawTables['tbOpcionais'] ?? []).filter(r => r.opcID).map(r => ({
-        dealership_id: D, external_id: String(r.opcID),
-        name: str(r.opcDescri) ?? str(r.opcNome) ?? 'Sem nome',
-        category: str(r.opcCategoria),
-      })), 'dealership_id,external_id', errors)
-
-    counts.general_enumerations = await upsertBatch(svc, 'general_enumerations',
-      (rawTables['tbEnumGeral'] ?? []).filter(r => r.enuID).map(r => ({
-        dealership_id: D, external_id: String(r.enuID),
-        type: str(r.enuTipo) ?? 'GERAL',
-        code: str(r.enuCodigo),
-        description: str(r.enuDescri) ?? str(r.enuNome) ?? 'Sem descrição',
-      })), 'dealership_id,external_id', errors)
-
-    counts.text_configurations = await upsertBatch(svc, 'text_configurations',
-      (rawTables['tbCadastroTextos'] ?? []).filter(r => r.texID).map(r => ({
-        dealership_id: D, external_id: String(r.texID),
-        key: str(r.texDescri) ?? str(r.texNome) ?? String(r.texID),
-        content: str(r.texConteudo, 10000), type: str(r.texTipo),
-      })), 'dealership_id,external_id', errors)
-
-    counts.ncm = await upsertBatch(svc, 'ncm',
-      (rawTables['tbNCM'] ?? []).filter(r => r.ncmID).map(r => ({
-        dealership_id: D, external_id: String(r.ncmID),
-        code: str(r.ncmCodigo) ?? String(r.ncmID), description: str(r.ncmDescri),
-      })), 'dealership_id,external_id', errors)
-
-    counts.nature_of_operation = await upsertBatch(svc, 'nature_of_operation',
-      (rawTables['tbNaturezaOp'] ?? []).filter(r => r.natID).map(r => ({
-        dealership_id: D, external_id: String(r.natID),
-        description: str(r.natDescri) ?? str(r.natNome) ?? 'Sem descrição',
-        cfop: str(r.natCFOP),
-      })), 'dealership_id,external_id', errors)
-
-    counts.banks = await upsertBatch(svc, 'banks',
-      (rawTables['tbBancosCadastro'] ?? []).filter(r => r.bancID).map(r => ({
-        dealership_id: D, external_id: String(r.bancID),
-        name: str(r.bancNome) ?? str(r.bancDescri) ?? 'Sem nome',
-        code: str(r.bancCodigo), agency: str(r.bancAgencia), account: str(r.bancConta),
-      })), 'dealership_id,external_id', errors)
-
-    // ── Step 2: Customers ─────────────────────────────────────────────────────
-
-    counts.customers = await upsertBatch(svc, 'customers',
-      (rawTables['tbCliente'] ?? []).filter(r => r.cliID).map(r => ({
-        dealership_id: D, external_id: String(r.cliID),
-        name: str(r.cliNome) ?? str(r.cliRazaoSocial) ?? 'Sem nome',
-        phone: str(r.cliTelefone) ?? str(r.cliTelResidencial),
-        email: str(r.cliEmail), cpf: str(r.cliCPF), cnpj: str(r.cliCNPJ),
-        rg: str(r.cliRG), birth_date: parseDate(r.cliDataNasc ?? r.cliNascimento),
-        address: str(r.cliEndereco ?? r.cliLogradouro), neighborhood: str(r.cliBairro),
-        city: str(r.cliCidade), state: str(r.cliEstado, 2), zip_code: str(r.cliCEP),
-        origin_external_id: r.oriID ? String(r.oriID) : null,
-        source: r.oriID ? String(r.oriID) : null,
-        notes: str(r.cliObservacoes ?? r.cliObs, 1000),
-      })), 'dealership_id,external_id', errors)
-
-    // Build customer UUID map
-    const { data: custMap } = await svc.from('customers').select('id, external_id').eq('dealership_id', D).not('external_id', 'is', null)
-    const customerIdByExternal: Record<string, string> = {}
-    ;(custMap ?? []).forEach((c: any) => { customerIdByExternal[c.external_id] = c.id })
-
-    // tbClienteComplemento — delete+insert (no unique key on row level)
-    const complRows = (rawTables['tbClienteComplemento'] ?? []).filter(r => r.cliID)
-    if (complRows.length > 0) {
-      await svc.from('customer_complements').delete().eq('dealership_id', D)
-      counts.customer_complements = await insertBatch(svc, 'customer_complements', complRows.map(r => ({
-        dealership_id: D, customer_external_id: String(r.cliID),
-        customer_id: customerIdByExternal[String(r.cliID)] ?? null,
-        father_name: str(r.cliPai), mother_name: str(r.cliMae),
-        spouse_name: str(r.cliConjuge ?? r.cliEsposo), spouse_cpf: str(r.cliCPFConjuge),
-        monthly_income: r.cliRenda ? parseNum(r.cliRenda) : null,
-        profession: str(r.cliProfissao), employer: str(r.cliEmpresa),
-        employer_phone: str(r.cliTelEmpresa), employer_address: str(r.cliEndEmpresa),
-        employer_city: str(r.cliCidEmpresa),
-      })), errors)
-    }
-
-    // tbClienteDadosComerciais
-    const commData = (rawTables['tbClienteDadosComerciais'] ?? []).filter(r => r.cliID)
-    if (commData.length > 0) {
-      await svc.from('customer_commercial_data').delete().eq('dealership_id', D)
-      counts.customer_commercial_data = await insertBatch(svc, 'customer_commercial_data', commData.map(r => ({
-        dealership_id: D, customer_external_id: String(r.cliID),
-        customer_id: customerIdByExternal[String(r.cliID)] ?? null,
-        company_name: str(r.cliRazaoSocial ?? r.cliEmpresa), cnpj: str(r.cliCNPJ),
-        activity: str(r.cliAtividade), monthly_revenue: r.cliFaturamento ? parseNum(r.cliFaturamento) : null,
-        address: str(r.cliEndereco), city: str(r.cliCidade), state: str(r.cliEstado, 2), phone: str(r.cliTelefone),
-      })), errors)
-    }
-
-    // tbClienteReferenciasBens
-    const assetRows = (rawTables['tbClienteReferenciasBens'] ?? []).filter(r => r.cliID)
-    if (assetRows.length > 0) {
-      await svc.from('customer_asset_references').delete().eq('dealership_id', D)
-      counts.customer_asset_references = await insertBatch(svc, 'customer_asset_references', assetRows.map(r => ({
-        dealership_id: D, external_id: r.refID ? String(r.refID) : null,
-        customer_external_id: String(r.cliID), customer_id: customerIdByExternal[String(r.cliID)] ?? null,
-        type: str(r.refTipo), description: str(r.refDescri),
-        value: r.refValor ? parseNum(r.refValor) : null,
-        financing_bank: str(r.refBanco), monthly_payment: r.refParcela ? parseNum(r.refParcela) : null,
-      })), errors)
-    }
-
-    // ── Step 3: Vendors ───────────────────────────────────────────────────────
-
-    counts.vendors = await upsertBatch(svc, 'vendors',
-      (rawTables['tbFornecedor'] ?? []).filter(r => r.forID).map(r => ({
-        dealership_id: D, external_id: String(r.forID),
-        name: str(r.forNome) ?? str(r.forRazaoSocial) ?? 'Sem nome',
-        category: str(r.forCategoria), phone: str(r.forTelefone), email: str(r.forEmail),
-        cnpj: str(r.forCNPJ), address: str(r.forEndereco ?? r.forLogradouro),
-        neighborhood: str(r.forBairro), city: str(r.forCidade),
-        state: str(r.forEstado, 2), zip_code: str(r.forCEP),
-        notes: str(r.forObservacoes ?? r.forObs, 1000),
-      })), 'dealership_id,external_id', errors)
-
-    // ── Step 4: Employees ─────────────────────────────────────────────────────
-
-    counts.employees = await upsertBatch(svc, 'employees',
-      (rawTables['tbFuncionario'] ?? []).filter(r => r.funID).map(r => ({
-        dealership_id: D, external_id: String(r.funID),
-        name: str(r.funNome) ?? 'Sem nome', cpf: str(r.funCPF), rg: str(r.funRG),
-        role: str(r.funCargo), email: str(r.funEmail), phone: str(r.funTelefone),
-        address: str(r.funEndereco ?? r.funLogradouro), city: str(r.funCidade),
-        state: str(r.funEstado, 2), zip_code: str(r.funCEP),
-        hire_date: parseDate(r.funDataAdmissao), termination_date: parseDate(r.funDataDemissao),
-        base_salary: r.funSalario ? parseNum(r.funSalario) : null,
-        commission_percent: r.funComissao ? parseNum(r.funComissao) : null,
-        is_active: !parseDate(r.funDataDemissao),
-        notes: str(r.funObservacoes ?? r.funObs, 1000),
-      })), 'dealership_id,external_id', errors)
-
-    // Build employee UUID map
-    const { data: empMap } = await svc.from('employees').select('id, external_id').eq('dealership_id', D).not('external_id', 'is', null)
-    const employeeIdByExternal: Record<string, string> = {}
-    ;(empMap ?? []).forEach((e: any) => { employeeIdByExternal[e.external_id] = e.id })
-
-    counts.employee_salaries = await upsertBatch(svc, 'employee_salaries',
-      (rawTables['tbfuncionarioSalario'] ?? []).filter(r => r.salID).map(r => ({
-        dealership_id: D, external_id: String(r.salID),
-        employee_external_id: r.funID ? String(r.funID) : null,
-        employee_id: r.funID ? (employeeIdByExternal[String(r.funID)] ?? null) : null,
-        date: parseDate(r.salData), amount: r.salValor ? parseNum(r.salValor) : null,
-        type: str(r.salTipo) ?? str(r.salDescri), description: str(r.salDescri ?? r.salObservacoes),
-      })), 'dealership_id,external_id', errors)
-
-    counts.commission_standards = await upsertBatch(svc, 'commission_standards',
-      (rawTables['tbComissaoPadrao'] ?? []).filter(r => r.cpaID).map(r => ({
-        dealership_id: D, external_id: String(r.cpaID),
-        employee_external_id: r.funID ? String(r.funID) : null,
-        employee_id: r.funID ? (employeeIdByExternal[String(r.funID)] ?? null) : null,
-        percent: r.cpaPercentual ? parseNum(r.cpaPercentual) : null,
-        min_value: r.cpaValorMin ? parseNum(r.cpaValorMin) : null,
-        max_value: r.cpaValorMax ? parseNum(r.cpaValorMax) : null, type: str(r.cpaTipo),
-      })), 'dealership_id,external_id', errors)
-
-    // ── Step 5: Bank accounts ─────────────────────────────────────────────────
-
-    counts.bank_accounts = await upsertBatch(svc, 'bank_accounts',
-      (rawTables['tbContasCorrentes'] ?? []).filter(r => r.ctaID).map(r => ({
-        dealership_id: D, external_id: String(r.ctaID),
-        name: str(r.ctaNome) ?? str(r.ctaDescri) ?? String(r.ctaID),
-        bank_external_id: r.bancID ? String(r.bancID) : null,
-        agency: str(r.ctaAgencia), account: str(r.ctaConta),
-        balance: r.ctaSaldo ? parseNum(r.ctaSaldo) : 0,
-      })), 'dealership_id,external_id', errors)
-
-    // ── Step 6: Vehicles ──────────────────────────────────────────────────────
+    // ── Phase B: Major entities in parallel (no FK deps on each other) ──────────
 
     const mappedVehicles = mdbData.vehicleRows
       .map(r => mapVehicleRow(r, D))
       .filter((r): r is Record<string, any> => r !== null)
 
-    counts.vehicles = await upsertBatch(svc, 'vehicles', mappedVehicles, 'dealership_id,external_id', errors)
+    ;[counts.customers, counts.vendors, counts.employees, counts.bank_accounts, counts.vehicles] =
+      await Promise.all([
+        upsertBatch(svc, 'customers',
+          (rawTables['tbCliente'] ?? []).filter(r => r.cliID).map(r => ({
+            dealership_id: D, external_id: String(r.cliID),
+            name: str(r.cliNome) ?? str(r.cliRazaoSocial) ?? 'Sem nome',
+            phone: str(r.cliTelefone) ?? str(r.cliTelResidencial),
+            email: str(r.cliEmail), cpf: str(r.cliCPF), cnpj: str(r.cliCNPJ),
+            rg: str(r.cliRG), birth_date: parseDate(r.cliDataNasc ?? r.cliNascimento),
+            address: str(r.cliEndereco ?? r.cliLogradouro), neighborhood: str(r.cliBairro),
+            city: str(r.cliCidade), state: str(r.cliEstado, 2), zip_code: str(r.cliCEP),
+            origin_external_id: r.oriID ? String(r.oriID) : null,
+            source: r.oriID ? String(r.oriID) : null,
+            notes: str(r.cliObservacoes ?? r.cliObs, 1000),
+          })), 'dealership_id,external_id', errors),
+        upsertBatch(svc, 'vendors',
+          (rawTables['tbFornecedor'] ?? []).filter(r => r.forID).map(r => ({
+            dealership_id: D, external_id: String(r.forID),
+            name: str(r.forNome) ?? str(r.forRazaoSocial) ?? 'Sem nome',
+            category: str(r.forCategoria), phone: str(r.forTelefone), email: str(r.forEmail),
+            cnpj: str(r.forCNPJ), address: str(r.forEndereco ?? r.forLogradouro),
+            neighborhood: str(r.forBairro), city: str(r.forCidade),
+            state: str(r.forEstado, 2), zip_code: str(r.forCEP),
+            notes: str(r.forObservacoes ?? r.forObs, 1000),
+          })), 'dealership_id,external_id', errors),
+        upsertBatch(svc, 'employees',
+          (rawTables['tbFuncionario'] ?? []).filter(r => r.funID).map(r => ({
+            dealership_id: D, external_id: String(r.funID),
+            name: str(r.funNome) ?? 'Sem nome', cpf: str(r.funCPF), rg: str(r.funRG),
+            role: str(r.funCargo), email: str(r.funEmail), phone: str(r.funTelefone),
+            address: str(r.funEndereco ?? r.funLogradouro), city: str(r.funCidade),
+            state: str(r.funEstado, 2), zip_code: str(r.funCEP),
+            hire_date: parseDate(r.funDataAdmissao), termination_date: parseDate(r.funDataDemissao),
+            base_salary: r.funSalario ? parseNum(r.funSalario) : null,
+            commission_percent: r.funComissao ? parseNum(r.funComissao) : null,
+            is_active: !parseDate(r.funDataDemissao),
+            notes: str(r.funObservacoes ?? r.funObs, 1000),
+          })), 'dealership_id,external_id', errors),
+        upsertBatch(svc, 'bank_accounts',
+          (rawTables['tbContasCorrentes'] ?? []).filter(r => r.ctaID).map(r => ({
+            dealership_id: D, external_id: String(r.ctaID),
+            name: str(r.ctaNome) ?? str(r.ctaDescri) ?? String(r.ctaID),
+            bank_external_id: r.bancID ? String(r.bancID) : null,
+            agency: str(r.ctaAgencia), account: str(r.ctaConta),
+            balance: r.ctaSaldo ? parseNum(r.ctaSaldo) : 0,
+          })), 'dealership_id,external_id', errors),
+        upsertBatch(svc, 'vehicles', mappedVehicles, 'dealership_id,external_id', errors),
+      ])
 
-    // Build vehicle UUID map
-    const { data: vehMap } = await svc.from('vehicles').select('id, external_id').eq('dealership_id', D).not('external_id', 'is', null)
+    // ── Phase C: Build UUID maps in parallel ──────────────────────────────────
+
+    const [{ data: custMap }, { data: empMap }, { data: vehMap }] = await Promise.all([
+      svc.from('customers').select('id, external_id').eq('dealership_id', D).not('external_id', 'is', null),
+      svc.from('employees').select('id, external_id').eq('dealership_id', D).not('external_id', 'is', null),
+      svc.from('vehicles').select('id, external_id').eq('dealership_id', D).not('external_id', 'is', null),
+    ])
+    const customerIdByExternal: Record<string, string> = {}
+    ;(custMap ?? []).forEach((c: any) => { customerIdByExternal[c.external_id] = c.id })
+    const employeeIdByExternal: Record<string, string> = {}
+    ;(empMap ?? []).forEach((e: any) => { employeeIdByExternal[e.external_id] = e.id })
     const vehicleIdByExternal: Record<string, string> = {}
     ;(vehMap ?? []).forEach((v: any) => { vehicleIdByExternal[v.external_id] = v.id })
 
-    // ── Step 7: Purchase & sale raw data ──────────────────────────────────────
+    // ── Phase D: All dependent tables in parallel ─────────────────────────────
 
-    counts.purchase_data = await upsertBatch(svc, 'purchase_data',
-      (rawTables['tbDadosCompra'] ?? []).filter(r => r.carID).map(r => ({
-        dealership_id: D, vehicle_external_id: String(r.carID),
-        vehicle_id: vehicleIdByExternal[String(r.carID)] ?? null,
-        purchase_date: parseDate(r.cData), mileage: r.cKM ? Math.round(parseNum(r.cKM)) : null,
-        purchase_price: r.cValor ? parseNum(r.cValor) : null,
-        supplier_external_id: r.forID ? String(r.forID) : null,
-        payment_method: str(r.cFormaPagamento), notes: str(r.cObservacoes ?? r.cObs, 1000),
-      })), 'dealership_id,vehicle_external_id', errors)
+    const [
+      phD_custCompl, phD_custComm, phD_custAsset,
+      phD_empSal, phD_commStd,
+      phD_purchase, phD_sale,
+      phD_exp,
+      phD_fines, phD_docs, phD_purchDocs, phD_opts, phD_pend, phD_deliv, phD_trades, phD_apportion, phD_postSale,
+      phD_fin, phD_ins,
+      phD_comm,
+      phD_orders,
+      phD_nfe,
+    ] = await Promise.all([
+      // Customer sub-tables (delete+insert pattern, sequential within each)
+      (async () => {
+        const rows = (rawTables['tbClienteComplemento'] ?? []).filter((r: any) => r.cliID)
+        if (rows.length === 0) return 0
+        await svc.from('customer_complements').delete().eq('dealership_id', D)
+        return insertBatch(svc, 'customer_complements', rows.map((r: any) => ({
+          dealership_id: D, customer_external_id: String(r.cliID),
+          customer_id: customerIdByExternal[String(r.cliID)] ?? null,
+          father_name: str(r.cliPai), mother_name: str(r.cliMae),
+          spouse_name: str(r.cliConjuge ?? r.cliEsposo), spouse_cpf: str(r.cliCPFConjuge),
+          monthly_income: r.cliRenda ? parseNum(r.cliRenda) : null,
+          profession: str(r.cliProfissao), employer: str(r.cliEmpresa),
+          employer_phone: str(r.cliTelEmpresa), employer_address: str(r.cliEndEmpresa),
+          employer_city: str(r.cliCidEmpresa),
+        })), errors)
+      })(),
+      (async () => {
+        const rows = (rawTables['tbClienteDadosComerciais'] ?? []).filter((r: any) => r.cliID)
+        if (rows.length === 0) return 0
+        await svc.from('customer_commercial_data').delete().eq('dealership_id', D)
+        return insertBatch(svc, 'customer_commercial_data', rows.map((r: any) => ({
+          dealership_id: D, customer_external_id: String(r.cliID),
+          customer_id: customerIdByExternal[String(r.cliID)] ?? null,
+          company_name: str(r.cliRazaoSocial ?? r.cliEmpresa), cnpj: str(r.cliCNPJ),
+          activity: str(r.cliAtividade), monthly_revenue: r.cliFaturamento ? parseNum(r.cliFaturamento) : null,
+          address: str(r.cliEndereco), city: str(r.cliCidade), state: str(r.cliEstado, 2), phone: str(r.cliTelefone),
+        })), errors)
+      })(),
+      (async () => {
+        const rows = (rawTables['tbClienteReferenciasBens'] ?? []).filter((r: any) => r.cliID)
+        if (rows.length === 0) return 0
+        await svc.from('customer_asset_references').delete().eq('dealership_id', D)
+        return insertBatch(svc, 'customer_asset_references', rows.map((r: any) => ({
+          dealership_id: D, external_id: r.refID ? String(r.refID) : null,
+          customer_external_id: String(r.cliID), customer_id: customerIdByExternal[String(r.cliID)] ?? null,
+          type: str(r.refTipo), description: str(r.refDescri),
+          value: r.refValor ? parseNum(r.refValor) : null,
+          financing_bank: str(r.refBanco), monthly_payment: r.refParcela ? parseNum(r.refParcela) : null,
+        })), errors)
+      })(),
+      // Employee sub-tables
+      upsertBatch(svc, 'employee_salaries',
+        (rawTables['tbfuncionarioSalario'] ?? []).filter(r => r.salID).map(r => ({
+          dealership_id: D, external_id: String(r.salID),
+          employee_external_id: r.funID ? String(r.funID) : null,
+          employee_id: r.funID ? (employeeIdByExternal[String(r.funID)] ?? null) : null,
+          date: parseDate(r.salData), amount: r.salValor ? parseNum(r.salValor) : null,
+          type: str(r.salTipo) ?? str(r.salDescri), description: str(r.salDescri ?? r.salObservacoes),
+        })), 'dealership_id,external_id', errors),
+      upsertBatch(svc, 'commission_standards',
+        (rawTables['tbComissaoPadrao'] ?? []).filter(r => r.cpaID).map(r => ({
+          dealership_id: D, external_id: String(r.cpaID),
+          employee_external_id: r.funID ? String(r.funID) : null,
+          employee_id: r.funID ? (employeeIdByExternal[String(r.funID)] ?? null) : null,
+          percent: r.cpaPercentual ? parseNum(r.cpaPercentual) : null,
+          min_value: r.cpaValorMin ? parseNum(r.cpaValorMin) : null,
+          max_value: r.cpaValorMax ? parseNum(r.cpaValorMax) : null, type: str(r.cpaTipo),
+        })), 'dealership_id,external_id', errors),
+      // Purchase & sale
+      upsertBatch(svc, 'purchase_data',
+        (rawTables['tbDadosCompra'] ?? []).filter(r => r.carID).map(r => ({
+          dealership_id: D, vehicle_external_id: String(r.carID),
+          vehicle_id: vehicleIdByExternal[String(r.carID)] ?? null,
+          purchase_date: parseDate(r.cData), mileage: r.cKM ? Math.round(parseNum(r.cKM)) : null,
+          purchase_price: r.cValor ? parseNum(r.cValor) : null,
+          supplier_external_id: r.forID ? String(r.forID) : null,
+          payment_method: str(r.cFormaPagamento), notes: str(r.cObservacoes ?? r.cObs, 1000),
+        })), 'dealership_id,vehicle_external_id', errors),
+      upsertBatch(svc, 'sale_data',
+        (rawTables['tbDadosVenda'] ?? []).filter(r => r.carID).map(r => ({
+          dealership_id: D, vehicle_external_id: String(r.carID),
+          vehicle_id: vehicleIdByExternal[String(r.carID)] ?? null,
+          sale_date: parseDate(r.vData), mileage: r.vKM ? Math.round(parseNum(r.vKM)) : null,
+          sale_price: r.vValorVenda ? parseNum(r.vValorVenda) : null,
+          customer_external_id: r.cliID ? String(r.cliID) : null,
+          customer_id: r.cliID ? (customerIdByExternal[String(r.cliID)] ?? null) : null,
+          payment_method: str(r.vFormaPagamento), notes: str(r.vObservacoes ?? r.vObs, 1000),
+        })), 'dealership_id,vehicle_external_id', errors),
+      // Expenses
+      (async () => {
+        const mappedExpenses = mdbData.expenseRows
+          .map(r => mapExpenseRow(r, D, vehicleIdByExternal))
+          .filter((r): r is Record<string, any> => r !== null)
+        const withId = mappedExpenses.filter(e => e.external_id)
+        const withoutId = mappedExpenses.filter(e => !e.external_id)
+        let expCount = await upsertBatch(svc, 'expenses', withId, 'dealership_id,external_id', errors)
+        if (withoutId.length > 0) {
+          const { count } = await svc.from('expenses').select('id', { count: 'exact', head: true }).eq('dealership_id', D)
+          if ((count ?? 0) === 0) expCount += await insertBatch(svc, 'expenses', withoutId, errors)
+        }
+        return expCount
+      })(),
+      // Vehicle-linked tables
+      upsertBatch(svc, 'vehicle_fines',
+        (rawTables['tbVeiculoMulta'] ?? []).filter(r => r.mulID).map(r => ({
+          dealership_id: D, external_id: String(r.mulID),
+          vehicle_external_id: r.carID ? String(r.carID) : null,
+          vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
+          date: parseDate(r.mulData), description: str(r.mulDescri),
+          amount: r.mulValor ? parseNum(r.mulValor) : null,
+          issuing_agency: str(r.mulOrgao), infraction_code: str(r.mulCodigo),
+          is_paid: !!r.mulPago, paid_date: parseDate(r.mulDataPagamento),
+          notes: str(r.mulObservacoes ?? r.mulObs, 1000),
+        })), 'dealership_id,external_id', errors),
+      upsertBatch(svc, 'vehicle_documents',
+        (rawTables['tbVeiculoDocumento'] ?? []).filter(r => r.docID).map(r => ({
+          dealership_id: D, external_id: String(r.docID),
+          vehicle_external_id: r.carID ? String(r.carID) : null,
+          vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
+          type: str(r.docTipo), number: str(r.docNumero),
+          issue_date: parseDate(r.docData), expiry_date: parseDate(r.docValidade),
+          file_url: str(r.docArquivo), notes: str(r.docObservacoes ?? r.docObs, 1000),
+        })), 'dealership_id,external_id', errors),
+      upsertBatch(svc, 'vehicle_purchase_documents',
+        (rawTables['tbVeiculoDocumentoCompra'] ?? []).filter(r => r.dcoID).map(r => ({
+          dealership_id: D, external_id: String(r.dcoID),
+          vehicle_external_id: r.carID ? String(r.carID) : null,
+          vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
+          type: str(r.dcoTipo), number: str(r.dcoNumero), issue_date: parseDate(r.dcoData),
+          amount: r.dcoValor ? parseNum(r.dcoValor) : null, file_url: str(r.dcoArquivo),
+          notes: str(r.dcoObservacoes ?? r.dcoObs, 1000),
+        })), 'dealership_id,external_id', errors),
+      upsertBatch(svc, 'vehicle_optionals',
+        (rawTables['tbVeiculoOpcionais'] ?? []).filter(r => r.carID && r.voID).map(r => ({
+          dealership_id: D, external_id: String(r.voID),
+          vehicle_external_id: String(r.carID),
+          vehicle_id: vehicleIdByExternal[String(r.carID)] ?? null,
+          optional_external_id: r.opcID ? String(r.opcID) : null,
+          name: str(r.voDescri) ?? str(r.opcDescri),
+        })), 'dealership_id,external_id', errors),
+      upsertBatch(svc, 'vehicle_pendencies',
+        (rawTables['tbVeiculoPendencia'] ?? []).filter(r => r.vpnID).map(r => ({
+          dealership_id: D, external_id: String(r.vpnID),
+          vehicle_external_id: r.carID ? String(r.carID) : null,
+          vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
+          standard_pendency_external_id: r.ppnID ? String(r.ppnID) : null,
+          description: str(r.vpnDescri), status: str(r.vpnStatus) ?? 'pending',
+          date: parseDate(r.vpnData), amount: r.vpnValor ? parseNum(r.vpnValor) : null,
+          resolved_date: parseDate(r.vpnDataResolucao ?? r.vpnDataFim),
+          notes: str(r.vpnObservacoes ?? r.vpnObs, 1000),
+        })), 'dealership_id,external_id', errors),
+      upsertBatch(svc, 'vehicle_delivery_protocols',
+        (rawTables['tbVeiculoProtocoloEntrega'] ?? []).filter(r => r.proID).map(r => ({
+          dealership_id: D, external_id: String(r.proID),
+          vehicle_external_id: r.carID ? String(r.carID) : null,
+          vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
+          customer_external_id: r.cliID ? String(r.cliID) : null,
+          customer_id: r.cliID ? (customerIdByExternal[String(r.cliID)] ?? null) : null,
+          delivery_date: parseDate(r.proData), mileage: r.proKM ? Math.round(parseNum(r.proKM)) : null,
+          fuel_level: str(r.proNivelCombustivel ?? r.proCombustivel),
+          description: str(r.proDescri, 2000), signature_url: str(r.proAssinatura),
+          notes: str(r.proObservacoes ?? r.proObs, 1000),
+        })), 'dealership_id,external_id', errors),
+      upsertBatch(svc, 'vehicle_trades',
+        (rawTables['tbveiculoTroca'] ?? []).filter(r => r.trcID).map(r => ({
+          dealership_id: D, external_id: String(r.trcID),
+          incoming_vehicle_external_id: r.carID ? String(r.carID) : null,
+          incoming_vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
+          outgoing_vehicle_external_id: r.carIDEntregue ? String(r.carIDEntregue) : null,
+          outgoing_vehicle_id: r.carIDEntregue ? (vehicleIdByExternal[String(r.carIDEntregue)] ?? null) : null,
+          customer_external_id: r.cliID ? String(r.cliID) : null,
+          customer_id: r.cliID ? (customerIdByExternal[String(r.cliID)] ?? null) : null,
+          trade_date: parseDate(r.trcData),
+          trade_in_value: r.trcValorEntrada ? parseNum(r.trcValorEntrada) : null,
+          difference_amount: r.trcDiferenca ? parseNum(r.trcDiferenca) : null,
+          notes: str(r.trcObservacoes ?? r.trcObs, 1000),
+        })), 'dealership_id,external_id', errors),
+      upsertBatch(svc, 'vehicle_apportionment',
+        (rawTables['tbRateioVeiculo'] ?? []).filter(r => r.ratID).map(r => ({
+          dealership_id: D, external_id: String(r.ratID),
+          vehicle_external_id: r.carID ? String(r.carID) : null,
+          vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
+          plan_account_external_id: r.plaID ? String(r.plaID) : null,
+          amount: r.ratValor ? parseNum(r.ratValor) : null, date: parseDate(r.ratData),
+          description: str(r.ratDescri, 1000),
+        })), 'dealership_id,external_id', errors),
+      upsertBatch(svc, 'post_sale_expenses',
+        (rawTables['tbDespesaPosVenda'] ?? []).filter(r => r.dpvID).map(r => ({
+          dealership_id: D, external_id: String(r.dpvID),
+          vehicle_external_id: r.carID ? String(r.carID) : null,
+          vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
+          description: str(r.dpvDescri), amount: r.dpvValor ? parseNum(r.dpvValor) : null,
+          date: parseDate(r.dpvData), plan_account_external_id: r.plaID ? String(r.plaID) : null,
+        })), 'dealership_id,external_id', errors),
+      // Financings & Insurances
+      upsertBatch(svc, 'financings',
+        (rawTables['tbFinanciamento'] ?? []).filter(r => r.finID).map(r => ({
+          dealership_id: D, external_id: String(r.finID),
+          vehicle_external_id: r.carID ? String(r.carID) : null,
+          vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
+          customer_external_id: r.cliID ? String(r.cliID) : null,
+          customer_id: r.cliID ? (customerIdByExternal[String(r.cliID)] ?? null) : null,
+          bank: str(r.finBanco), total_amount: r.finValor ? parseNum(r.finValor) : null,
+          installments: r.finParcelas ? parseInt(String(r.finParcelas)) : null,
+          interest_rate: r.finTaxa ? parseNum(r.finTaxa) : null,
+          installment_amount: r.finValorParcela ? parseNum(r.finValorParcela) : null,
+          down_payment: r.finEntrada ? parseNum(r.finEntrada) : null,
+          start_date: parseDate(r.finData), contract_number: str(r.finContrato),
+          notes: str(r.finObservacoes ?? r.finObs, 1000),
+        })), 'dealership_id,external_id', errors),
+      upsertBatch(svc, 'insurances',
+        (rawTables['tbSeguro'] ?? []).filter(r => r.segID).map(r => ({
+          dealership_id: D, external_id: String(r.segID),
+          vehicle_external_id: r.carID ? String(r.carID) : null,
+          vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
+          customer_external_id: r.cliID ? String(r.cliID) : null,
+          customer_id: r.cliID ? (customerIdByExternal[String(r.cliID)] ?? null) : null,
+          insurer: str(r.segEmpresa), policy_number: str(r.segApolice),
+          insured_value: r.segValor ? parseNum(r.segValor) : null,
+          premium: r.segPremio ? parseNum(r.segPremio) : null,
+          start_date: parseDate(r.segDataInicio), end_date: parseDate(r.segDataFim),
+          coverage_type: str(r.segTipoCobertura), notes: str(r.segObservacoes ?? r.segObs, 1000),
+        })), 'dealership_id,external_id', errors),
+      // Commissions
+      upsertBatch(svc, 'commissions',
+        (rawTables['tbComissao'] ?? []).filter(r => r.comID).map(r => ({
+          dealership_id: D, external_id: String(r.comID),
+          vehicle_external_id: r.carID ? String(r.carID) : null,
+          vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
+          employee_external_id: r.funID ? String(r.funID) : null,
+          employee_id: r.funID ? (employeeIdByExternal[String(r.funID)] ?? null) : null,
+          amount: r.comValor ? parseNum(r.comValor) : null,
+          percent: r.comPercentual ? parseNum(r.comPercentual) : null,
+          date: parseDate(r.comData), paid_date: parseDate(r.comDataPagamento),
+          is_paid: !!r.comPago, notes: str(r.comObservacoes ?? r.comObs, 1000),
+        })), 'dealership_id,external_id', errors),
+      // Orders + followups (sequential within: need order UUIDs first)
+      (async () => {
+        const ordersCount = await upsertBatch(svc, 'orders',
+          (rawTables['tbPedidosClientes'] ?? []).filter(r => r.pedID).map(r => ({
+            dealership_id: D, external_id: String(r.pedID),
+            customer_external_id: r.cliID ? String(r.cliID) : null,
+            customer_id: r.cliID ? (customerIdByExternal[String(r.cliID)] ?? null) : null,
+            vehicle_external_id: r.carID ? String(r.carID) : null,
+            vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
+            employee_external_id: r.funID ? String(r.funID) : null,
+            employee_id: r.funID ? (employeeIdByExternal[String(r.funID)] ?? null) : null,
+            order_date: parseDate(r.pedData), amount: r.pedValor ? parseNum(r.pedValor) : null,
+            status: str(r.pedStatus) ?? 'open', payment_method: str(r.pedFormaPagamento),
+            down_payment: r.pedEntrada ? parseNum(r.pedEntrada) : null,
+            notes: str(r.pedObservacoes ?? r.pedObs, 1000),
+          })), 'dealership_id,external_id', errors)
+        const { data: ordMap } = await svc.from('orders').select('id, external_id').eq('dealership_id', D).not('external_id', 'is', null)
+        const orderIdByExternal: Record<string, string> = {}
+        ;(ordMap ?? []).forEach((o: any) => { orderIdByExternal[o.external_id] = o.id })
+        const followupsCount = await upsertBatch(svc, 'order_followups',
+          (rawTables['tbPedidosFollowUp'] ?? []).filter(r => r.fupID).map(r => ({
+            dealership_id: D, external_id: String(r.fupID),
+            order_external_id: r.pedID ? String(r.pedID) : null,
+            order_id: r.pedID ? (orderIdByExternal[String(r.pedID)] ?? null) : null,
+            employee_external_id: r.funID ? String(r.funID) : null,
+            employee_id: r.funID ? (employeeIdByExternal[String(r.funID)] ?? null) : null,
+            date: parseDate(r.fupData), description: str(r.fupDescri, 2000),
+            status: str(r.fupStatus), next_contact: parseDate(r.fupProximoContato ?? r.fupDataRetorno),
+          })), 'dealership_id,external_id', errors)
+        return { orders: ordersCount, order_followups: followupsCount }
+      })(),
+      // NFe + sub-tables (sequential within: need nfe_ide UUIDs first)
+      (async () => {
+        const nfeCount = await upsertBatch(svc, 'nfe_ide',
+          (rawTables['tbNFe ide'] ?? []).filter(r => r.nfeID).map(r => ({
+            dealership_id: D, external_id: String(r.nfeID),
+            access_key: str(r.nfeChave ?? r.chNFe),
+            nfe_number: str(r.nNF ?? r.nfeNumero), series: str(r.serie ?? r.nfeSerie),
+            model: str(r.mod ?? r.nfeModelo), issue_date: parseDate(r.dhEmi ?? r.nfeDataEmissao),
+            nature_of_operation: str(r.natOp),
+            operation_type: r.tpNF !== undefined ? parseInt(String(r.tpNF)) : null,
+            total_value: r.vNF ? parseNum(r.vNF) : null, status: str(r.nfeStatus) ?? 'pending',
+            vehicle_external_id: r.carID ? String(r.carID) : null,
+            vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
+          })), 'dealership_id,external_id', errors)
+        const { data: nfeMap } = await svc.from('nfe_ide').select('id, external_id').eq('dealership_id', D).not('external_id', 'is', null)
+        const nfeIdByExternal: Record<string, string> = {}
+        ;(nfeMap ?? []).forEach((n: any) => { nfeIdByExternal[n.external_id] = n.id })
+        const [emitCount, destCount, prodCount] = await Promise.all([
+          upsertBatch(svc, 'nfe_emit',
+            (rawTables['tbNFe emit'] ?? []).filter(r => r.nfeID).map(r => ({
+              dealership_id: D, external_id: str(r.nfeEmitID) ?? `emit-${r.nfeID}`,
+              nfe_external_id: String(r.nfeID), nfe_id: nfeIdByExternal[String(r.nfeID)] ?? null,
+              cnpj: str(r.cnpj ?? r.CNPJ), name: str(r.xNome), trade_name: str(r.xFant),
+              address: str(r.xLgr ?? r.endereco), city: str(r.xMun ?? r.cidade),
+              state: str(r.UF ?? r.estado, 2), zip_code: str(r.CEP),
+              phone: str(r.fone ?? r.telefone), ie: str(r.IE),
+            })), 'dealership_id,external_id', errors),
+          upsertBatch(svc, 'nfe_dest',
+            (rawTables['tbNFe dest'] ?? []).filter(r => r.nfeID).map(r => ({
+              dealership_id: D, external_id: str(r.nfeDestID) ?? `dest-${r.nfeID}`,
+              nfe_external_id: String(r.nfeID), nfe_id: nfeIdByExternal[String(r.nfeID)] ?? null,
+              cpf_cnpj: str(r.CPF ?? r.CNPJ ?? r.cpfCNPJ), name: str(r.xNome),
+              address: str(r.xLgr ?? r.endereco), city: str(r.xMun ?? r.cidade),
+              state: str(r.UF ?? r.estado, 2), zip_code: str(r.CEP),
+              phone: str(r.fone ?? r.telefone), email: str(r.email), ie: str(r.IE),
+            })), 'dealership_id,external_id', errors),
+          upsertBatch(svc, 'nfe_prod',
+            (rawTables['tbNFe prod'] ?? []).filter(r => r.nfeProdID).map(r => ({
+              dealership_id: D, external_id: String(r.nfeProdID),
+              nfe_external_id: r.nfeID ? String(r.nfeID) : null,
+              nfe_id: r.nfeID ? (nfeIdByExternal[String(r.nfeID)] ?? null) : null,
+              product_code: str(r.cProd), ean: str(r.cEAN), description: str(r.xProd),
+              ncm_code: str(r.NCM), cfop: str(r.CFOP), unit: str(r.uCom),
+              quantity: r.qCom ? parseNum(r.qCom) : null,
+              unit_value: r.vUnCom ? parseNum(r.vUnCom) : null,
+              total_value: r.vProd ? parseNum(r.vProd) : null,
+              vehicle_external_id: r.carID ? String(r.carID) : null,
+              vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
+            })), 'dealership_id,external_id', errors),
+        ])
+        return { nfe_ide: nfeCount, nfe_emit: emitCount, nfe_dest: destCount, nfe_prod: prodCount }
+      })(),
+    ])
 
-    counts.sale_data = await upsertBatch(svc, 'sale_data',
-      (rawTables['tbDadosVenda'] ?? []).filter(r => r.carID).map(r => ({
-        dealership_id: D, vehicle_external_id: String(r.carID),
-        vehicle_id: vehicleIdByExternal[String(r.carID)] ?? null,
-        sale_date: parseDate(r.vData), mileage: r.vKM ? Math.round(parseNum(r.vKM)) : null,
-        sale_price: r.vValorVenda ? parseNum(r.vValorVenda) : null,
-        customer_external_id: r.cliID ? String(r.cliID) : null,
-        customer_id: r.cliID ? (customerIdByExternal[String(r.cliID)] ?? null) : null,
-        payment_method: str(r.vFormaPagamento), notes: str(r.vObservacoes ?? r.vObs, 1000),
-      })), 'dealership_id,vehicle_external_id', errors)
-
-    // ── Step 8: Expenses ──────────────────────────────────────────────────────
-
-    const mappedExpenses = mdbData.expenseRows
-      .map(r => mapExpenseRow(r, D, vehicleIdByExternal))
-      .filter((r): r is Record<string, any> => r !== null)
-
-    const withId = mappedExpenses.filter(e => e.external_id)
-    const withoutId = mappedExpenses.filter(e => !e.external_id)
-    counts.expenses = await upsertBatch(svc, 'expenses', withId, 'dealership_id,external_id', errors)
-    if (withoutId.length > 0) {
-      const { count } = await svc.from('expenses').select('id', { count: 'exact', head: true }).eq('dealership_id', D)
-      if ((count ?? 0) === 0) counts.expenses = (counts.expenses ?? 0) + await insertBatch(svc, 'expenses', withoutId, errors)
-    }
-
-    // ── Step 9: Vehicle-linked tables ─────────────────────────────────────────
-
-    counts.vehicle_fines = await upsertBatch(svc, 'vehicle_fines',
-      (rawTables['tbVeiculoMulta'] ?? []).filter(r => r.mulID).map(r => ({
-        dealership_id: D, external_id: String(r.mulID),
-        vehicle_external_id: r.carID ? String(r.carID) : null,
-        vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
-        date: parseDate(r.mulData), description: str(r.mulDescri),
-        amount: r.mulValor ? parseNum(r.mulValor) : null,
-        issuing_agency: str(r.mulOrgao), infraction_code: str(r.mulCodigo),
-        is_paid: !!r.mulPago, paid_date: parseDate(r.mulDataPagamento),
-        notes: str(r.mulObservacoes ?? r.mulObs, 1000),
-      })), 'dealership_id,external_id', errors)
-
-    counts.vehicle_documents = await upsertBatch(svc, 'vehicle_documents',
-      (rawTables['tbVeiculoDocumento'] ?? []).filter(r => r.docID).map(r => ({
-        dealership_id: D, external_id: String(r.docID),
-        vehicle_external_id: r.carID ? String(r.carID) : null,
-        vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
-        type: str(r.docTipo), number: str(r.docNumero),
-        issue_date: parseDate(r.docData), expiry_date: parseDate(r.docValidade),
-        file_url: str(r.docArquivo), notes: str(r.docObservacoes ?? r.docObs, 1000),
-      })), 'dealership_id,external_id', errors)
-
-    counts.vehicle_purchase_documents = await upsertBatch(svc, 'vehicle_purchase_documents',
-      (rawTables['tbVeiculoDocumentoCompra'] ?? []).filter(r => r.dcoID).map(r => ({
-        dealership_id: D, external_id: String(r.dcoID),
-        vehicle_external_id: r.carID ? String(r.carID) : null,
-        vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
-        type: str(r.dcoTipo), number: str(r.dcoNumero), issue_date: parseDate(r.dcoData),
-        amount: r.dcoValor ? parseNum(r.dcoValor) : null, file_url: str(r.dcoArquivo),
-        notes: str(r.dcoObservacoes ?? r.dcoObs, 1000),
-      })), 'dealership_id,external_id', errors)
-
-    counts.vehicle_optionals = await upsertBatch(svc, 'vehicle_optionals',
-      (rawTables['tbVeiculoOpcionais'] ?? []).filter(r => r.carID && r.voID).map(r => ({
-        dealership_id: D, external_id: String(r.voID),
-        vehicle_external_id: String(r.carID),
-        vehicle_id: vehicleIdByExternal[String(r.carID)] ?? null,
-        optional_external_id: r.opcID ? String(r.opcID) : null,
-        name: str(r.voDescri) ?? str(r.opcDescri),
-      })), 'dealership_id,external_id', errors)
-
-    counts.vehicle_pendencies = await upsertBatch(svc, 'vehicle_pendencies',
-      (rawTables['tbVeiculoPendencia'] ?? []).filter(r => r.vpnID).map(r => ({
-        dealership_id: D, external_id: String(r.vpnID),
-        vehicle_external_id: r.carID ? String(r.carID) : null,
-        vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
-        standard_pendency_external_id: r.ppnID ? String(r.ppnID) : null,
-        description: str(r.vpnDescri), status: str(r.vpnStatus) ?? 'pending',
-        date: parseDate(r.vpnData), amount: r.vpnValor ? parseNum(r.vpnValor) : null,
-        resolved_date: parseDate(r.vpnDataResolucao ?? r.vpnDataFim),
-        notes: str(r.vpnObservacoes ?? r.vpnObs, 1000),
-      })), 'dealership_id,external_id', errors)
-
-    counts.vehicle_delivery_protocols = await upsertBatch(svc, 'vehicle_delivery_protocols',
-      (rawTables['tbVeiculoProtocoloEntrega'] ?? []).filter(r => r.proID).map(r => ({
-        dealership_id: D, external_id: String(r.proID),
-        vehicle_external_id: r.carID ? String(r.carID) : null,
-        vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
-        customer_external_id: r.cliID ? String(r.cliID) : null,
-        customer_id: r.cliID ? (customerIdByExternal[String(r.cliID)] ?? null) : null,
-        delivery_date: parseDate(r.proData), mileage: r.proKM ? Math.round(parseNum(r.proKM)) : null,
-        fuel_level: str(r.proNivelCombustivel ?? r.proCombustivel),
-        description: str(r.proDescri, 2000), signature_url: str(r.proAssinatura),
-        notes: str(r.proObservacoes ?? r.proObs, 1000),
-      })), 'dealership_id,external_id', errors)
-
-    counts.vehicle_trades = await upsertBatch(svc, 'vehicle_trades',
-      (rawTables['tbveiculoTroca'] ?? []).filter(r => r.trcID).map(r => ({
-        dealership_id: D, external_id: String(r.trcID),
-        incoming_vehicle_external_id: r.carID ? String(r.carID) : null,
-        incoming_vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
-        outgoing_vehicle_external_id: r.carIDEntregue ? String(r.carIDEntregue) : null,
-        outgoing_vehicle_id: r.carIDEntregue ? (vehicleIdByExternal[String(r.carIDEntregue)] ?? null) : null,
-        customer_external_id: r.cliID ? String(r.cliID) : null,
-        customer_id: r.cliID ? (customerIdByExternal[String(r.cliID)] ?? null) : null,
-        trade_date: parseDate(r.trcData),
-        trade_in_value: r.trcValorEntrada ? parseNum(r.trcValorEntrada) : null,
-        difference_amount: r.trcDiferenca ? parseNum(r.trcDiferenca) : null,
-        notes: str(r.trcObservacoes ?? r.trcObs, 1000),
-      })), 'dealership_id,external_id', errors)
-
-    counts.vehicle_apportionment = await upsertBatch(svc, 'vehicle_apportionment',
-      (rawTables['tbRateioVeiculo'] ?? []).filter(r => r.ratID).map(r => ({
-        dealership_id: D, external_id: String(r.ratID),
-        vehicle_external_id: r.carID ? String(r.carID) : null,
-        vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
-        plan_account_external_id: r.plaID ? String(r.plaID) : null,
-        amount: r.ratValor ? parseNum(r.ratValor) : null, date: parseDate(r.ratData),
-        description: str(r.ratDescri, 1000),
-      })), 'dealership_id,external_id', errors)
-
-    counts.post_sale_expenses = await upsertBatch(svc, 'post_sale_expenses',
-      (rawTables['tbDespesaPosVenda'] ?? []).filter(r => r.dpvID).map(r => ({
-        dealership_id: D, external_id: String(r.dpvID),
-        vehicle_external_id: r.carID ? String(r.carID) : null,
-        vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
-        description: str(r.dpvDescri), amount: r.dpvValor ? parseNum(r.dpvValor) : null,
-        date: parseDate(r.dpvData), plan_account_external_id: r.plaID ? String(r.plaID) : null,
-      })), 'dealership_id,external_id', errors)
-
-    // ── Step 10: Financings & Insurances ──────────────────────────────────────
-
-    counts.financings = await upsertBatch(svc, 'financings',
-      (rawTables['tbFinanciamento'] ?? []).filter(r => r.finID).map(r => ({
-        dealership_id: D, external_id: String(r.finID),
-        vehicle_external_id: r.carID ? String(r.carID) : null,
-        vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
-        customer_external_id: r.cliID ? String(r.cliID) : null,
-        customer_id: r.cliID ? (customerIdByExternal[String(r.cliID)] ?? null) : null,
-        bank: str(r.finBanco), total_amount: r.finValor ? parseNum(r.finValor) : null,
-        installments: r.finParcelas ? parseInt(String(r.finParcelas)) : null,
-        interest_rate: r.finTaxa ? parseNum(r.finTaxa) : null,
-        installment_amount: r.finValorParcela ? parseNum(r.finValorParcela) : null,
-        down_payment: r.finEntrada ? parseNum(r.finEntrada) : null,
-        start_date: parseDate(r.finData), contract_number: str(r.finContrato),
-        notes: str(r.finObservacoes ?? r.finObs, 1000),
-      })), 'dealership_id,external_id', errors)
-
-    counts.insurances = await upsertBatch(svc, 'insurances',
-      (rawTables['tbSeguro'] ?? []).filter(r => r.segID).map(r => ({
-        dealership_id: D, external_id: String(r.segID),
-        vehicle_external_id: r.carID ? String(r.carID) : null,
-        vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
-        customer_external_id: r.cliID ? String(r.cliID) : null,
-        customer_id: r.cliID ? (customerIdByExternal[String(r.cliID)] ?? null) : null,
-        insurer: str(r.segEmpresa), policy_number: str(r.segApolice),
-        insured_value: r.segValor ? parseNum(r.segValor) : null,
-        premium: r.segPremio ? parseNum(r.segPremio) : null,
-        start_date: parseDate(r.segDataInicio), end_date: parseDate(r.segDataFim),
-        coverage_type: str(r.segTipoCobertura), notes: str(r.segObservacoes ?? r.segObs, 1000),
-      })), 'dealership_id,external_id', errors)
-
-    // ── Step 11: Commissions ──────────────────────────────────────────────────
-
-    counts.commissions = await upsertBatch(svc, 'commissions',
-      (rawTables['tbComissao'] ?? []).filter(r => r.comID).map(r => ({
-        dealership_id: D, external_id: String(r.comID),
-        vehicle_external_id: r.carID ? String(r.carID) : null,
-        vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
-        employee_external_id: r.funID ? String(r.funID) : null,
-        employee_id: r.funID ? (employeeIdByExternal[String(r.funID)] ?? null) : null,
-        amount: r.comValor ? parseNum(r.comValor) : null,
-        percent: r.comPercentual ? parseNum(r.comPercentual) : null,
-        date: parseDate(r.comData), paid_date: parseDate(r.comDataPagamento),
-        is_paid: !!r.comPago, notes: str(r.comObservacoes ?? r.comObs, 1000),
-      })), 'dealership_id,external_id', errors)
-
-    // ── Step 12: Orders & follow-ups ──────────────────────────────────────────
-
-    counts.orders = await upsertBatch(svc, 'orders',
-      (rawTables['tbPedidosClientes'] ?? []).filter(r => r.pedID).map(r => ({
-        dealership_id: D, external_id: String(r.pedID),
-        customer_external_id: r.cliID ? String(r.cliID) : null,
-        customer_id: r.cliID ? (customerIdByExternal[String(r.cliID)] ?? null) : null,
-        vehicle_external_id: r.carID ? String(r.carID) : null,
-        vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
-        employee_external_id: r.funID ? String(r.funID) : null,
-        employee_id: r.funID ? (employeeIdByExternal[String(r.funID)] ?? null) : null,
-        order_date: parseDate(r.pedData), amount: r.pedValor ? parseNum(r.pedValor) : null,
-        status: str(r.pedStatus) ?? 'open', payment_method: str(r.pedFormaPagamento),
-        down_payment: r.pedEntrada ? parseNum(r.pedEntrada) : null,
-        notes: str(r.pedObservacoes ?? r.pedObs, 1000),
-      })), 'dealership_id,external_id', errors)
-
-    const { data: ordMap } = await svc.from('orders').select('id, external_id').eq('dealership_id', D).not('external_id', 'is', null)
-    const orderIdByExternal: Record<string, string> = {}
-    ;(ordMap ?? []).forEach((o: any) => { orderIdByExternal[o.external_id] = o.id })
-
-    counts.order_followups = await upsertBatch(svc, 'order_followups',
-      (rawTables['tbPedidosFollowUp'] ?? []).filter(r => r.fupID).map(r => ({
-        dealership_id: D, external_id: String(r.fupID),
-        order_external_id: r.pedID ? String(r.pedID) : null,
-        order_id: r.pedID ? (orderIdByExternal[String(r.pedID)] ?? null) : null,
-        employee_external_id: r.funID ? String(r.funID) : null,
-        employee_id: r.funID ? (employeeIdByExternal[String(r.funID)] ?? null) : null,
-        date: parseDate(r.fupData), description: str(r.fupDescri, 2000),
-        status: str(r.fupStatus), next_contact: parseDate(r.fupProximoContato ?? r.fupDataRetorno),
-      })), 'dealership_id,external_id', errors)
-
-    // ── Step 13: NFe fiscal data ──────────────────────────────────────────────
-
-    counts.nfe_ide = await upsertBatch(svc, 'nfe_ide',
-      (rawTables['tbNFe ide'] ?? []).filter(r => r.nfeID).map(r => ({
-        dealership_id: D, external_id: String(r.nfeID),
-        access_key: str(r.nfeChave ?? r.chNFe),
-        nfe_number: str(r.nNF ?? r.nfeNumero), series: str(r.serie ?? r.nfeSerie),
-        model: str(r.mod ?? r.nfeModelo), issue_date: parseDate(r.dhEmi ?? r.nfeDataEmissao),
-        nature_of_operation: str(r.natOp),
-        operation_type: r.tpNF !== undefined ? parseInt(String(r.tpNF)) : null,
-        total_value: r.vNF ? parseNum(r.vNF) : null, status: str(r.nfeStatus) ?? 'pending',
-        vehicle_external_id: r.carID ? String(r.carID) : null,
-        vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
-      })), 'dealership_id,external_id', errors)
-
-    const { data: nfeMap } = await svc.from('nfe_ide').select('id, external_id').eq('dealership_id', D).not('external_id', 'is', null)
-    const nfeIdByExternal: Record<string, string> = {}
-    ;(nfeMap ?? []).forEach((n: any) => { nfeIdByExternal[n.external_id] = n.id })
-
-    counts.nfe_emit = await upsertBatch(svc, 'nfe_emit',
-      (rawTables['tbNFe emit'] ?? []).filter(r => r.nfeID).map(r => ({
-        dealership_id: D, external_id: str(r.nfeEmitID) ?? `emit-${r.nfeID}`,
-        nfe_external_id: String(r.nfeID), nfe_id: nfeIdByExternal[String(r.nfeID)] ?? null,
-        cnpj: str(r.cnpj ?? r.CNPJ), name: str(r.xNome), trade_name: str(r.xFant),
-        address: str(r.xLgr ?? r.endereco), city: str(r.xMun ?? r.cidade),
-        state: str(r.UF ?? r.estado, 2), zip_code: str(r.CEP),
-        phone: str(r.fone ?? r.telefone), ie: str(r.IE),
-      })), 'dealership_id,external_id', errors)
-
-    counts.nfe_dest = await upsertBatch(svc, 'nfe_dest',
-      (rawTables['tbNFe dest'] ?? []).filter(r => r.nfeID).map(r => ({
-        dealership_id: D, external_id: str(r.nfeDestID) ?? `dest-${r.nfeID}`,
-        nfe_external_id: String(r.nfeID), nfe_id: nfeIdByExternal[String(r.nfeID)] ?? null,
-        cpf_cnpj: str(r.CPF ?? r.CNPJ ?? r.cpfCNPJ), name: str(r.xNome),
-        address: str(r.xLgr ?? r.endereco), city: str(r.xMun ?? r.cidade),
-        state: str(r.UF ?? r.estado, 2), zip_code: str(r.CEP),
-        phone: str(r.fone ?? r.telefone), email: str(r.email), ie: str(r.IE),
-      })), 'dealership_id,external_id', errors)
-
-    counts.nfe_prod = await upsertBatch(svc, 'nfe_prod',
-      (rawTables['tbNFe prod'] ?? []).filter(r => r.nfeProdID).map(r => ({
-        dealership_id: D, external_id: String(r.nfeProdID),
-        nfe_external_id: r.nfeID ? String(r.nfeID) : null,
-        nfe_id: r.nfeID ? (nfeIdByExternal[String(r.nfeID)] ?? null) : null,
-        product_code: str(r.cProd), ean: str(r.cEAN), description: str(r.xProd),
-        ncm_code: str(r.NCM), cfop: str(r.CFOP), unit: str(r.uCom),
-        quantity: r.qCom ? parseNum(r.qCom) : null,
-        unit_value: r.vUnCom ? parseNum(r.vUnCom) : null,
-        total_value: r.vProd ? parseNum(r.vProd) : null,
-        vehicle_external_id: r.carID ? String(r.carID) : null,
-        vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
-      })), 'dealership_id,external_id', errors)
+    counts.customer_complements = phD_custCompl
+    counts.customer_commercial_data = phD_custComm
+    counts.customer_asset_references = phD_custAsset
+    counts.employee_salaries = phD_empSal
+    counts.commission_standards = phD_commStd
+    counts.purchase_data = phD_purchase
+    counts.sale_data = phD_sale
+    counts.expenses = phD_exp
+    counts.vehicle_fines = phD_fines
+    counts.vehicle_documents = phD_docs
+    counts.vehicle_purchase_documents = phD_purchDocs
+    counts.vehicle_optionals = phD_opts
+    counts.vehicle_pendencies = phD_pend
+    counts.vehicle_delivery_protocols = phD_deliv
+    counts.vehicle_trades = phD_trades
+    counts.vehicle_apportionment = phD_apportion
+    counts.post_sale_expenses = phD_postSale
+    counts.financings = phD_fin
+    counts.insurances = phD_ins
+    counts.commissions = phD_comm
+    counts.orders = (phD_orders as any).orders
+    counts.order_followups = (phD_orders as any).order_followups
+    counts.nfe_ide = (phD_nfe as any).nfe_ide
+    counts.nfe_emit = (phD_nfe as any).nfe_emit
+    counts.nfe_dest = (phD_nfe as any).nfe_dest
+    counts.nfe_prod = (phD_nfe as any).nfe_prod
 
     try { await svc.rpc('refresh_days_in_stock', { d_id: D }) } catch { /* optional */ }
 
