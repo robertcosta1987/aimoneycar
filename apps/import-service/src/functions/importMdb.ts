@@ -231,6 +231,8 @@ async function importMdbHandler(req: HttpRequest, ctx: InvocationContext): Promi
   const origin = req.headers.get('origin') ?? ''
   const cors = corsHeaders(origin)
 
+  ctx.log(`importMdb invoked: method=${req.method} content-length=${req.headers.get('content-length')} origin=${origin}`)
+
   if (req.method === 'OPTIONS') return { status: 204, headers: cors }
 
   try {
