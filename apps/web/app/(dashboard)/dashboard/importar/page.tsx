@@ -107,19 +107,28 @@ export default function ImportarPage() {
         setProgress(65)
         setState('processing')
         setStatusLabel('Processando no servidor...')
-        const triggerRes = await fetch(azureUrl, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ storagePath, filename: file.name }),
-        })
-        if (!triggerRes.ok) {
-          const err = await triggerRes.json().catch(() => ({ error: `HTTP ${triggerRes.status}` }))
-          throw new Error(err.error ?? `HTTP ${triggerRes.status}`)
+        let triggerRes: Response | null = null
+        for (let attempt = 0; attempt < 4; attempt++) {
+          if (attempt > 0) await new Promise(r => setTimeout(r, 1500 * attempt))
+          try {
+            triggerRes = await fetch(azureUrl, {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${session.access_token}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ storagePath, filename: file.name }),
+            })
+            break
+          } catch (fetchErr) {
+            if (attempt === 3) throw new Error('Não foi possível contactar o servidor após várias tentativas. Verifique sua conexão e tente novamente.')
+          }
         }
-        const { import_id: importId } = await triggerRes.json()
+        if (!triggerRes!.ok) {
+          const err = await triggerRes!.json().catch(() => ({ error: `HTTP ${triggerRes!.status}` }))
+          throw new Error(err.error ?? `HTTP ${triggerRes!.status}`)
+        }
+        const { import_id: importId } = await triggerRes!.json()
 
         // Step 4: poll /api/import-status until complete or error
         const STAGE_LABELS: Record<string, string> = {
