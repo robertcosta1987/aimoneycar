@@ -1,14 +1,10 @@
 import { app, output, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions'
 import { BlobServiceClient } from '@azure/storage-blob'
 import { createClient } from '@supabase/supabase-js'
-import { execFile } from 'child_process'
-import { promisify } from 'util'
 import { unlink } from 'fs/promises'
 import { join } from 'path'
 import { tmpdir } from 'os'
-import { parse as csvParse } from 'csv-parse/sync'
-
-const execFileAsync = promisify(execFile)
+import MDBReader from 'mdb-reader'
 
 // ─── Supabase service client (lazy — env vars not available at module load time) ─
 
@@ -63,34 +59,21 @@ function str(v: any, max = 255): string | null {
   return String(v).trim().slice(0, max) || null
 }
 
-// ─── MDB parser (mdbtools) ────────────────────────────────────────────────────
+// ─── MDB parser ──────────────────────────────────────────────────────────────
 
-async function mdbExportTable(mdbPath: string, tableName: string): Promise<Record<string, any>[]> {
-  try {
-    const { stdout } = await execFileAsync('mdb-export', [
-      '-D', '%Y-%m-%d',          // date → ISO
-      '-T', '%Y-%m-%d %H:%M:%S', // datetime → ISO
-      '-b', 'strip',             // drop binary blobs
-      mdbPath, tableName,
-    ], { maxBuffer: 512 * 1024 * 1024 }) // 512 MB ceiling per table
-    if (!stdout.trim()) return []
-    return csvParse(stdout, { columns: true, skip_empty_lines: true, relax_quotes: true, cast: false }) as Record<string, any>[]
-  } catch {
-    return []
-  }
-}
+async function parseMDB(buffer: Buffer) {
+  const reader = new MDBReader(buffer)
+  const tableNames = reader.getTableNames()
 
-async function parseMDB(mdbPath: string) {
-  const { stdout: tablesOut } = await execFileAsync('mdb-tables', ['-1', mdbPath])
-  const tableNames = tablesOut.trim().split('\n').filter(Boolean)
   const tableSet = new Set(tableNames)
-
   const tableCache: Record<string, Record<string, any>[]> = {}
+  const yield_ = () => new Promise<void>(resolve => setImmediate(resolve))
 
   const t = async (name: string): Promise<Record<string, any>[]> => {
     if (!(name in tableCache)) {
       if (!tableSet.has(name)) return (tableCache[name] = [])
-      tableCache[name] = await mdbExportTable(mdbPath, name)
+      await yield_() // yield to event loop between table loads
+      try { tableCache[name] = reader.getTable(name).getData() as Record<string, any>[] } catch { tableCache[name] = [] }
     }
     return tableCache[name]
   }
@@ -338,33 +321,31 @@ async function processImportInBackground(
   const counts: Record<string, number> = {}
 
   // Download from Azure Blob Storage (same region as this Function → fast)
-  const tmpPath = join(tmpdir(), `${importId}.mdb`)
+  let buffer: Buffer
   try {
     const connStr = process.env.AzureWebJobsStorage!
     const container = process.env.AZURE_BLOB_CONTAINER ?? 'mdb-imports'
     const blobClient = BlobServiceClient.fromConnectionString(connStr)
       .getContainerClient(container)
       .getBlockBlobClient(storagePath)
-    const props = await blobClient.getProperties()
-    await blobClient.downloadToFile(tmpPath)
-    ctx.log(`Downloaded OK: ${((props.contentLength ?? 0) / 1024 / 1024).toFixed(1)} MB → ${tmpPath}`)
-    await getSvc().from('imports').update({ file_size: props.contentLength ?? 0, status: 'parsing' }).eq('id', importId)
+    buffer = await blobClient.downloadToBuffer()
+    ctx.log(`Downloaded OK: ${(buffer.length / 1024 / 1024).toFixed(1)} MB`)
+    await getSvc().from('imports').update({ file_size: buffer.length, status: 'parsing' }).eq('id', importId)
   } catch (e: any) {
     const msg = e?.message ?? 'Download failed'
     ctx.log(`Download error: ${msg}`)
     await getSvc().from('imports').update({ status: 'error', errors: [msg], completed_at: new Date().toISOString() }).eq('id', importId)
-    await unlink(tmpPath).catch(() => {})
     return
   }
 
-  // Parse MDB via mdbtools (native C — streams each table from disk, no 500MB V8 heap spike)
+  // Parse MDB (async with setImmediate yields to keep event loop responsive)
   let mdbData: Awaited<ReturnType<typeof parseMDB>>
   try {
-    mdbData = await parseMDB(tmpPath)
+    mdbData = await parseMDB(buffer)
+    ;(buffer as any) = null // free the 544MB buffer after parsing
   } catch (e: any) {
     errors.push(`Parse error: ${e.message}`)
     await getSvc().from('imports').update({ status: 'error', errors, completed_at: new Date().toISOString() }).eq('id', importId)
-    await unlink(tmpPath).catch(() => {})
     return
   }
 
@@ -885,7 +866,6 @@ async function processImportInBackground(
   counts.nfe_prod = (phD_nfe as any).nfe_prod
 
   try { await getSvc().rpc('refresh_days_in_stock', { d_id: D }) } catch { /* non-critical */ }
-  await unlink(tmpPath).catch(() => {}) // clean up temp MDB file
   try {
     const connStr = process.env.AzureWebJobsStorage!
     const container = process.env.AZURE_BLOB_CONTAINER ?? 'mdb-imports'
