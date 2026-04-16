@@ -1,0 +1,25 @@
+{
+  "name": "@moneycar/import-service",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/src/functions/importMdb.js",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "start": "npm run build && func start",
+    "dev": "npm run build && func start"
+  },
+  "dependencies": {
+    "@azure/functions": "^4.5.0",
+    "@azure/storage-blob": "^12.26.0",
+    "@supabase/supabase-js": "^2.45.0",
+    "csv-parse": "^5.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

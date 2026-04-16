@@ -1,6 +1,14 @@
-import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions'
+import { app, output, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions'
+import { BlobServiceClient } from '@azure/storage-blob'
 import { createClient } from '@supabase/supabase-js'
-import MDBReader from 'mdb-reader'
+import { execFile } from 'child_process'
+import { promisify } from 'util'
+import { unlink } from 'fs/promises'
+import { join } from 'path'
+import { tmpdir } from 'os'
+import { parse as csvParse } from 'csv-parse/sync'
+
+const execFileAsync = promisify(execFile)
 
 // ─── Supabase service client (lazy — env vars not available at module load time) ─
 
@@ -55,36 +63,55 @@ function str(v: any, max = 255): string | null {
   return String(v).trim().slice(0, max) || null
 }
 
-// ─── MDB parser ──────────────────────────────────────────────────────────────
+// ─── MDB parser (mdbtools) ────────────────────────────────────────────────────
 
-function parseMDB(buffer: Buffer) {
-  const reader = new MDBReader(buffer)
-  const tableNames = reader.getTableNames()
+async function mdbExportTable(mdbPath: string, tableName: string): Promise<Record<string, any>[]> {
+  try {
+    const { stdout } = await execFileAsync('mdb-export', [
+      '-D', '%Y-%m-%d',          // date → ISO
+      '-T', '%Y-%m-%d %H:%M:%S', // datetime → ISO
+      '-b', 'strip',             // drop binary blobs
+      mdbPath, tableName,
+    ], { maxBuffer: 512 * 1024 * 1024 }) // 512 MB ceiling per table
+    if (!stdout.trim()) return []
+    return csvParse(stdout, { columns: true, skip_empty_lines: true, relax_quotes: true, cast: false }) as Record<string, any>[]
+  } catch {
+    return []
+  }
+}
+
+async function parseMDB(mdbPath: string) {
+  const { stdout: tablesOut } = await execFileAsync('mdb-tables', ['-1', mdbPath])
+  const tableNames = tablesOut.trim().split('\n').filter(Boolean)
+  const tableSet = new Set(tableNames)
 
   const tableCache: Record<string, Record<string, any>[]> = {}
-  const t = (name: string): Record<string, any>[] => {
+
+  const t = async (name: string): Promise<Record<string, any>[]> => {
     if (!(name in tableCache)) {
-      try { tableCache[name] = reader.getTable(name).getData() as Record<string, any>[] } catch { tableCache[name] = [] }
+      if (!tableSet.has(name)) return (tableCache[name] = [])
+      tableCache[name] = await mdbExportTable(mdbPath, name)
     }
     return tableCache[name]
   }
+  const freeTable = (name: string) => { delete tableCache[name] }
 
   const brandMap: Record<number, string> = {}
-  t('tbFabricantes').forEach((r: any) => { if (r.fabID && r.fabNome) brandMap[r.fabID] = String(r.fabNome) })
+  ;(await t('tbFabricantes')).forEach((r: any) => { if (r.fabID && r.fabNome) brandMap[r.fabID] = String(r.fabNome) })
 
   const fuelMap: Record<number, string> = {}
-  t('tbCombustivel').forEach((r: any) => { if (r.gazID && r.gazDescri) fuelMap[r.gazID] = String(r.gazDescri) })
+  ;(await t('tbCombustivel')).forEach((r: any) => { if (r.gazID && r.gazDescri) fuelMap[r.gazID] = String(r.gazDescri) })
 
   const planMap: Record<number, string> = {}
-  t('tbPlanoContas').forEach((r: any) => { if (r.plaID && r.PlaNome) planMap[r.plaID] = String(r.PlaNome) })
+  ;(await t('tbPlanoContas')).forEach((r: any) => { if (r.plaID && r.PlaNome) planMap[r.plaID] = String(r.PlaNome) })
 
   const purchaseMap: Record<number, { date: any; km: any; valor: any }> = {}
-  t('tbDadosCompra').forEach((r: any) => { if (r.carID) purchaseMap[r.carID] = { date: r.cData, km: r.cKM, valor: r.cValor } })
+  ;(await t('tbDadosCompra')).forEach((r: any) => { if (r.carID) purchaseMap[r.carID] = { date: r.cData, km: r.cKM, valor: r.cValor } })
 
   const saleMap: Record<number, { date: any; km: any; valor: any; cliID: any }> = {}
-  t('tbDadosVenda').forEach((r: any) => { if (r.carID) saleMap[r.carID] = { date: r.vData, km: r.vKM, valor: r.vValorVenda, cliID: r.cliID } })
+  ;(await t('tbDadosVenda')).forEach((r: any) => { if (r.carID) saleMap[r.carID] = { date: r.vData, km: r.vKM, valor: r.vValorVenda, cliID: r.cliID } })
 
-  const vehicleRows = t('tbVeiculo').map((r: any) => ({
+  const vehicleRows = (await t('tbVeiculo')).map((r: any) => ({
     carID: r.carID, carPlaca: r.carPlaca, carDescri: r.carDescri,
     carAno: r.carAno, carAnoModelo: r.carAnoModelo,
     carValorCompra: r.carValorCompra, carValorTabela: r.carValorTabela,
@@ -97,7 +124,7 @@ function parseMDB(buffer: Buffer) {
   delete tableCache['tbVeiculo']
 
   const EXCLUDE_PLANS = ['VEICULO', 'VEÍCULO', 'COMPRA', 'VENDA']
-  const expenseRows = t('tbMovimento')
+  const expenseRows = (await t('tbMovimento'))
     .filter((r: any) => {
       if (!r.carReferencia || r.carReferencia === 0) return false
       if (parseNum(r.movValor) <= 0) return false
@@ -110,11 +137,13 @@ function parseMDB(buffer: Buffer) {
     }))
   delete tableCache['tbMovimento']
 
-  const rawTables = new Proxy<Record<string, Record<string, any>[]>>({}, {
+  // Lazy proxy: each property access returns a Promise that loads the table on first access.
+  // freeTable() is called after each phase to bound peak memory.
+  const tables = new Proxy<Record<string, Promise<Record<string, any>[]>>>({} as any, {
     get: (_, name) => typeof name === 'string' ? t(name) : undefined,
   })
 
-  return { vehicleRows, expenseRows, rawTables, tableNames }
+  return { vehicleRows, expenseRows, tables, freeTable, tableNames }
 }
 
 // ─── Row mappers ─────────────────────────────────────────────────────────────
@@ -268,30 +297,15 @@ async function importMdbHandler(req: HttpRequest, ctx: InvocationContext): Promi
   }
   if (!storagePath) return json(400, { error: 'Missing storagePath' }, cors)
 
-  ctx.log(`Downloading MDB from storage: ${storagePath} for dealership ${D}`)
-
-  // Download file from Supabase Storage using service role
-  let buffer: Buffer
-  try {
-    const { data: blob, error: dlErr } = await getSvc().storage.from('imports').download(storagePath)
-    if (dlErr) return json(500, { error: `Storage download failed: ${dlErr.message}` }, cors)
-    buffer = Buffer.from(await (blob as Blob).arrayBuffer())
-    ctx.log(`Downloaded OK: ${(buffer.length / 1024 / 1024).toFixed(1)} MB`)
-  } catch (e: any) {
-    return json(500, { error: `Failed to download file: ${e.message}` }, cors)
-  }
-
-  ctx.log(`Processing MDB import: ${filename} (${(buffer.length / 1024 / 1024).toFixed(1)} MB) for dealership ${D}`)
-
-  // Create import record
+  // Create import record immediately so we have an ID to return
   const { data: importRecord, error: importErr } = await getSvc()
     .from('imports')
     .insert({
       dealership_id: D,
       filename,
       file_type: 'application/msaccess',
-      file_size: buffer.length,
-      status: 'processing',
+      file_size: 0,
+      status: 'downloading',
       records_imported: 0,
       errors: [],
       created_by: user.id,
@@ -301,11 +315,10 @@ async function importMdbHandler(req: HttpRequest, ctx: InvocationContext): Promi
   if (importErr) return json(500, { error: importErr.message }, cors)
   const importId = (importRecord as any).id
 
-  // Return 202 immediately — process in background to avoid load balancer timeout
-  // The Node.js worker continues running after the HTTP response is sent
-  processImportInBackground(importId, buffer, storagePath, D, ctx).catch(e =>
-    ctx.log(`Background processing error: ${e?.message ?? e}`)
-  )
+  // Enqueue job for async processing via queue trigger (avoids load balancer timeout)
+  ctx.extraOutputs.set(importJobsQueue, JSON.stringify({ importId, storagePath, filename, dealershipId: D }))
+  ctx.log(`Enqueued import job: importId=${importId} storagePath=${storagePath}`)
+
   return json(202, { import_id: importId, status: 'processing' }, cors)
 
   } catch (e: any) {
@@ -316,98 +329,119 @@ async function importMdbHandler(req: HttpRequest, ctx: InvocationContext): Promi
 
 async function processImportInBackground(
   importId: string,
-  buffer: Buffer,
   storagePath: string,
+  filename: string,
   D: string,
   ctx: InvocationContext
 ): Promise<void> {
   const errors: string[] = []
   const counts: Record<string, number> = {}
 
-  // Parse MDB
-  let mdbData: ReturnType<typeof parseMDB>
+  // Download from Azure Blob Storage (same region as this Function → fast)
+  const tmpPath = join(tmpdir(), `${importId}.mdb`)
   try {
-    mdbData = parseMDB(buffer)
-    ;(buffer as any) = null // free memory
+    const connStr = process.env.AzureWebJobsStorage!
+    const container = process.env.AZURE_BLOB_CONTAINER ?? 'mdb-imports'
+    const blobClient = BlobServiceClient.fromConnectionString(connStr)
+      .getContainerClient(container)
+      .getBlockBlobClient(storagePath)
+    const props = await blobClient.getProperties()
+    await blobClient.downloadToFile(tmpPath)
+    ctx.log(`Downloaded OK: ${((props.contentLength ?? 0) / 1024 / 1024).toFixed(1)} MB → ${tmpPath}`)
+    await getSvc().from('imports').update({ file_size: props.contentLength ?? 0, status: 'parsing' }).eq('id', importId)
+  } catch (e: any) {
+    const msg = e?.message ?? 'Download failed'
+    ctx.log(`Download error: ${msg}`)
+    await getSvc().from('imports').update({ status: 'error', errors: [msg], completed_at: new Date().toISOString() }).eq('id', importId)
+    await unlink(tmpPath).catch(() => {})
+    return
+  }
+
+  // Parse MDB via mdbtools (native C — streams each table from disk, no 500MB V8 heap spike)
+  let mdbData: Awaited<ReturnType<typeof parseMDB>>
+  try {
+    mdbData = await parseMDB(tmpPath)
   } catch (e: any) {
     errors.push(`Parse error: ${e.message}`)
     await getSvc().from('imports').update({ status: 'error', errors, completed_at: new Date().toISOString() }).eq('id', importId)
+    await unlink(tmpPath).catch(() => {})
     return
   }
 
   ctx.log(`MDB parsed. Tables: ${mdbData.tableNames.length}, Vehicles: ${mdbData.vehicleRows.length}, Expenses: ${mdbData.expenseRows.length}`)
+  await getSvc().from('imports').update({ status: 'importing_referencias' }).eq('id', importId)
 
-  const { rawTables } = mdbData
+  const { tables: rawTables, freeTable } = mdbData
 
   // ── Phase A: Reference tables (parallel) ────────────────────────────────
 
   const step1Results = await Promise.all([
     upsertBatch('manufacturers',
-      (rawTables['tbFabricantes'] ?? []).filter((r: any) => r.fabID && r.fabNome).map((r: any) => ({
+      (await rawTables['tbFabricantes']).filter((r: any) => r.fabID && r.fabNome).map((r: any) => ({
         dealership_id: D, external_id: String(r.fabID), name: str(r.fabNome)!,
       })), 'dealership_id,external_id', errors),
     upsertBatch('fuel_types',
-      (rawTables['tbCombustivel'] ?? []).filter((r: any) => r.gazID && r.gazDescri).map((r: any) => ({
+      (await rawTables['tbCombustivel']).filter((r: any) => r.gazID && r.gazDescri).map((r: any) => ({
         dealership_id: D, external_id: String(r.gazID), name: str(r.gazDescri)!,
       })), 'dealership_id,external_id', errors),
     upsertBatch('plan_accounts',
-      (rawTables['tbPlanoContas'] ?? []).filter((r: any) => r.plaID && r.PlaNome).map((r: any) => ({
+      (await rawTables['tbPlanoContas']).filter((r: any) => r.plaID && r.PlaNome).map((r: any) => ({
         dealership_id: D, external_id: String(r.plaID), name: str(r.PlaNome)!,
         category: str(r.plaCategoria), type: str(r.plaTipo),
       })), 'dealership_id,external_id', errors),
     upsertBatch('customer_origins',
-      (rawTables['tbOrigemCliente'] ?? []).filter((r: any) => r.oriID).map((r: any) => ({
+      (await rawTables['tbOrigemCliente']).filter((r: any) => r.oriID).map((r: any) => ({
         dealership_id: D, external_id: String(r.oriID),
         name: str(r.oriDescri) ?? str(r.oriNome) ?? 'Sem nome',
       })), 'dealership_id,external_id', errors),
     upsertBatch('cancellation_reasons',
-      (rawTables['tbMotivoCancelamento'] ?? []).filter((r: any) => r.mcanID).map((r: any) => ({
+      (await rawTables['tbMotivoCancelamento']).filter((r: any) => r.mcanID).map((r: any) => ({
         dealership_id: D, external_id: String(r.mcanID),
         description: str(r.mcanDescri) ?? str(r.mcanNome) ?? 'Sem descrição',
       })), 'dealership_id,external_id', errors),
     upsertBatch('standard_pendencies',
-      (rawTables['tbPendenciaPadrao'] ?? []).filter((r: any) => r.ppnID).map((r: any) => ({
+      (await rawTables['tbPendenciaPadrao']).filter((r: any) => r.ppnID).map((r: any) => ({
         dealership_id: D, external_id: String(r.ppnID),
         description: str(r.ppnDescri) ?? str(r.ppnNome) ?? 'Sem descrição',
         category: str(r.ppnCategoria),
       })), 'dealership_id,external_id', errors),
     upsertBatch('standard_expenses',
-      (rawTables['tbDespesaPadrao'] ?? []).filter((r: any) => r.dpaID).map((r: any) => ({
+      (await rawTables['tbDespesaPadrao']).filter((r: any) => r.dpaID).map((r: any) => ({
         dealership_id: D, external_id: String(r.dpaID),
         description: str(r.dpaDescri) ?? str(r.dpaNome) ?? 'Sem descrição',
         plan_account_external_id: r.plaID ? String(r.plaID) : null,
         amount: r.dpaValor ? parseNum(r.dpaValor) : null,
       })), 'dealership_id,external_id', errors),
     upsertBatch('optionals',
-      (rawTables['tbOpcionais'] ?? []).filter((r: any) => r.opcID).map((r: any) => ({
+      (await rawTables['tbOpcionais']).filter((r: any) => r.opcID).map((r: any) => ({
         dealership_id: D, external_id: String(r.opcID),
         name: str(r.opcDescri) ?? str(r.opcNome) ?? 'Sem nome',
         category: str(r.opcCategoria),
       })), 'dealership_id,external_id', errors),
     upsertBatch('general_enumerations',
-      (rawTables['tbEnumGeral'] ?? []).filter((r: any) => r.enuID).map((r: any) => ({
+      (await rawTables['tbEnumGeral']).filter((r: any) => r.enuID).map((r: any) => ({
         dealership_id: D, external_id: String(r.enuID),
         type: str(r.enuTipo) ?? 'GERAL', code: str(r.enuCodigo),
         description: str(r.enuDescri) ?? str(r.enuNome) ?? 'Sem descrição',
       })), 'dealership_id,external_id', errors),
     upsertBatch('text_configurations',
-      (rawTables['tbCadastroTextos'] ?? []).filter((r: any) => r.texID).map((r: any) => ({
+      (await rawTables['tbCadastroTextos']).filter((r: any) => r.texID).map((r: any) => ({
         dealership_id: D, external_id: String(r.texID),
         key: str(r.texDescri) ?? str(r.texNome) ?? String(r.texID),
         content: str(r.texConteudo, 10000), type: str(r.texTipo),
       })), 'dealership_id,external_id', errors),
     upsertBatch('ncm',
-      (rawTables['tbNCM'] ?? []).filter((r: any) => r.ncmID).map((r: any) => ({
+      (await rawTables['tbNCM']).filter((r: any) => r.ncmID).map((r: any) => ({
         dealership_id: D, external_id: String(r.ncmID),
         code: str(r.ncmCodigo) ?? String(r.ncmID), description: str(r.ncmDescri),
       })), 'dealership_id,external_id', errors),
     upsertBatch('nature_of_operation',
-      (rawTables['tbNaturezaOp'] ?? []).filter((r: any) => r.natID).map((r: any) => ({
+      (await rawTables['tbNaturezaOp']).filter((r: any) => r.natID).map((r: any) => ({
         dealership_id: D, external_id: String(r.natID),
         description: str(r.natDescri) ?? str(r.natNome) ?? 'Sem descrição', cfop: str(r.natCFOP),
       })), 'dealership_id,external_id', errors),
     upsertBatch('banks',
-      (rawTables['tbBancosCadastro'] ?? []).filter((r: any) => r.bancID).map((r: any) => ({
+      (await rawTables['tbBancosCadastro']).filter((r: any) => r.bancID).map((r: any) => ({
         dealership_id: D, external_id: String(r.bancID),
         name: str(r.bancNome) ?? str(r.bancDescri) ?? 'Sem nome',
         code: str(r.bancCodigo), agency: str(r.bancAgencia), account: str(r.bancConta),
@@ -419,7 +453,12 @@ async function processImportInBackground(
     counts.standard_expenses, counts.optionals, counts.general_enumerations,
     counts.text_configurations, counts.ncm, counts.nature_of_operation, counts.banks,
   ] = step1Results
-  ctx.log(`Phase A done. Ref tables: ${step1Results.reduce((a, b) => a + b, 0)}`)
+  const countA = step1Results.reduce((a, b) => a + b, 0)
+  ctx.log(`Phase A done. Ref tables: ${countA}`)
+  ;['tbFabricantes','tbCombustivel','tbPlanoContas','tbOrigemCliente','tbMotivoCancelamento',
+    'tbPendenciaPadrao','tbDespesaPadrao','tbOpcionais','tbEnumGeral','tbCadastroTextos',
+    'tbNCM','tbNaturezaOp','tbBancosCadastro'].forEach(freeTable)
+  await getSvc().from('imports').update({ status: 'importing_entidades', records_imported: countA }).eq('id', importId)
 
   // ── Phase B: Main entities (parallel) ───────────────────────────────────
 
@@ -431,7 +470,7 @@ async function processImportInBackground(
   ;[counts.customers, counts.vendors, counts.employees, counts.bank_accounts, counts.vehicles] =
     await Promise.all([
       upsertBatch('customers',
-        (rawTables['tbCliente'] ?? []).filter((r: any) => r.cliID).map((r: any) => ({
+        (await rawTables['tbCliente']).filter((r: any) => r.cliID).map((r: any) => ({
           dealership_id: D, external_id: String(r.cliID),
           name: str(r.cliNome) ?? str(r.cliRazaoSocial) ?? 'Sem nome',
           phone: str(r.cliTelefone) ?? str(r.cliTelResidencial),
@@ -444,7 +483,7 @@ async function processImportInBackground(
           notes: str(r.cliObservacoes ?? r.cliObs, 1000),
         })), 'dealership_id,external_id', errors),
       upsertBatch('vendors',
-        (rawTables['tbFornecedor'] ?? []).filter((r: any) => r.forID).map((r: any) => ({
+        (await rawTables['tbFornecedor']).filter((r: any) => r.forID).map((r: any) => ({
           dealership_id: D, external_id: String(r.forID),
           name: str(r.forNome) ?? str(r.forRazaoSocial) ?? 'Sem nome',
           category: str(r.forCategoria), phone: str(r.forTelefone), email: str(r.forEmail),
@@ -454,7 +493,7 @@ async function processImportInBackground(
           notes: str(r.forObservacoes ?? r.forObs, 1000),
         })), 'dealership_id,external_id', errors),
       upsertBatch('employees',
-        (rawTables['tbFuncionario'] ?? []).filter((r: any) => r.funID).map((r: any) => ({
+        (await rawTables['tbFuncionario']).filter((r: any) => r.funID).map((r: any) => ({
           dealership_id: D, external_id: String(r.funID),
           name: str(r.funNome) ?? 'Sem nome', cpf: str(r.funCPF), rg: str(r.funRG),
           role: str(r.funCargo), email: str(r.funEmail), phone: str(r.funTelefone),
@@ -467,7 +506,7 @@ async function processImportInBackground(
           notes: str(r.funObservacoes ?? r.funObs, 1000),
         })), 'dealership_id,external_id', errors),
       upsertBatch('bank_accounts',
-        (rawTables['tbContasCorrentes'] ?? []).filter((r: any) => r.ctaID).map((r: any) => ({
+        (await rawTables['tbContasCorrentes']).filter((r: any) => r.ctaID).map((r: any) => ({
           dealership_id: D, external_id: String(r.ctaID),
           name: str(r.ctaNome) ?? str(r.ctaDescri) ?? String(r.ctaID),
           bank_external_id: r.bancID ? String(r.bancID) : null,
@@ -477,6 +516,9 @@ async function processImportInBackground(
       upsertBatch('vehicles', mappedVehicles, 'dealership_id,external_id', errors),
     ])
   ctx.log(`Phase B done. Vehicles: ${counts.vehicles}, Customers: ${counts.customers}`)
+  ;['tbCliente','tbFornecedor','tbFuncionario','tbContasCorrentes'].forEach(freeTable)
+  const countAB = countA + (counts.customers ?? 0) + (counts.vendors ?? 0) + (counts.employees ?? 0) + (counts.bank_accounts ?? 0) + (counts.vehicles ?? 0)
+  await getSvc().from('imports').update({ status: 'importing_detalhes', records_imported: countAB }).eq('id', importId)
 
   // ── Phase C: UUID maps ──────────────────────────────────────────────────
 
@@ -507,7 +549,7 @@ async function processImportInBackground(
   ] = await Promise.all([
     // Customer sub-tables
     (async () => {
-      const rows = (rawTables['tbClienteComplemento'] ?? []).filter((r: any) => r.cliID)
+      const rows = (await rawTables['tbClienteComplemento']).filter((r: any) => r.cliID)
       if (!rows.length) return 0
       await getSvc().from('customer_complements').delete().eq('dealership_id', D)
       return insertBatch('customer_complements', rows.map((r: any) => ({
@@ -522,7 +564,7 @@ async function processImportInBackground(
       })), errors)
     })(),
     (async () => {
-      const rows = (rawTables['tbClienteDadosComerciais'] ?? []).filter((r: any) => r.cliID)
+      const rows = (await rawTables['tbClienteDadosComerciais']).filter((r: any) => r.cliID)
       if (!rows.length) return 0
       await getSvc().from('customer_commercial_data').delete().eq('dealership_id', D)
       return insertBatch('customer_commercial_data', rows.map((r: any) => ({
@@ -534,7 +576,7 @@ async function processImportInBackground(
       })), errors)
     })(),
     (async () => {
-      const rows = (rawTables['tbClienteReferenciasBens'] ?? []).filter((r: any) => r.cliID)
+      const rows = (await rawTables['tbClienteReferenciasBens']).filter((r: any) => r.cliID)
       if (!rows.length) return 0
       await getSvc().from('customer_asset_references').delete().eq('dealership_id', D)
       return insertBatch('customer_asset_references', rows.map((r: any) => ({
@@ -547,7 +589,7 @@ async function processImportInBackground(
     })(),
     // Employee sub-tables
     upsertBatch('employee_salaries',
-      (rawTables['tbfuncionarioSalario'] ?? []).filter((r: any) => r.salID).map((r: any) => ({
+      (await rawTables['tbfuncionarioSalario']).filter((r: any) => r.salID).map((r: any) => ({
         dealership_id: D, external_id: String(r.salID),
         employee_external_id: r.funID ? String(r.funID) : null,
         employee_id: r.funID ? (employeeIdByExternal[String(r.funID)] ?? null) : null,
@@ -555,7 +597,7 @@ async function processImportInBackground(
         type: str(r.salTipo) ?? str(r.salDescri), description: str(r.salDescri ?? r.salObservacoes),
       })), 'dealership_id,external_id', errors),
     upsertBatch('commission_standards',
-      (rawTables['tbComissaoPadrao'] ?? []).filter((r: any) => r.cpaID).map((r: any) => ({
+      (await rawTables['tbComissaoPadrao']).filter((r: any) => r.cpaID).map((r: any) => ({
         dealership_id: D, external_id: String(r.cpaID),
         employee_external_id: r.funID ? String(r.funID) : null,
         employee_id: r.funID ? (employeeIdByExternal[String(r.funID)] ?? null) : null,
@@ -565,7 +607,7 @@ async function processImportInBackground(
       })), 'dealership_id,external_id', errors),
     // Purchase & sale data
     upsertBatch('purchase_data',
-      (rawTables['tbDadosCompra'] ?? []).filter((r: any) => r.carID).map((r: any) => ({
+      (await rawTables['tbDadosCompra']).filter((r: any) => r.carID).map((r: any) => ({
         dealership_id: D, vehicle_external_id: String(r.carID),
         vehicle_id: vehicleIdByExternal[String(r.carID)] ?? null,
         purchase_date: parseDate(r.cData), mileage: r.cKM ? Math.round(parseNum(r.cKM)) : null,
@@ -574,7 +616,7 @@ async function processImportInBackground(
         payment_method: str(r.cFormaPagamento), notes: str(r.cObservacoes ?? r.cObs, 1000),
       })), 'dealership_id,vehicle_external_id', errors),
     upsertBatch('sale_data',
-      (rawTables['tbDadosVenda'] ?? []).filter((r: any) => r.carID).map((r: any) => ({
+      (await rawTables['tbDadosVenda']).filter((r: any) => r.carID).map((r: any) => ({
         dealership_id: D, vehicle_external_id: String(r.carID),
         vehicle_id: vehicleIdByExternal[String(r.carID)] ?? null,
         sale_date: parseDate(r.vData), mileage: r.vKM ? Math.round(parseNum(r.vKM)) : null,
@@ -600,7 +642,7 @@ async function processImportInBackground(
     })(),
     // Vehicle-linked tables
     upsertBatch('vehicle_fines',
-      (rawTables['tbVeiculoMulta'] ?? []).filter((r: any) => r.mulID).map((r: any) => ({
+      (await rawTables['tbVeiculoMulta']).filter((r: any) => r.mulID).map((r: any) => ({
         dealership_id: D, external_id: String(r.mulID),
         vehicle_external_id: r.carID ? String(r.carID) : null,
         vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
@@ -611,7 +653,7 @@ async function processImportInBackground(
         notes: str(r.mulObservacoes ?? r.mulObs, 1000),
       })), 'dealership_id,external_id', errors),
     upsertBatch('vehicle_documents',
-      (rawTables['tbVeiculoDocumento'] ?? []).filter((r: any) => r.docID).map((r: any) => ({
+      (await rawTables['tbVeiculoDocumento']).filter((r: any) => r.docID).map((r: any) => ({
         dealership_id: D, external_id: String(r.docID),
         vehicle_external_id: r.carID ? String(r.carID) : null,
         vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
@@ -620,7 +662,7 @@ async function processImportInBackground(
         file_url: str(r.docArquivo), notes: str(r.docObservacoes ?? r.docObs, 1000),
       })), 'dealership_id,external_id', errors),
     upsertBatch('vehicle_purchase_documents',
-      (rawTables['tbVeiculoDocumentoCompra'] ?? []).filter((r: any) => r.dcoID).map((r: any) => ({
+      (await rawTables['tbVeiculoDocumentoCompra']).filter((r: any) => r.dcoID).map((r: any) => ({
         dealership_id: D, external_id: String(r.dcoID),
         vehicle_external_id: r.carID ? String(r.carID) : null,
         vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
@@ -629,7 +671,7 @@ async function processImportInBackground(
         notes: str(r.dcoObservacoes ?? r.dcoObs, 1000),
       })), 'dealership_id,external_id', errors),
     upsertBatch('vehicle_optionals',
-      (rawTables['tbVeiculoOpcionais'] ?? []).filter((r: any) => r.carID && r.voID).map((r: any) => ({
+      (await rawTables['tbVeiculoOpcionais']).filter((r: any) => r.carID && r.voID).map((r: any) => ({
         dealership_id: D, external_id: String(r.voID),
         vehicle_external_id: String(r.carID),
         vehicle_id: vehicleIdByExternal[String(r.carID)] ?? null,
@@ -637,7 +679,7 @@ async function processImportInBackground(
         name: str(r.voDescri) ?? str(r.opcDescri),
       })), 'dealership_id,external_id', errors),
     upsertBatch('vehicle_pendencies',
-      (rawTables['tbVeiculoPendencia'] ?? []).filter((r: any) => r.vpnID).map((r: any) => ({
+      (await rawTables['tbVeiculoPendencia']).filter((r: any) => r.vpnID).map((r: any) => ({
         dealership_id: D, external_id: String(r.vpnID),
         vehicle_external_id: r.carID ? String(r.carID) : null,
         vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
@@ -648,7 +690,7 @@ async function processImportInBackground(
         notes: str(r.vpnObservacoes ?? r.vpnObs, 1000),
       })), 'dealership_id,external_id', errors),
     upsertBatch('vehicle_delivery_protocols',
-      (rawTables['tbVeiculoProtocoloEntrega'] ?? []).filter((r: any) => r.proID).map((r: any) => ({
+      (await rawTables['tbVeiculoProtocoloEntrega']).filter((r: any) => r.proID).map((r: any) => ({
         dealership_id: D, external_id: String(r.proID),
         vehicle_external_id: r.carID ? String(r.carID) : null,
         vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
@@ -660,7 +702,7 @@ async function processImportInBackground(
         notes: str(r.proObservacoes ?? r.proObs, 1000),
       })), 'dealership_id,external_id', errors),
     upsertBatch('vehicle_trades',
-      (rawTables['tbveiculoTroca'] ?? []).filter((r: any) => r.trcID).map((r: any) => ({
+      (await rawTables['tbveiculoTroca']).filter((r: any) => r.trcID).map((r: any) => ({
         dealership_id: D, external_id: String(r.trcID),
         incoming_vehicle_external_id: r.carID ? String(r.carID) : null,
         incoming_vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
@@ -674,7 +716,7 @@ async function processImportInBackground(
         notes: str(r.trcObservacoes ?? r.trcObs, 1000),
       })), 'dealership_id,external_id', errors),
     upsertBatch('vehicle_apportionment',
-      (rawTables['tbRateioVeiculo'] ?? []).filter((r: any) => r.ratID).map((r: any) => ({
+      (await rawTables['tbRateioVeiculo']).filter((r: any) => r.ratID).map((r: any) => ({
         dealership_id: D, external_id: String(r.ratID),
         vehicle_external_id: r.carID ? String(r.carID) : null,
         vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
@@ -683,7 +725,7 @@ async function processImportInBackground(
         description: str(r.ratDescri, 1000),
       })), 'dealership_id,external_id', errors),
     upsertBatch('post_sale_expenses',
-      (rawTables['tbDespesaPosVenda'] ?? []).filter((r: any) => r.dpvID).map((r: any) => ({
+      (await rawTables['tbDespesaPosVenda']).filter((r: any) => r.dpvID).map((r: any) => ({
         dealership_id: D, external_id: String(r.dpvID),
         vehicle_external_id: r.carID ? String(r.carID) : null,
         vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
@@ -691,7 +733,7 @@ async function processImportInBackground(
         date: parseDate(r.dpvData), plan_account_external_id: r.plaID ? String(r.plaID) : null,
       })), 'dealership_id,external_id', errors),
     upsertBatch('financings',
-      (rawTables['tbFinanciamento'] ?? []).filter((r: any) => r.finID).map((r: any) => ({
+      (await rawTables['tbFinanciamento']).filter((r: any) => r.finID).map((r: any) => ({
         dealership_id: D, external_id: String(r.finID),
         vehicle_external_id: r.carID ? String(r.carID) : null,
         vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
@@ -706,7 +748,7 @@ async function processImportInBackground(
         notes: str(r.finObservacoes ?? r.finObs, 1000),
       })), 'dealership_id,external_id', errors),
     upsertBatch('insurances',
-      (rawTables['tbSeguro'] ?? []).filter((r: any) => r.segID).map((r: any) => ({
+      (await rawTables['tbSeguro']).filter((r: any) => r.segID).map((r: any) => ({
         dealership_id: D, external_id: String(r.segID),
         vehicle_external_id: r.carID ? String(r.carID) : null,
         vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
@@ -719,7 +761,7 @@ async function processImportInBackground(
         coverage_type: str(r.segTipoCobertura), notes: str(r.segObservacoes ?? r.segObs, 1000),
       })), 'dealership_id,external_id', errors),
     upsertBatch('commissions',
-      (rawTables['tbComissao'] ?? []).filter((r: any) => r.comID).map((r: any) => ({
+      (await rawTables['tbComissao']).filter((r: any) => r.comID).map((r: any) => ({
         dealership_id: D, external_id: String(r.comID),
         vehicle_external_id: r.carID ? String(r.carID) : null,
         vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
@@ -733,7 +775,7 @@ async function processImportInBackground(
     // Orders → followups (sequential inner chain)
     (async () => {
       const ordersCount = await upsertBatch('orders',
-        (rawTables['tbPedidosClientes'] ?? []).filter((r: any) => r.pedID).map((r: any) => ({
+        (await rawTables['tbPedidosClientes']).filter((r: any) => r.pedID).map((r: any) => ({
           dealership_id: D, external_id: String(r.pedID),
           customer_external_id: r.cliID ? String(r.cliID) : null,
           customer_id: r.cliID ? (customerIdByExternal[String(r.cliID)] ?? null) : null,
@@ -750,7 +792,7 @@ async function processImportInBackground(
       const orderIdByExternal: Record<string, string> = {}
       ;(ordMap ?? []).forEach((o: any) => { orderIdByExternal[o.external_id] = o.id })
       const followupsCount = await upsertBatch('order_followups',
-        (rawTables['tbPedidosFollowUp'] ?? []).filter((r: any) => r.fupID).map((r: any) => ({
+        (await rawTables['tbPedidosFollowUp']).filter((r: any) => r.fupID).map((r: any) => ({
           dealership_id: D, external_id: String(r.fupID),
           order_external_id: r.pedID ? String(r.pedID) : null,
           order_id: r.pedID ? (orderIdByExternal[String(r.pedID)] ?? null) : null,
@@ -764,7 +806,7 @@ async function processImportInBackground(
     // NFe → emit/dest/prod (sequential inner chain)
     (async () => {
       const nfeCount = await upsertBatch('nfe_ide',
-        (rawTables['tbNFe ide'] ?? []).filter((r: any) => r.nfeID).map((r: any) => ({
+        (await rawTables['tbNFe ide']).filter((r: any) => r.nfeID).map((r: any) => ({
           dealership_id: D, external_id: String(r.nfeID),
           access_key: str(r.nfeChave ?? r.chNFe),
           nfe_number: str(r.nNF ?? r.nfeNumero), series: str(r.serie ?? r.nfeSerie),
@@ -780,7 +822,7 @@ async function processImportInBackground(
       ;(nfeMap ?? []).forEach((n: any) => { nfeIdByExternal[n.external_id] = n.id })
       const [emitCount, destCount, prodCount] = await Promise.all([
         upsertBatch('nfe_emit',
-          (rawTables['tbNFe emit'] ?? []).filter((r: any) => r.nfeID).map((r: any) => ({
+          (await rawTables['tbNFe emit']).filter((r: any) => r.nfeID).map((r: any) => ({
             dealership_id: D, external_id: str(r.nfeEmitID) ?? `emit-${r.nfeID}`,
             nfe_external_id: String(r.nfeID), nfe_id: nfeIdByExternal[String(r.nfeID)] ?? null,
             cnpj: str(r.cnpj ?? r.CNPJ), name: str(r.xNome), trade_name: str(r.xFant),
@@ -789,7 +831,7 @@ async function processImportInBackground(
             phone: str(r.fone ?? r.telefone), ie: str(r.IE),
           })), 'dealership_id,external_id', errors),
         upsertBatch('nfe_dest',
-          (rawTables['tbNFe dest'] ?? []).filter((r: any) => r.nfeID).map((r: any) => ({
+          (await rawTables['tbNFe dest']).filter((r: any) => r.nfeID).map((r: any) => ({
             dealership_id: D, external_id: str(r.nfeDestID) ?? `dest-${r.nfeID}`,
             nfe_external_id: String(r.nfeID), nfe_id: nfeIdByExternal[String(r.nfeID)] ?? null,
             cpf_cnpj: str(r.CPF ?? r.CNPJ ?? r.cpfCNPJ), name: str(r.xNome),
@@ -798,7 +840,7 @@ async function processImportInBackground(
             phone: str(r.fone ?? r.telefone), email: str(r.email), ie: str(r.IE),
           })), 'dealership_id,external_id', errors),
         upsertBatch('nfe_prod',
-          (rawTables['tbNFe prod'] ?? []).filter((r: any) => r.nfeProdID).map((r: any) => ({
+          (await rawTables['tbNFe prod']).filter((r: any) => r.nfeProdID).map((r: any) => ({
             dealership_id: D, external_id: String(r.nfeProdID),
             nfe_external_id: r.nfeID ? String(r.nfeID) : null,
             nfe_id: r.nfeID ? (nfeIdByExternal[String(r.nfeID)] ?? null) : null,
@@ -843,7 +885,15 @@ async function processImportInBackground(
   counts.nfe_prod = (phD_nfe as any).nfe_prod
 
   try { await getSvc().rpc('refresh_days_in_stock', { d_id: D }) } catch { /* non-critical */ }
-  try { await getSvc().storage.from('imports').remove([storagePath]) } catch { /* non-critical */ }
+  await unlink(tmpPath).catch(() => {}) // clean up temp MDB file
+  try {
+    const connStr = process.env.AzureWebJobsStorage!
+    const container = process.env.AZURE_BLOB_CONTAINER ?? 'mdb-imports'
+    await BlobServiceClient.fromConnectionString(connStr)
+      .getContainerClient(container)
+      .getBlockBlobClient(storagePath)
+      .deleteIfExists()
+  } catch { /* non-critical */ }
 
   const totalImported = Object.values(counts).reduce((a, b) => a + (b ?? 0), 0)
   ctx.log(`Import complete. Total: ${totalImported}, Errors: ${errors.length}`)
@@ -856,13 +906,34 @@ async function processImportInBackground(
   }).eq('id', importId)
 }
 
-// ─── Register function ───────────────────────────────────────────────────────
+// ─── Queue output binding ─────────────────────────────────────────────────────
+
+const importJobsQueue = output.storageQueue({
+  queueName: 'import-jobs',
+  connection: 'AzureWebJobsStorage',
+})
+
+// ─── Register HTTP trigger ────────────────────────────────────────────────────
 
 app.http('importMdb', {
   methods: ['POST', 'OPTIONS'],
   authLevel: 'anonymous',
   route: 'importMdb',
+  extraOutputs: [importJobsQueue],
   handler: importMdbHandler,
+})
+
+// ─── Queue trigger: actual MDB processing ────────────────────────────────────
+
+app.storageQueue('processImport', {
+  queueName: 'import-jobs',
+  connection: 'AzureWebJobsStorage',
+  handler: async (message: unknown, ctx: InvocationContext) => {
+    const data = typeof message === 'string' ? JSON.parse(message) : (message as any)
+    const { importId, storagePath, filename, dealershipId } = data
+    ctx.log(`processImport triggered: importId=${importId}`)
+    await processImportInBackground(importId, storagePath, filename, dealershipId, ctx)
+  },
 })
 
 // ─── Clear dealership data ────────────────────────────────────────────────────
