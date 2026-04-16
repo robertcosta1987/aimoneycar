@@ -9,6 +9,16 @@ const nextConfig = {
     '/api/chat': ['./lib/ai/FIELD_MAP.md'],
     '/api/demo/chat': ['./lib/ai/FIELD_MAP.md'],
   },
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      // Polyfill Buffer for mdb-reader browser build
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        buffer: require.resolve('buffer/'),
+      }
+    }
+    return config
+  },
 };
 
 module.exports = nextConfig;

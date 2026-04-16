@@ -99,6 +99,7 @@ export default function ImportarPage() {
           xhr.onerror = () => reject(new Error('Falha de rede ao enviar arquivo'))
           xhr.open('PUT', signedUrl)
           xhr.setRequestHeader('Content-Type', 'application/octet-stream')
+          xhr.setRequestHeader('x-ms-blob-type', 'BlockBlob')
           xhr.send(file)
         })
 
@@ -121,21 +122,39 @@ export default function ImportarPage() {
         const { import_id: importId } = await triggerRes.json()
 
         // Step 4: poll /api/import-status until complete or error
+        const STAGE_LABELS: Record<string, string> = {
+          downloading:          'Baixando arquivo...',
+          parsing:              'Analisando arquivo MDB...',
+          importing_referencias:'Importando tabelas de referência...',
+          importing_entidades:  'Importando clientes, veículos e colaboradores...',
+          importing_detalhes:   'Importando dados financeiros e detalhes...',
+          complete:             'Concluído!',
+          error:                'Erro na importação',
+        }
+        const STAGE_PROGRESS: Record<string, number> = {
+          downloading:          67,
+          parsing:              72,
+          importing_referencias:78,
+          importing_entidades:  85,
+          importing_detalhes:   92,
+          complete:             100,
+        }
         const data = await new Promise<any>((resolve, reject) => {
-          let dots = 0
           const interval = setInterval(async () => {
             try {
-              dots = (dots + 1) % 4
-              setStatusLabel(`Processando no servidor${'.'.repeat(dots + 1)}`)
               const statusRes = await fetch(`/api/import-status?importId=${importId}`)
               if (!statusRes.ok) return
               const imp = await statusRes.json()
+              const label = STAGE_LABELS[imp.status] ?? 'Processando...'
+              const pct = STAGE_PROGRESS[imp.status] ?? 70
+              const recordsTxt = imp.records_imported > 0 ? ` (${imp.records_imported.toLocaleString('pt-BR')} registros)` : ''
+              setStatusLabel(`${label}${recordsTxt}`)
+              setProgress(pct)
               if (imp.status === 'complete' || imp.status === 'error') {
                 clearInterval(interval)
                 if (imp.status === 'error') reject(new Error((imp.errors ?? ['Erro desconhecido'])[0]))
                 else resolve(imp)
               }
-              setProgress(Math.min(95, (progress || 65) + 2))
             } catch { /* keep polling */ }
           }, 4000)
         })
@@ -256,7 +275,7 @@ export default function ImportarPage() {
 
       const azureBase = process.env.NEXT_PUBLIC_IMPORT_SERVICE_URL
       if (!azureBase) throw new Error('Serviço não configurado')
-      const clearUrl = azureBase.replace('importMdb', 'clearData')
+      const clearUrl = azureBase.replace(/importmdb/i, 'cleardata')
 
       const res = await fetch(clearUrl, {
         method: 'DELETE',
@@ -336,12 +355,13 @@ export default function ImportarPage() {
           <CardContent className="p-6 space-y-3">
             <div className="flex items-center gap-3">
               <Loader2 className="w-5 h-5 text-primary animate-spin flex-shrink-0" />
-              <p className="text-sm font-medium text-foreground">{statusLabel}</p>
+              <p className="text-sm font-medium text-foreground flex-1">{statusLabel}</p>
+              <span className="text-sm font-semibold text-primary tabular-nums">{progress}%</span>
             </div>
-            <Progress value={progress} />
+            <Progress value={progress} className="h-2" />
             {state === 'processing' && (
               <p className="text-xs text-foreground-muted">
-                O arquivo está sendo processado no servidor. Isso pode levar alguns minutos para arquivos grandes — não feche esta janela.
+                Processando no servidor — não feche esta janela.
               </p>
             )}
           </CardContent>

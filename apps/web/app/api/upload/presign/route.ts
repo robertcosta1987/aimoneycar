@@ -1,5 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/supabase/server'
+import {
+  BlobServiceClient,
+  BlobSASPermissions,
+  SASProtocol,
+  StorageSharedKeyCredential,
+  generateBlobSASQueryParameters,
+} from '@azure/storage-blob'
+
+function azureBlobSasUrl(blobName: string, permissions: string, ttlSeconds: number): string {
+  const accountName = process.env.AZURE_STORAGE_ACCOUNT_NAME!
+  const accountKey = process.env.AZURE_STORAGE_ACCOUNT_KEY!
+  const container = process.env.AZURE_BLOB_CONTAINER ?? 'mdb-imports'
+
+  const credential = new StorageSharedKeyCredential(accountName, accountKey)
+  const startsOn = new Date(Date.now() - 60_000)
+  const expiresOn = new Date(Date.now() + ttlSeconds * 1000)
+
+  const sasParams = generateBlobSASQueryParameters(
+    {
+      containerName: container,
+      blobName,
+      permissions: BlobSASPermissions.parse(permissions),
+      startsOn,
+      expiresOn,
+      protocol: SASProtocol.Https,
+    },
+    credential,
+  )
+
+  return `https://${accountName}.blob.core.windows.net/${container}/${blobName}?${sasParams}`
+}
 
 export async function POST(req: NextRequest) {
   const supabase = createClient()
@@ -7,14 +38,10 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { filename } = await req.json()
-  const svc = createServiceClient()
+  const blobPath = `${user.id}/${Date.now()}_${filename}`
 
-  const path = `${user.id}/${Date.now()}_${filename}`
-  const { data, error } = await svc.storage
-    .from('imports')
-    .createSignedUploadUrl(path)
+  // Write-only SAS valid for 2 hours (upload only)
+  const signedUrl = azureBlobSasUrl(blobPath, 'cw', 7200)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
-  return NextResponse.json({ path, token: data.token, signedUrl: data.signedUrl })
+  return NextResponse.json({ path: blobPath, signedUrl })
 }
