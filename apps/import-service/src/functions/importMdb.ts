@@ -242,16 +242,21 @@ async function upsertBatch(
 ): Promise<number> {
   if (!rows.length) return 0
   const BATCH_SIZE = 1000
-  const CONCURRENCY = 3
+  const CONCURRENCY = 2
   const batches: Record<string, any>[][] = []
   for (let i = 0; i < rows.length; i += BATCH_SIZE) batches.push(rows.slice(i, i + BATCH_SIZE))
   let count = 0
   for (let i = 0; i < batches.length; i += CONCURRENCY) {
     const group = batches.slice(i, i + CONCURRENCY)
     const results = await Promise.all(group.map(async (chunk, j) => {
-      const { error } = await getSvc().from(table).upsert(chunk, { onConflict: conflictKey, ignoreDuplicates: false })
-      if (error) { errors.push(`${table} batch ${i + j + 1}: ${error.message}`); return 0 }
-      return chunk.length
+      const batchNum = i + j + 1
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        const { error } = await getSvc().from(table).upsert(chunk, { onConflict: conflictKey, ignoreDuplicates: false })
+        if (!error) return chunk.length
+        if (attempt < 3) await new Promise(r => setTimeout(r, attempt * 2000))
+        else errors.push(`${table} batch ${batchNum}: ${error.message}`)
+      }
+      return 0
     }))
     count += results.reduce((a, b) => a + b, 0)
   }
