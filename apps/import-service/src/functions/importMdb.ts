@@ -536,26 +536,37 @@ async function processImportInBackground(
       upsertBatch('vendors',
         (await rawTables['tbFornecedor']).filter((r: any) => r.forID).map((r: any) => ({
           dealership_id: D, external_id: String(r.forID),
-          name: str(r.forNome) ?? str(r.forRazaoSocial) ?? 'Sem nome',
-          category: str(r.forCategoria), phone: str(r.forTelefone), email: str(r.forEmail),
-          cnpj: str(r.forCNPJ), address: str(r.forEndereco ?? r.forLogradouro),
+          name: str(r.forRazSoc) ?? str(r.forRazaoSocial) ?? str(r.forFantasia) ?? 'Sem nome',
+          category: str(r.forCategoria), phone: str(r.forFone1 ?? r.forTelefone), email: str(r.forEmail),
+          cnpj: str(r.forCNPJ), address: str(r.forEnd ?? r.forEndereco ?? r.forLogradouro),
           neighborhood: str(r.forBairro), city: str(r.forCidade),
           state: str(r.forEstado, 2), zip_code: str(r.forCEP),
-          notes: str(r.forObservacoes ?? r.forObs, 1000),
+          notes: str(r.forOBS ?? r.forObservacoes ?? r.forObs, 1000),
         })), 'dealership_id,external_id', errors),
-      upsertBatch('employees',
-        (await rawTables['tbFuncionario']).filter((r: any) => r.funID).map((r: any) => ({
-          dealership_id: D, external_id: String(r.funID),
-          name: str(r.funNome) ?? 'Sem nome', cpf: str(r.funCPF), rg: str(r.funRG),
-          role: str(r.funCargo), email: str(r.funEmail), phone: str(r.funTelefone),
-          address: str(r.funEndereco ?? r.funLogradouro), city: str(r.funCidade),
-          state: str(r.funEstado, 2), zip_code: str(r.funCEP),
-          hire_date: parseDate(r.funDataAdmissao), termination_date: parseDate(r.funDataDemissao),
-          base_salary: r.funSalario ? parseNum(r.funSalario) : null,
-          commission_percent: r.funComissao ? parseNum(r.funComissao) : null,
-          is_active: !parseDate(r.funDataDemissao),
-          notes: str(r.funObservacoes ?? r.funObs, 1000),
-        })), 'dealership_id,external_id', errors),
+      // Employees: name lives in tbFornecedor (linked via forID), not tbFuncionario
+      (async () => {
+        const fornRows = await rawTables['tbFornecedor']
+        const fornById: Record<string, any> = {}
+        fornRows.forEach((r: any) => { if (r.forID) fornById[String(r.forID)] = r })
+        return upsertBatch('employees',
+          (await rawTables['tbFuncionario']).filter((r: any) => r.funID).map((r: any) => {
+            const forn = r.forID ? (fornById[String(r.forID)] ?? {}) : {}
+            const terminated = parseDate(r.funDtDemissao ?? r.funDataDemissao)
+            return {
+              dealership_id: D, external_id: String(r.funID),
+              name: str(forn.forRazSoc) ?? str(forn.forRazaoSocial) ?? str(forn.forFantasia) ?? 'Sem nome',
+              cpf: str(forn.forCNPJ ?? r.funCPF), rg: str(r.funRG),
+              email: str(forn.forEmail ?? r.funEmail),
+              phone: str(forn.forFone1 ?? forn.forFone2 ?? r.funTelefone),
+              city: str(forn.forCidade ?? r.funCidade), state: str(forn.forEstado ?? r.funEstado, 2),
+              hire_date: parseDate(r.funDtAdmissao ?? r.funDataAdmissao),
+              termination_date: terminated,
+              base_salary: null, commission_percent: null,
+              is_active: !terminated,
+              notes: str(forn.forOBS, 1000),
+            }
+          }), 'dealership_id,external_id', errors)
+      })(),
       upsertBatch('bank_accounts',
         (await rawTables['tbContasCorrentes']).filter((r: any) => r.ctaID).map((r: any) => ({
           dealership_id: D, external_id: String(r.ctaID),
@@ -648,21 +659,37 @@ async function processImportInBackground(
     })(),
     // Employee sub-tables
     upsertBatch('employee_salaries',
-      (await rawTables['tbfuncionarioSalario']).filter((r: any) => r.salID).map((r: any) => ({
-        dealership_id: D, external_id: String(r.salID),
-        employee_external_id: r.funID ? String(r.funID) : null,
-        employee_id: r.funID ? (employeeIdByExternal[String(r.funID)] ?? null) : null,
-        date: parseDate(r.salData), amount: r.salValor ? parseNum(r.salValor) : null,
-        type: str(r.salTipo) ?? str(r.salDescri), description: str(r.salDescri ?? r.salObservacoes),
-      })), 'dealership_id,external_id', errors),
+      // tbfuncionarioSalario: salary + commission rates per employee per period
+      // forID → funID translation needed because employees.external_id = funID
+      (async () => {
+        const funRows = await rawTables['tbFuncionario']
+        const forIdToFunId: Record<string, string> = {}
+        funRows.forEach((r: any) => { if (r.funID && r.forID) forIdToFunId[String(r.forID)] = String(r.funID) })
+        return upsertBatch('employee_salaries',
+          (await rawTables['tbfuncionarioSalario']).filter((r: any) => r.funcID).map((r: any) => {
+            const funId = r.forID ? (forIdToFunId[String(r.forID)] ?? null) : null
+            return {
+              dealership_id: D, external_id: String(r.funcID),
+              employee_external_id: funId,
+              employee_id: funId ? (employeeIdByExternal[funId] ?? null) : null,
+              date: parseDate(r.funcData), amount: r.funSalarioFixo ? parseNum(r.funSalarioFixo) : null,
+              type: 'SALARIO',
+              description: [
+                r.funComVenda1 && parseNum(r.funComVenda1) > 0 ? `Comissão venda: R$ ${parseNum(r.funComVenda1).toFixed(2)}` : null,
+                r.funComVenda2 && parseNum(r.funComVenda2) > 0 ? `Comissão venda 2: R$ ${parseNum(r.funComVenda2).toFixed(2)}` : null,
+                r.funComCompra1 && parseNum(r.funComCompra1) > 0 ? `Comissão compra: R$ ${parseNum(r.funComCompra1).toFixed(2)}` : null,
+              ].filter(Boolean).join(' | ') || null,
+            }
+          }), 'dealership_id,external_id', errors)
+      })(),
     upsertBatch('commission_standards',
-      (await rawTables['tbComissaoPadrao']).filter((r: any) => r.cpaID).map((r: any) => ({
-        dealership_id: D, external_id: String(r.cpaID),
-        employee_external_id: r.funID ? String(r.funID) : null,
-        employee_id: r.funID ? (employeeIdByExternal[String(r.funID)] ?? null) : null,
-        percent: r.cpaPercentual ? parseNum(r.cpaPercentual) : null,
-        min_value: r.cpaValorMin ? parseNum(r.cpaValorMin) : null,
-        max_value: r.cpaValorMax ? parseNum(r.cpaValorMax) : null, type: str(r.cpaTipo),
+      (await rawTables['tbComissaoPadrao']).filter((r: any) => r.coID).map((r: any) => ({
+        dealership_id: D, external_id: String(r.coID),
+        employee_external_id: r.forID ? String(r.forID) : null,
+        employee_id: r.forID ? (employeeIdByExternal[String(r.forID)] ?? null) : null,
+        percent: r.coPorcentual ? parseNum(r.coPorcentual) : null,
+        min_value: null, max_value: null,
+        type: r.coTipo ? String(r.coTipo) : null,
       })), 'dealership_id,external_id', errors),
     // Purchase & sale data
     upsertBatch('purchase_data',
@@ -824,18 +851,27 @@ async function processImportInBackground(
         start_date: parseDate(r.segDataInicio), end_date: parseDate(r.segDataFim),
         coverage_type: str(r.segTipoCobertura), notes: str(r.segObservacoes ?? r.segObs, 1000),
       })), 'dealership_id,external_id', errors),
-    upsertBatch('commissions',
-      (await rawTables['tbComissao']).filter((r: any) => r.comID).map((r: any) => ({
-        dealership_id: D, external_id: String(r.comID),
-        vehicle_external_id: r.carID ? String(r.carID) : null,
-        vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
-        employee_external_id: r.funID ? String(r.funID) : null,
-        employee_id: r.funID ? (employeeIdByExternal[String(r.funID)] ?? null) : null,
-        amount: r.comValor ? parseNum(r.comValor) : null,
-        percent: r.comPercentual ? parseNum(r.comPercentual) : null,
-        date: parseDate(r.comData), paid_date: parseDate(r.comDataPagamento),
-        is_paid: !!r.comPago, notes: str(r.comObservacoes ?? r.comObs, 1000),
-      })), 'dealership_id,external_id', errors),
+    // Commissions: forID in MDB → translate to funID (employees.external_id) for name resolution
+    (async () => {
+      const funRows = await rawTables['tbFuncionario']
+      const forIdToFunId: Record<string, string> = {}
+      funRows.forEach((r: any) => { if (r.funID && r.forID) forIdToFunId[String(r.forID)] = String(r.funID) })
+      return upsertBatch('commissions',
+        (await rawTables['tbComissao']).filter((r: any) => r.coID).map((r: any) => {
+          const funId = r.forID ? (forIdToFunId[String(r.forID)] ?? null) : null
+          return {
+            dealership_id: D, external_id: String(r.coID),
+            vehicle_external_id: r.carID ? String(r.carID) : null,
+            vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
+            employee_external_id: funId,
+            employee_id: funId ? (employeeIdByExternal[funId] ?? null) : null,
+            amount: r.coValor ? parseNum(r.coValor) : null,
+            percent: r.coPorcentual ? parseNum(r.coPorcentual) : null,
+            date: null, paid_date: null, is_paid: false,
+            notes: r.coTipo ? `Tipo: ${r.coTipo} | Modalidade: ${r.coModalidade ?? '—'}` : null,
+          }
+        }), 'dealership_id,external_id', errors)
+    })(),
     // Orders → followups (sequential inner chain)
     (async () => {
       const ordersCount = await upsertBatch('orders',
