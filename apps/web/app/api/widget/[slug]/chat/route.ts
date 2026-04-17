@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
-import { createClient } from '@getSvc()/getSvc()-js'
+import { createClient } from '@supabase/supabase-js'
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',

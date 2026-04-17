@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@getSvc()/getSvc()-js'
+import { createClient } from '@supabase/supabase-js'
 import { checkSessionStatus } from '@/lib/wasender/client'
 
 function getSvc() {

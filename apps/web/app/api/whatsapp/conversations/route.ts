@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@getSvc()/getSvc()-js'
+import { createClient } from '@supabase/supabase-js'
 
 function getSvc() {
   return createClient(

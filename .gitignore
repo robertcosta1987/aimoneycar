@@ -43,3 +43,4 @@ coverage/
 
 # Turbo
 .turbo
+.env*.local
