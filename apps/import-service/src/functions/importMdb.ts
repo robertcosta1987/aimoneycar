@@ -101,7 +101,7 @@ async function parseMDB(buffer: Buffer, log: (msg: string) => void) {
   ;(await t('tbPlanoContas')).forEach((r: any) => { if (r.plaID && r.PlaNome) planMap[r.plaID] = String(r.PlaNome) })
 
   const purchaseMap: Record<number, { date: any; km: any; valor: any }> = {}
-  ;(await t('tbDadosCompra', ['carID', 'cData', 'cKM', 'cValor', 'forID', 'cFormaPagamento', 'cObservacoes', 'cObs'])).forEach((r: any) => { if (r.carID) purchaseMap[r.carID] = { date: r.cData, km: r.cKM, valor: r.cValor } })
+  ;(await t('tbDadosCompra', ['carID', 'cData', 'cKM', 'cValor', 'forID', 'cliID', 'crepresentante', 'cFormaPagamento', 'cObservacoes', 'cObs'])).forEach((r: any) => { if (r.carID) purchaseMap[r.carID] = { date: r.cData, km: r.cKM, valor: r.cValor } })
 
   const saleMap: Record<number, { date: any; km: any; valor: any; cliID: any }> = {}
   ;(await t('tbDadosVenda', ['carID', 'vData', 'vKM', 'vValorVenda', 'cliID', 'vFormaPagamento', 'vObservacoes', 'vObs'])).forEach((r: any) => { if (r.carID) saleMap[r.carID] = { date: r.vData, km: r.vKM, valor: r.vValorVenda, cliID: r.cliID } })
@@ -155,7 +155,7 @@ async function parseMDB(buffer: Buffer, log: (msg: string) => void) {
     tbClienteDadosComerciais:    ['cliID', 'cliRazaoSocial', 'cliEmpresa', 'cliCNPJ', 'cliAtividade', 'cliFaturamento', 'cliEndereco', 'cliCidade', 'cliEstado', 'cliTelefone'],
     tbClienteReferenciasBens:    ['cliID', 'refID', 'refTipo', 'refDescri', 'refValor', 'refBanco', 'refParcela'],
     tbfuncionarioSalario:        ['salID', 'funID', 'salData', 'salValor', 'salTipo', 'salDescri', 'salObservacoes'],
-    tbComissaoPadrao:            ['cpaID', 'funID', 'cpaPercentual', 'cpaValorMin', 'cpaValorMax', 'cpaTipo'],
+    tbComissaoPadrao:            ['cpaID', 'coID', 'funID', 'forID', 'cpaPercentual', 'coPorcentual', 'cpaValorMin', 'coValorMin', 'cpaValorMax', 'coValorMax', 'cpaTipo', 'coTipo', 'is_active'],
     tbVeiculoMulta:              ['mulID', 'carID', 'mulData', 'mulValor', 'mulDescri', 'mulOrgao', 'mulCodigo', 'mulPago', 'mulDataPagamento', 'mulObservacoes', 'mulObs'],
     tbVeiculoDocumento:          ['docID', 'carID', 'docTipo', 'docNumero', 'docData', 'docValidade', 'docArquivo', 'docObservacoes', 'docObs'],
     tbVeiculoDocumentoCompra:    ['dcoID', 'carID', 'dcoTipo', 'dcoNumero', 'dcoData', 'dcoValor', 'dcoArquivo', 'dcoObservacoes', 'dcoObs'],
@@ -167,7 +167,7 @@ async function parseMDB(buffer: Buffer, log: (msg: string) => void) {
     tbDespesaPosVenda:           ['dpvID', 'carID', 'dpvDescri', 'dpvValor', 'dpvData', 'plaID'],
     tbFinanciamento:             ['finID', 'carID', 'forID', 'finValor', 'finParcelas', 'finTaxa', 'finParcelaValor', 'finOBS', 'finData1Parcela'],
     tbSeguro:                    ['segID', 'carID', 'cliID', 'segEmpresa', 'segApolice', 'segValor', 'segPremio', 'segDataInicio', 'segDataFim', 'segTipoCobertura', 'segObservacoes', 'segObs'],
-    tbComissao:                  ['comID', 'carID', 'funID', 'comValor', 'comPercentual', 'comData', 'comDataPagamento', 'comPago', 'comObservacoes', 'comObs'],
+    tbComissao:                  ['coID', 'comID', 'carID', 'funID', 'forID', 'coValor', 'comValor', 'coPorcentual', 'comPercentual', 'coData', 'comData', 'coDataPagamento', 'comDataPagamento', 'coPago', 'comPago', 'coTipo', 'comTipo', 'coModalidade', 'comModalidade', 'comObservacoes', 'comObs'],
     tbPedidosClientes:           ['pedID', 'cliID', 'carID', 'funID', 'pedData', 'pedValor', 'pedStatus', 'pedFormaPagamento', 'pedEntrada', 'pedObservacoes', 'pedObs'],
     tbPedidosFollowUp:           ['fupID', 'pedID', 'funID', 'fupData', 'fupDescri', 'fupStatus', 'fupProximoContato', 'fupDataRetorno'],
     'tbNFe ide':                 ['nfeID', 'nfeChave', 'chNFe', 'nNF', 'nfeNumero', 'serie', 'nfeSerie', 'mod', 'nfeModelo', 'dhEmi', 'nfeDataEmissao', 'natOp', 'tpNF', 'vNF', 'nfeStatus', 'carID'],
@@ -604,6 +604,13 @@ async function processImportInBackground(
     vendorIdByExternal[v.external_id] = v.id
   })
 
+  // forID→funID translation map: tbComissao and tbDadosVenda use forID (tbFornecedor PK)
+  // as salesperson reference; translate to funID (employees.external_id) for DB lookups
+  const forIdToFunId: Record<string, string> = {}
+  ;(await rawTables['tbFuncionario']).forEach((r: any) => {
+    if (r.funID && r.forID) forIdToFunId[String(r.forID)] = String(r.funID)
+  })
+
   // ── Phase D: Dependent tables (parallel with sequential inner chains) ────
 
   const [
@@ -657,37 +664,37 @@ async function processImportInBackground(
         financing_bank: str(r.refBanco), monthly_payment: r.refParcela ? parseNum(r.refParcela) : null,
       })), errors)
     })(),
-    // Employee salaries — async IIFE needed for forID→funID translation
+    // Employee salaries — tbfuncionarioSalario links directly via funID
     (async () => {
-      const funRows = await rawTables['tbFuncionario']
-      const forIdToFunId: Record<string, string> = {}
-      funRows.forEach((r: any) => { if (r.funID && r.forID) forIdToFunId[String(r.forID)] = String(r.funID) })
       return upsertBatch('employee_salaries',
-        (await rawTables['tbfuncionarioSalario']).filter((r: any) => r.funcID).map((r: any) => {
-          const funId = r.forID ? (forIdToFunId[String(r.forID)] ?? null) : null
+        (await rawTables['tbfuncionarioSalario']).filter((r: any) => r.salID ?? r.funcID).map((r: any) => {
+          const salId = r.salID ?? r.funcID
+          const funId = r.funID ? String(r.funID) : null
           return {
-            dealership_id: D, external_id: String(r.funcID),
+            dealership_id: D, external_id: String(salId),
             employee_external_id: funId,
             employee_id: funId ? (employeeIdByExternal[funId] ?? null) : null,
-            date: parseDate(r.funcData), amount: r.funSalarioFixo ? parseNum(r.funSalarioFixo) : null,
-            type: 'SALARIO',
-            description: [
-              r.funComVenda1 && parseNum(r.funComVenda1) > 0 ? `Comissão venda: R$ ${parseNum(r.funComVenda1).toFixed(2)}` : null,
-              r.funComVenda2 && parseNum(r.funComVenda2) > 0 ? `Comissão venda 2: R$ ${parseNum(r.funComVenda2).toFixed(2)}` : null,
-              r.funComCompra1 && parseNum(r.funComCompra1) > 0 ? `Comissão compra: R$ ${parseNum(r.funComCompra1).toFixed(2)}` : null,
-            ].filter(Boolean).join(' | ') || null,
+            date: parseDate(r.salData ?? r.funcData),
+            amount: r.salValor ? parseNum(r.salValor) : null,
+            type: str(r.salTipo) ?? 'SALARIO',
+            description: str(r.salDescri ?? r.salObservacoes, 1000),
           }
         }), 'dealership_id,external_id', errors)
     })(),
     upsertBatch('commission_standards',
-      (await rawTables['tbComissaoPadrao']).filter((r: any) => r.coID).map((r: any) => ({
-        dealership_id: D, external_id: String(r.coID),
-        employee_external_id: r.forID ? String(r.forID) : null,
-        employee_id: r.forID ? (employeeIdByExternal[String(r.forID)] ?? null) : null,
-        percent: r.coPorcentual ? parseNum(r.coPorcentual) : null,
-        min_value: null, max_value: null,
-        type: r.coTipo ? String(r.coTipo) : null,
-      })), 'dealership_id,external_id', errors),
+      (await rawTables['tbComissaoPadrao']).filter((r: any) => r.cpaID ?? r.coID).map((r: any) => {
+        const stdId = r.cpaID ?? r.coID
+        const funId = r.funID ? String(r.funID) : (r.forID ? (forIdToFunId[String(r.forID)] ?? null) : null)
+        return {
+          dealership_id: D, external_id: String(stdId),
+          employee_external_id: funId,
+          employee_id: funId ? (employeeIdByExternal[funId] ?? null) : null,
+          percent: r.cpaPercentual ?? r.coPorcentual ? parseNum(r.cpaPercentual ?? r.coPorcentual) : null,
+          min_value: r.cpaValorMin ?? r.coValorMin ? parseNum(r.cpaValorMin ?? r.coValorMin) : null,
+          max_value: r.cpaValorMax ?? r.coValorMax ? parseNum(r.cpaValorMax ?? r.coValorMax) : null,
+          type: str(r.cpaTipo ?? r.coTipo),
+        }
+      }), 'dealership_id,external_id', errors),
     // Purchase & sale data
     upsertBatch('purchase_data',
       (await rawTables['tbDadosCompra']).filter((r: any) => r.carID).map((r: any) => ({
@@ -696,13 +703,18 @@ async function processImportInBackground(
         purchase_date: parseDate(r.cData), mileage: r.cKM ? Math.round(parseNum(r.cKM)) : null,
         purchase_price: r.cValor ? parseNum(r.cValor) : null,
         supplier_external_id: r.forID ? String(r.forID) : null,
+        supplier_id: r.forID ? (vendorIdByExternal[String(r.forID)] ?? null) : null,
+        seller_customer_external_id: r.cliID ? String(r.cliID) : null,
+        seller_customer_id: r.cliID ? (customerIdByExternal[String(r.cliID)] ?? null) : null,
         payment_method: str(r.cFormaPagamento), notes: str(r.cObservacoes ?? r.cObs, 1000),
       })), 'dealership_id,vehicle_external_id', errors),
     upsertBatch('sale_data',
       (await rawTables['tbDadosVenda']).filter((r: any) => r.carID).map((r: any) => {
-        // Salesperson: try common field name variants used across MDB software versions
-        const vendFunId = r.vVendedorID ?? r.vFunID ?? r.vFuncionarioID ?? r.vendedorID ?? null
-        const employeeExtId = vendFunId ? String(vendFunId) : null
+        // vendedorID is a forID (FK to tbFornecedor); translate to funID via forIdToFunId
+        const rawVendId = r.vVendedorID ?? r.vFunID ?? r.vFuncionarioID ?? r.vendedorID ?? null
+        const employeeExtId = rawVendId
+          ? (forIdToFunId[String(rawVendId)] ?? String(rawVendId))
+          : null
         return {
           dealership_id: D, vehicle_external_id: String(r.carID),
           vehicle_id: vehicleIdByExternal[String(r.carID)] ?? null,
@@ -855,24 +867,29 @@ async function processImportInBackground(
         start_date: parseDate(r.segDataInicio), end_date: parseDate(r.segDataFim),
         coverage_type: str(r.segTipoCobertura), notes: str(r.segObservacoes ?? r.segObs, 1000),
       })), 'dealership_id,external_id', errors),
-    // Commissions: forID in MDB → translate to funID (employees.external_id) for name resolution
+    // Commissions: forID or funID → translate to employees.external_id
     (async () => {
-      const funRows = await rawTables['tbFuncionario']
-      const forIdToFunId: Record<string, string> = {}
-      funRows.forEach((r: any) => { if (r.funID && r.forID) forIdToFunId[String(r.forID)] = String(r.funID) })
       return upsertBatch('commissions',
-        (await rawTables['tbComissao']).filter((r: any) => r.coID).map((r: any) => {
-          const funId = r.forID ? (forIdToFunId[String(r.forID)] ?? null) : null
+        (await rawTables['tbComissao']).filter((r: any) => r.coID ?? r.comID).map((r: any) => {
+          const coId = r.coID ?? r.comID
+          // funID = direct funID, or translate forID via forIdToFunId
+          const funId = r.funID
+            ? String(r.funID)
+            : (r.forID ? (forIdToFunId[String(r.forID)] ?? null) : null)
+          const amount = r.coValor ?? r.comValor
+          const percent = r.coPorcentual ?? r.comPercentual
+          const coTipo = r.coTipo ?? r.comTipo
+          const coModalidade = r.coModalidade ?? r.comModalidade
           return {
-            dealership_id: D, external_id: String(r.coID),
+            dealership_id: D, external_id: String(coId),
             vehicle_external_id: r.carID ? String(r.carID) : null,
             vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
             employee_external_id: funId,
             employee_id: funId ? (employeeIdByExternal[funId] ?? null) : null,
-            amount: r.coValor ? parseNum(r.coValor) : null,
-            percent: r.coPorcentual ? parseNum(r.coPorcentual) : null,
+            amount: amount ? parseNum(amount) : null,
+            percent: percent ? parseNum(percent) : null,
             date: null, paid_date: null, is_paid: false,
-            notes: r.coTipo ? `Tipo: ${r.coTipo} | Modalidade: ${r.coModalidade ?? '—'}` : null,
+            notes: coTipo ? `Tipo: ${coTipo} | Modalidade: ${coModalidade ?? '—'}` : null,
           }
         }), 'dealership_id,external_id', errors)
     })(),
