@@ -50,6 +50,12 @@ export interface FullDealershipContext {
   commissions: any[]
   commissionStandards: any[]
   employeeSalaries: any[]
+  saleData: any[]
+  purchaseData: any[]
+  vendors: any[]
+  vehicleTrades: any[]
+  vehiclePendencies: any[]
+  postSaleExpenses: any[]
 }
 
 // ─── FIPE Tool definitions ─────────────────────────────────────────────────────
@@ -595,6 +601,165 @@ function buildSystemPrompt(ctx: FullDealershipContext): string {
       lines.push(`- ${src}: ${n}`)
     })
   }
+
+  // ── Orders with salesperson linkage ───────────────────────────────────────
+  if (ctx.orders.length > 0) {
+    const empById: Record<string, string> = {}
+    ctx.employees.forEach(e => { empById[e.id] = e.name; if (e.external_id) empById[e.external_id] = e.name })
+    const byEmpOrders: Record<string, { name: string; count: number; total: number }> = {}
+    ctx.orders.forEach(o => {
+      const key = o.employee_id ?? o.employee_external_id ?? 'Sem vendedor'
+      const name = empById[key] ?? empById[o.employee_external_id] ?? key
+      if (!byEmpOrders[key]) byEmpOrders[key] = { name, count: 0, total: 0 }
+      byEmpOrders[key].count++
+      byEmpOrders[key].total += o.amount ?? 0
+    })
+    lines.push(`\n## Pedidos por Vendedor (${ctx.orders.length} pedidos)`)
+    lines.push(`| Vendedor | Qtd Pedidos | Valor Total |`)
+    lines.push(`|----------|-------------|-------------|`)
+    Object.values(byEmpOrders).sort((a, b) => b.total - a.total).forEach(e => {
+      lines.push(`| ${e.name} | ${e.count} | R$ ${brl(e.total)} |`)
+    })
+  }
+
+  // ── Sale data with customer and payment method ────────────────────────────
+  if (ctx.saleData.length > 0) {
+    const custById: Record<string, string> = {}
+    ctx.customers.forEach(c => { custById[c.id] = c.name; if (c.external_id) custById[c.external_id] = c.name })
+    const payMethodCount: Record<string, number> = {}
+    ctx.saleData.forEach(s => {
+      const pm = s.payment_method ?? 'Não informado'
+      payMethodCount[pm] = (payMethodCount[pm] ?? 0) + 1
+    })
+    lines.push(`\n## Dados de Venda (${ctx.saleData.length} registros)`)
+    lines.push(`Formas de pagamento:`)
+    Object.entries(payMethodCount).sort((a, b) => b[1] - a[1]).forEach(([pm, n]) => {
+      lines.push(`- ${pm}: ${n} vendas`)
+    })
+    // Recent sales detail (last 30)
+    lines.push(`\n### Vendas Recentes (últimas ${Math.min(30, ctx.saleData.length)})`)
+    lines.push(`| Veículo (extID) | Cliente | Valor | Forma Pgto | Data |`)
+    lines.push(`|-----------------|---------|-------|-----------|------|`)
+    ctx.saleData.slice(0, 30).forEach(s => {
+      const custName = custById[s.customer_id] ?? custById[s.customer_external_id] ?? s.customer_external_id ?? '—'
+      lines.push(
+        `| ${s.vehicle_external_id ?? '?'} | ${custName}` +
+        ` | R$ ${brl(s.sale_price ?? 0)} | ${s.payment_method ?? '—'} | ${s.sale_date ?? '—'} |`
+      )
+    })
+  }
+
+  // ── Purchase data ─────────────────────────────────────────────────────────
+  if (ctx.purchaseData.length > 0) {
+    const payMethodCount: Record<string, number> = {}
+    ctx.purchaseData.forEach(p => {
+      const pm = p.payment_method ?? 'Não informado'
+      payMethodCount[pm] = (payMethodCount[pm] ?? 0) + 1
+    })
+    lines.push(`\n## Dados de Compra (${ctx.purchaseData.length} registros)`)
+    lines.push(`Formas de pagamento (compra):`)
+    Object.entries(payMethodCount).sort((a, b) => b[1] - a[1]).forEach(([pm, n]) => {
+      lines.push(`- ${pm}: ${n} compras`)
+    })
+  }
+
+  // ── Vendors ───────────────────────────────────────────────────────────────
+  if (ctx.vendors.length > 0) {
+    const byCategory: Record<string, number> = {}
+    ctx.vendors.forEach(v => { const cat = v.category ?? 'Sem categoria'; byCategory[cat] = (byCategory[cat] ?? 0) + 1 })
+    lines.push(`\n## Fornecedores/Prestadores (${ctx.vendors.length})`)
+    Object.entries(byCategory).sort((a, b) => b[1] - a[1]).forEach(([cat, n]) => {
+      lines.push(`- ${cat}: ${n}`)
+    })
+  }
+
+  // ── Vehicle trades ────────────────────────────────────────────────────────
+  if (ctx.vehicleTrades.length > 0) {
+    const totalTradeInValue = ctx.vehicleTrades.reduce((s, t) => s + (t.trade_in_value ?? 0), 0)
+    lines.push(`\n## Trocas de Veículos (${ctx.vehicleTrades.length} negociações)`)
+    lines.push(`- Valor total atribuído a veículos recebidos em troca: R$ ${brl(totalTradeInValue)}`)
+    lines.push(`| Data | Veículo Recebido | Veículo Entregue | Valor Troca | Diferença |`)
+    lines.push(`|------|-----------------|------------------|-------------|-----------|`)
+    ctx.vehicleTrades.slice(0, 30).forEach(t => {
+      lines.push(
+        `| ${t.trade_date ?? '—'} | ${t.incoming_vehicle_external_id ?? '—'}` +
+        ` | ${t.outgoing_vehicle_external_id ?? '—'}` +
+        ` | R$ ${brl(t.trade_in_value ?? 0)} | R$ ${brl(t.difference_amount ?? 0)} |`
+      )
+    })
+  }
+
+  // ── Vehicle pendencies ────────────────────────────────────────────────────
+  if (ctx.vehiclePendencies.length > 0) {
+    const pending = ctx.vehiclePendencies.filter(p => p.status === 'pending')
+    const totalPendingAmount = pending.reduce((s, p) => s + (p.amount ?? 0), 0)
+    lines.push(`\n## Pendências de Veículos (${ctx.vehiclePendencies.length} total, ${pending.length} em aberto)`)
+    lines.push(`- Valor total pendências em aberto: R$ ${brl(totalPendingAmount)}`)
+    if (pending.length > 0) {
+      lines.push(`| Veículo | Descrição | Valor | Data |`)
+      lines.push(`|---------|-----------|-------|------|`)
+      pending.slice(0, 20).forEach(p => {
+        lines.push(`| ${p.vehicle_external_id ?? '?'} | ${p.description ?? '—'} | R$ ${brl(p.amount ?? 0)} | ${p.date ?? '—'} |`)
+      })
+    }
+  }
+
+  // ── Post-sale expenses ────────────────────────────────────────────────────
+  if (ctx.postSaleExpenses.length > 0) {
+    const totalPostSale = ctx.postSaleExpenses.reduce((s, e) => s + (e.amount ?? 0), 0)
+    lines.push(`\n## Despesas Pós-Venda (${ctx.postSaleExpenses.length} registros)`)
+    lines.push(`- Total despesas pós-venda: R$ ${brl(totalPostSale)}`)
+    lines.push(`| Veículo | Descrição | Valor | Data |`)
+    lines.push(`|---------|-----------|-------|------|`)
+    ctx.postSaleExpenses.slice(0, 20).forEach(e => {
+      lines.push(`| ${e.vehicle_external_id ?? '?'} | ${e.description ?? '—'} | R$ ${brl(e.amount ?? 0)} | ${e.date ?? '—'} |`)
+    })
+  }
+
+  // ── Relationship map ──────────────────────────────────────────────────────
+  lines.push(`\n## MAPA DE RELACIONAMENTOS ENTRE TABELAS`)
+  lines.push(`Use este mapa para correlacionar dados entre tabelas ao responder perguntas:`)
+  lines.push(``)
+  lines.push(`**VEÍCULO** (vehicles) é o centro de tudo:`)
+  lines.push(`- vehicle.external_id → sale_data.vehicle_external_id (dados detalhados da venda: cliente, forma de pagamento)`)
+  lines.push(`- vehicle.external_id → purchase_data.vehicle_external_id (dados detalhados da compra: fornecedor, forma de pagamento)`)
+  lines.push(`- vehicle.id → expenses.vehicle_id (despesas de preparação/manutenção do veículo)`)
+  lines.push(`- vehicle.external_id → vehicle_fines.vehicle_external_id (multas do veículo)`)
+  lines.push(`- vehicle.external_id → vehicle_pendencies.vehicle_external_id (pendências antes da venda)`)
+  lines.push(`- vehicle.external_id → post_sale_expenses.vehicle_external_id (custos após a venda)`)
+  lines.push(`- vehicle.external_id → commissions.vehicle_external_id (comissão gerada pela venda)`)
+  lines.push(`- vehicle.external_id → financings.vehicle_external_id (financiamento do cliente)`)
+  lines.push(`- vehicle.external_id → vehicle_trades.incoming/outgoing_vehicle_external_id (troca)`)
+  lines.push(`- vehicle.external_id → orders.vehicle_external_id (pedido de venda)`)
+  lines.push(``)
+  lines.push(`**FUNCIONÁRIO/VENDEDOR** (employees):`)
+  lines.push(`- employee.external_id = employee_external_id nos outros registros`)
+  lines.push(`- employee.id → orders.employee_id (pedidos realizados pelo vendedor)`)
+  lines.push(`- employee.external_id → orders.employee_external_id (pedidos pelo código externo)`)
+  lines.push(`- employee.id → commissions.employee_id (comissões do vendedor)`)
+  lines.push(`- employee.id → commission_standards.employee_id (regras de comissão do vendedor)`)
+  lines.push(`- employee.id → employee_salaries.employee_id (pagamentos: salário, comissão, adiantamento)`)
+  lines.push(`- employee.id → agendamentos.salesperson_id (atendimentos agendados pelo vendedor)`)
+  lines.push(``)
+  lines.push(`**CLIENTE** (customers):`)
+  lines.push(`- customer.external_id → sale_data.customer_external_id (venda para o cliente)`)
+  lines.push(`- customer.id → orders.customer_id (pedidos do cliente)`)
+  lines.push(`- customer.external_id → financings.customer_external_id (financiamento do cliente)`)
+  lines.push(`- customer.id → vehicle_trades.customer_id (troca realizada pelo cliente)`)
+  lines.push(``)
+  lines.push(`**PEDIDO** (orders) ↔ **VENDA** (sale_data):`)
+  lines.push(`- orders.vehicle_external_id = sale_data.vehicle_external_id (mesmo veículo)`)
+  lines.push(`- orders.employee_external_id identifica o vendedor que fechou o pedido`)
+  lines.push(`- Para saber quem vendeu um veículo: orders.employee_external_id → employees.external_id → employees.name`)
+  lines.push(``)
+  lines.push(`**DESPESAS** (expenses) vs **DESPESAS PÓS-VENDA** (post_sale_expenses):`)
+  lines.push(`- expenses: custos ANTES ou DURANTE o período em estoque (preparação, IPVA, seguro, etc.)`)
+  lines.push(`- post_sale_expenses: custos APÓS a venda (garantia, recalls, devolução)`)
+  lines.push(`- Ambas vinculadas ao veículo via vehicle_external_id`)
+  lines.push(``)
+  lines.push(`**FORNECEDORES** (vendors):`)
+  lines.push(`- vendors.external_id → purchase_data.supplier_external_id (fornecedor do veículo comprado)`)
+  lines.push(`- vendors podem ser pessoas físicas ou jurídicas de quem a revenda compra veículos`)
 
   return lines.join('\n')
 }

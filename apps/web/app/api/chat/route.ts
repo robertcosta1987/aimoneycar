@@ -32,6 +32,12 @@ export async function POST(req: NextRequest) {
       { data: commissions },
       { data: commissionStandards },
       { data: employeeSalaries },
+      { data: saleData },
+      { data: purchaseData },
+      { data: vendors },
+      { data: vehicleTrades },
+      { data: vehiclePendencies },
+      { data: postSaleExpenses },
     ] = await Promise.all([
       svc.from('dealerships').select('name, city, state').eq('id', D).single(),
 
@@ -96,6 +102,47 @@ export async function POST(req: NextRequest) {
         .eq('dealership_id', D)
         .order('date', { ascending: false })
         .limit(300),
+
+      // Sale data — detailed sale records per vehicle
+      svc.from('sale_data')
+        .select('id, vehicle_external_id, vehicle_id, sale_date, mileage, sale_price, customer_external_id, customer_id, payment_method, notes')
+        .eq('dealership_id', D)
+        .order('sale_date', { ascending: false })
+        .limit(300),
+
+      // Purchase data — detailed purchase records per vehicle
+      svc.from('purchase_data')
+        .select('id, vehicle_external_id, vehicle_id, purchase_date, mileage, purchase_price, supplier_external_id, supplier_id, supplier_name, payment_method, notes')
+        .eq('dealership_id', D)
+        .order('purchase_date', { ascending: false })
+        .limit(300),
+
+      // Vendors — service providers and suppliers
+      svc.from('vendors')
+        .select('id, external_id, name, category, phone, city, state')
+        .eq('dealership_id', D)
+        .limit(200),
+
+      // Vehicle trades — trade-in deals
+      svc.from('vehicle_trades')
+        .select('id, external_id, incoming_vehicle_external_id, incoming_vehicle_id, outgoing_vehicle_external_id, outgoing_vehicle_id, customer_external_id, customer_id, trade_date, trade_in_value, difference_amount, notes')
+        .eq('dealership_id', D)
+        .order('trade_date', { ascending: false })
+        .limit(200),
+
+      // Vehicle pendencies — pending work items per vehicle
+      svc.from('vehicle_pendencies')
+        .select('id, external_id, vehicle_external_id, vehicle_id, description, status, date, amount, resolved_date')
+        .eq('dealership_id', D)
+        .order('date', { ascending: false })
+        .limit(300),
+
+      // Post-sale expenses — costs after a vehicle is sold
+      svc.from('post_sale_expenses')
+        .select('id, external_id, vehicle_external_id, vehicle_id, description, amount, date')
+        .eq('dealership_id', D)
+        .order('date', { ascending: false })
+        .limit(200),
     ])
 
     const vehicles = allVehicles ?? []
@@ -172,6 +219,12 @@ export async function POST(req: NextRequest) {
       commissions: commissionList,
       commissionStandards: commissionStandards ?? [],
       employeeSalaries: employeeSalaries ?? [],
+      saleData: saleData ?? [],
+      purchaseData: purchaseData ?? [],
+      vendors: vendors ?? [],
+      vehicleTrades: vehicleTrades ?? [],
+      vehiclePendencies: vehiclePendencies ?? [],
+      postSaleExpenses: postSaleExpenses ?? [],
     }
 
     const { reply, dashboard } = await chatWithClaude(body.messages, context)
