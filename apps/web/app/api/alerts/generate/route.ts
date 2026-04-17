@@ -1,10 +1,9 @@
 import { NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
-import { fetchAll } from '@/lib/supabase/fetch-all'
 import { generateDailyAlerts } from '@/lib/ai/alerts'
 import type { Vehicle, Expense } from '@/types'
 export const dynamic = 'force-dynamic'
-export const maxDuration = 60 // Vercel Pro allows up to 60s
+export const maxDuration = 60
 
 export async function POST() {
   try {
@@ -24,40 +23,43 @@ export async function POST() {
       .from('dealerships').select('id, name').eq('id', dealId).single()
     if (!dealership) return NextResponse.json({ error: 'Dealership not found' }, { status: 404 })
 
-    // Step 1: fetch all available vehicles (lightweight — no expenses)
-    const vehicles = await fetchAll<Vehicle>(
-      svc.from('vehicles')
-        .select('id, brand, model, year_model, plate, days_in_stock, purchase_price, sale_price, status, color, mileage, fuel, transmission, dealership_id, external_id, created_at, updated_at')
-        .eq('dealership_id', dealId)
-        .eq('status', 'available')
-    )
+    // 1. Fast count of all available vehicles (no row scan)
+    const { count: totalAvailable } = await svc
+      .from('vehicles')
+      .select('id', { count: 'exact', head: true })
+      .eq('dealership_id', dealId)
+      .eq('status', 'available')
 
-    // Step 2: identify candidate vehicle IDs before touching expenses
-    const criticalIds = vehicles
-      .filter(v => (v.days_in_stock ?? 0) > 90)
-      .sort((a, b) => (b.days_in_stock ?? 0) - (a.days_in_stock ?? 0))
-      .slice(0, 10)
-      .map(v => v.id)
+    // 2. Fetch only the worst aged vehicles — single query, no pagination
+    const { data: agedVehicles } = await svc
+      .from('vehicles')
+      .select('id, brand, model, year_model, plate, days_in_stock, purchase_price, sale_price, status, dealership_id')
+      .eq('dealership_id', dealId)
+      .eq('status', 'available')
+      .gt('days_in_stock', 45)
+      .order('days_in_stock', { ascending: false })
+      .limit(25)
 
-    const attentionIds = vehicles
-      .filter(v => (v.days_in_stock ?? 0) >= 46 && (v.days_in_stock ?? 0) <= 90)
-      .sort((a, b) => (b.days_in_stock ?? 0) - (a.days_in_stock ?? 0))
-      .slice(0, 10)
-      .map(v => v.id)
+    const candidates = agedVehicles ?? []
+    const candidateIds = candidates.map(v => v.id)
 
-    const candidateIds = [...new Set([...criticalIds, ...attentionIds])]
-
-    // Step 3: only fetch expenses for those candidate vehicles (not all 500k+)
-    let expenses: Expense[] = []
-    if (candidateIds.length > 0) {
-      expenses = await fetchAll<Expense>(
-        svc.from('expenses')
+    // 3. Fetch expenses only for those vehicles
+    const { data: expenses } = candidateIds.length > 0
+      ? await svc.from('expenses')
           .select('id, vehicle_id, amount, category, dealership_id')
           .in('vehicle_id', candidateIds)
-      )
-    }
+      : { data: [] as Expense[] }
 
-    const alerts = await generateDailyAlerts(dealId, dealership.name, vehicles, expenses)
+    // Build a vehicles array that includes total counts for context
+    // Pass agedVehicles as the "vehicles" list — generateDailyAlerts already
+    // filters by status === 'available', and all of these qualify
+    const alerts = await generateDailyAlerts(
+      dealId,
+      dealership.name,
+      (candidates as unknown as Vehicle[]),
+      (expenses ?? []) as Expense[],
+      totalAvailable ?? 0
+    )
 
     if (alerts.length === 0) {
       return NextResponse.json({ generated: 0, message: 'Nenhuma situação de alerta encontrada na frota.' })

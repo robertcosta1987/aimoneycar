@@ -14,22 +14,21 @@ export async function generateDailyAlerts(
   dealershipId: string,
   dealershipName: string,
   vehicles: Vehicle[],
-  expenses: Expense[]
+  expenses: Expense[],
+  totalAvailable?: number
 ): Promise<Omit<AIAlert, 'id' | 'created_at'>[]> {
   const available = vehicles.filter(v => v.status === 'available')
 
-  // Sort and cap each category to avoid a massive prompt
   const critical = available
-    .filter(v => v.days_in_stock > 90)
+    .filter(v => (v.days_in_stock ?? 0) > 90)
     .sort((a, b) => (b.days_in_stock ?? 0) - (a.days_in_stock ?? 0))
     .slice(0, 10)
 
   const attention = available
-    .filter(v => v.days_in_stock >= 46 && v.days_in_stock <= 90)
+    .filter(v => (v.days_in_stock ?? 0) >= 46 && (v.days_in_stock ?? 0) <= 90)
     .sort((a, b) => (b.days_in_stock ?? 0) - (a.days_in_stock ?? 0))
     .slice(0, 5)
 
-  // Build expense map
   const expensesByVehicle = expenses.reduce<Record<string, number>>((acc, e) => {
     if (e.vehicle_id) acc[e.vehicle_id] = (acc[e.vehicle_id] ?? 0) + e.amount
     return acc
@@ -44,7 +43,7 @@ export async function generateDailyAlerts(
     .map(({ v, ratio }) => ({
       vehicle: v,
       totalExpenses: expensesByVehicle[v.id],
-      reason: `${v.brand} ${v.model} acumulou R$ ${(expensesByVehicle[v.id] ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} em despesas (${(ratio * 100).toFixed(1)}% do custo de compra)`,
+      reason: `${v.brand} ${v.model} acumulou despesas equivalentes a ${(ratio * 100).toFixed(1)}% do custo de compra`,
     }))
 
   const candidates: AlertCandidate[] = [
@@ -59,24 +58,23 @@ export async function generateDailyAlerts(
     ...highExpense,
   ]
 
-  // No alerts needed if fleet is healthy
   if (candidates.length === 0) return []
 
-  const criticalTotal = available.filter(v => v.days_in_stock > 90).length
-  const attentionTotal = available.filter(v => v.days_in_stock >= 46 && v.days_in_stock <= 90).length
+  const fleetSize = totalAvailable ?? available.length
+  const criticalTotal = available.filter(v => (v.days_in_stock ?? 0) > 90).length
+  const attentionTotal = available.filter(v => (v.days_in_stock ?? 0) >= 46 && (v.days_in_stock ?? 0) <= 90).length
 
   const prompt = `Você é o sistema de alertas da revenda "${dealershipName}".
-Analise as situações abaixo e gere exatamente ${candidates.length} alertas em português, um por situação listada, na mesma ordem.
+Analise as situações abaixo e gere exatamente ${candidates.length} alertas em português, um por situação, na mesma ordem.
 
-Frota disponível: ${available.length} veículos | Críticos (>90d): ${criticalTotal} | Atenção (46-90d): ${attentionTotal}
+Frota: ${fleetSize} disponíveis | ${criticalTotal} críticos (>90d) | ${attentionTotal} em atenção (46-90d)
 
-Situações (${candidates.length} no total):
+Situações:
 ${candidates.map((c, i) => `${i + 1}. ${c.reason}`).join('\n')}
 
-Responda APENAS com um array JSON de exatamente ${candidates.length} objetos, na mesma ordem:
-[{"type":"critical"|"warning"|"info"|"success","title":"título curto","message":"1-2 frases acionáveis","action":"texto do botão ou null"}]`
+Responda APENAS com um array JSON de exatamente ${candidates.length} objetos:
+[{"type":"critical"|"warning"|"info"|"success","title":"título curto","message":"1-2 frases acionáveis","action":"texto botão ou null"}]`
 
-  // Throws on API error — caller handles it
   const response = await getAI().messages.create({
     model: 'claude-haiku-4-5-20251001',
     max_tokens: 2048,
@@ -85,7 +83,7 @@ Responda APENAS com um array JSON de exatamente ${candidates.length} objetos, na
 
   const text = response.content[0].type === 'text' ? response.content[0].text : ''
   const jsonMatch = text.match(/\[[\s\S]*\]/)
-  if (!jsonMatch) throw new Error(`Claude returned no valid JSON. Response: ${text.slice(0, 200)}`)
+  if (!jsonMatch) throw new Error(`Claude não retornou JSON válido: ${text.slice(0, 200)}`)
 
   const parsed = JSON.parse(jsonMatch[0]) as Array<{
     type: AIAlert['type']
