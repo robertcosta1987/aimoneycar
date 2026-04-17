@@ -3,8 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 import { fetchAll } from '@/lib/supabase/fetch-all'
 import Link from 'next/link'
 import {
-  Car, TrendingUp, AlertTriangle, DollarSign, Clock,
-  ArrowRight, ChevronRight, FileBarChart2
+  Car, TrendingUp, DollarSign, Clock,
+  ChevronRight, FileBarChart2
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -35,7 +35,7 @@ export default async function DashboardPage() {
   const [
     { data: statsData },
     { data: vehicles },
-    { data: alerts },
+    { data: _alerts },
     { data: sales },
     { data: costRaw },
     { data: soldRecent },
@@ -108,19 +108,6 @@ export default async function DashboardPage() {
       subColor: 'text-foreground-muted',
     },
   ]
-
-  const alertColors: Record<string, string> = {
-    critical: 'text-danger',
-    warning: 'text-warning',
-    info: 'text-primary',
-    success: 'text-success',
-  }
-  const alertBg: Record<string, string> = {
-    critical: 'bg-danger/10 border-danger/20',
-    warning: 'bg-warning/10 border-warning/20',
-    info: 'bg-primary/10 border-primary/20',
-    success: 'bg-success/10 border-success/20',
-  }
 
   const agingWidgetVehicles = agingAll.map(v => ({
     id: v.id,
@@ -198,43 +185,9 @@ export default async function DashboardPage() {
         </Link>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Alerts */}
-        <Card className="lg:col-span-1">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-warning" />
-                Alertas IA
-              </CardTitle>
-              <Link href="/dashboard/alertas">
-                <Button variant="ghost" size="sm" className="h-7 text-xs gap-1">
-                  Ver todos <ChevronRight className="w-3 h-3" />
-                </Button>
-              </Link>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {!alerts || alerts.length === 0 ? (
-              <div className="text-center py-6 text-foreground-muted text-sm">
-                ✅ Nenhum alerta pendente
-              </div>
-            ) : (
-              alerts.slice(0, 4).map((alert) => (
-                <div
-                  key={alert.id}
-                  className={`p-3 rounded-xl border text-sm ${alertBg[alert.type] || alertBg.info}`}
-                >
-                  <p className={`font-medium text-xs ${alertColors[alert.type]}`}>{alert.title}</p>
-                  <p className="text-foreground-muted text-xs mt-1 line-clamp-2">{alert.message}</p>
-                </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Vehicles in stock */}
-        <Card className="lg:col-span-2">
+      {/* Vehicles in stock */}
+      <div>
+        <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base flex items-center gap-2">

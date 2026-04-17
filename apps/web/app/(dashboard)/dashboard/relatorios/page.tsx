@@ -1,6 +1,6 @@
 'use client'
-import { useState, useEffect } from 'react'
-import { BarChart3, TrendingUp, DollarSign, Car, Receipt, Calendar, CalendarClock, ChevronLeft, Sparkles } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { BarChart3, TrendingUp, DollarSign, Car, Receipt, Calendar, CalendarClock, ChevronLeft, Sparkles, Bell, RefreshCw } from 'lucide-react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { fetchAll } from '@/lib/supabase/fetch-all'
@@ -17,6 +17,35 @@ type Mode = 'rolling' | 'month'
 interface AvailableMonth { value: string; label: string; salesCount: number }
 
 export default function RelatoriosPage() {
+  const [aiGenerating, setAiGenerating] = useState(false)
+  const [aiResult, setAiResult]         = useState<{ ok: boolean; msg: string } | null>(null)
+  const aiTriggered = useRef(false)
+
+  const generateAlerts = async () => {
+    setAiGenerating(true)
+    setAiResult(null)
+    try {
+      const res  = await fetch('/api/alerts/generate', { method: 'POST' })
+      const raw  = await res.text()
+      let json: any = {}
+      try { json = JSON.parse(raw) } catch {
+        setAiResult({ ok: false, msg: `Erro do servidor (HTTP ${res.status}): ${raw.slice(0, 150)}` })
+        return
+      }
+      if (json.error) {
+        setAiResult({ ok: false, msg: json.error })
+      } else if (json.generated > 0) {
+        setAiResult({ ok: true, msg: `${json.generated} alertas gerados com sucesso.` })
+      } else {
+        setAiResult({ ok: true, msg: json.message ?? 'Nenhuma situação de alerta encontrada.' })
+      }
+    } catch (err: any) {
+      setAiResult({ ok: false, msg: err?.message ?? 'Erro desconhecido' })
+    } finally {
+      setAiGenerating(false)
+    }
+  }
+
   const [mode, setMode]                   = useState<Mode>('rolling')
   const [period, setPeriod]               = useState('30')
   const [selectedMonth, setSelectedMonth] = useState<string>('')
@@ -608,6 +637,49 @@ export default function RelatoriosPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Alertas IA */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Bell className="w-4 h-4 text-warning" />
+              Alertas IA
+            </CardTitle>
+            <Link href="/dashboard/alertas">
+              <Button variant="ghost" size="sm" className="h-7 text-xs gap-1">
+                Ver alertas <ChevronLeft className="w-3 h-3 rotate-180" />
+              </Button>
+            </Link>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-foreground-muted">
+            Analisa toda a frota disponível e gera alertas inteligentes sobre veículos críticos, atenção e despesas elevadas.
+          </p>
+          {aiResult && (
+            <div className={`p-3 rounded-xl border text-sm ${aiResult.ok ? 'bg-success/10 border-success/20 text-success' : 'bg-danger/10 border-danger/20 text-danger'}`}>
+              {aiResult.ok ? '✅' : '⚠️'} {aiResult.msg}
+            </div>
+          )}
+          <div className="flex gap-3">
+            <Button
+              onClick={generateAlerts}
+              disabled={aiGenerating}
+              className="gap-2"
+            >
+              <RefreshCw className={`w-4 h-4 ${aiGenerating ? 'animate-spin' : ''}`} />
+              {aiGenerating ? 'Gerando alertas...' : 'Gerar Alertas IA'}
+            </Button>
+            <Link href="/dashboard/alertas">
+              <Button variant="outline" className="gap-2">
+                <Bell className="w-4 h-4" />
+                Ver Alertas
+              </Button>
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }
