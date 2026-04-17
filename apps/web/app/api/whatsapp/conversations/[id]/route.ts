@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@getSvc()/getSvc()-js'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+function getSvc() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+}
 
 // GET /api/whatsapp/conversations/[id]?page=&limit=
 export async function GET(
@@ -15,7 +17,7 @@ export async function GET(
   const page  = parseInt(searchParams.get('page')  || '1')
   const limit = parseInt(searchParams.get('limit') || '50')
 
-  const { data: conversa, error: convErr } = await supabase
+  const { data: conversa, error: convErr } = await getSvc()
     .from('whatsapp_conversas')
     .select('*')
     .eq('id', params.id)
@@ -25,7 +27,7 @@ export async function GET(
     return NextResponse.json({ error: 'Conversation not found' }, { status: 404 })
   }
 
-  const { data: mensagens, count } = await supabase
+  const { data: mensagens, count } = await getSvc()
     .from('whatsapp_mensagens')
     .select('*', { count: 'exact' })
     .eq('conversa_id', params.id)
@@ -57,7 +59,7 @@ export async function PATCH(
     if (key in body) patch[key] = body[key]
   }
 
-  const { error } = await supabase
+  const { error } = await getSvc()
     .from('whatsapp_conversas')
     .update(patch)
     .eq('id', params.id)

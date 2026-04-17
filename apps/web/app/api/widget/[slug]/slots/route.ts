@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@getSvc()/getSvc()-js'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+function getSvc() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+}
 
 export async function GET(
   req: NextRequest,
@@ -14,7 +16,7 @@ export async function GET(
   const startDate = sp.get('start') || new Date().toISOString().split('T')[0]
   const endDate = sp.get('end') || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
-  const { data: dealership } = await supabase
+  const { data: dealership } = await getSvc()
     .from('dealerships')
     .select('id')
     .eq('slug', params.slug)
@@ -24,7 +26,7 @@ export async function GET(
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
-  const { data: slots, error } = await supabase.rpc('get_slots_disponiveis', {
+  const { data: slots, error } = await getSvc().rpc('get_slots_disponiveis', {
     p_dealership_id: dealership.id,
     p_data_inicio: startDate,
     p_data_fim: endDate,

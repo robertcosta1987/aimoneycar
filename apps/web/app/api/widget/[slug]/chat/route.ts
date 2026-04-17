@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@getSvc()/getSvc()-js'
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -12,11 +12,13 @@ export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: CORS_HEADERS })
 }
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+function getAI() { return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! }) }
+function getSvc() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+}
 
 // ── Slot logic ────────────────────────────────────────────────────────────────
 // 9:00 – 18:00 BRT, 30 min appointments, 15 min gap between = 45 min cycle
@@ -40,7 +42,7 @@ async function getSlotsForDate(dealershipId: string, dateISO: string): Promise<{
   const dayStart = `${dateISO}T00:00:00-03:00`
   const dayEnd   = `${dateISO}T23:59:59-03:00`
 
-  const { data: existing } = await supabase
+  const { data: existing } = await getSvc()
     .from('agendamentos')
     .select('data_inicio, data_fim')
     .eq('dealership_id', dealershipId)
@@ -99,7 +101,7 @@ export async function POST(
   try {
     const { messages, visitorId, conversationId } = await req.json()
 
-    const { data: dealership } = await supabase
+    const { data: dealership } = await getSvc()
       .from('dealerships')
       .select('id, name, city, state, address, phone, whatsapp')
       .eq('slug', params.slug)
@@ -110,7 +112,7 @@ export async function POST(
     }
 
     // Get available vehicles
-    const { data: vehicles } = await supabase
+    const { data: vehicles } = await getSvc()
       .from('vehicles')
       .select('id, brand, model, version, year_model, color, mileage, sale_price, fuel, transmission')
       .eq('dealership_id', dealership.id)
@@ -190,7 +192,7 @@ export async function POST(
       content: m.content,
     }))
 
-    let response = await anthropic.messages.create({
+    let response = await getAI().messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 1024,
       system: systemPrompt,
@@ -216,7 +218,7 @@ export async function POST(
         content: toolResults.filter(Boolean) as Anthropic.ToolResultBlockParam[],
       })
 
-      response = await anthropic.messages.create({
+      response = await getAI().messages.create({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 1024,
         system: systemPrompt,
@@ -288,7 +290,7 @@ Fluxo ideal: cumprimentar → mostrar opções → qualificar → oferecer agend
 async function executeTool(dealershipId: string, toolName: string, input: any, conversationId: string): Promise<any> {
   switch (toolName) {
     case 'buscar_veiculos': {
-      let query = supabase
+      let query = getSvc()
         .from('vehicles')
         .select('id, brand, model, version, year_model, color, mileage, sale_price, fuel, transmission')
         .eq('dealership_id', dealershipId)
@@ -350,7 +352,7 @@ async function executeTool(dealershipId: string, toolName: string, input: any, c
       ))
       const endUTC = new Date(startUTC.getTime() + 30 * 60 * 1000)
 
-      const { data: inserted, error } = await supabase
+      const { data: inserted, error } = await getSvc()
         .from('agendamentos')
         .insert({
           dealership_id: dealershipId,
@@ -376,7 +378,7 @@ async function executeTool(dealershipId: string, toolName: string, input: any, c
       }
 
       if (conversationId) {
-        await supabase
+        await getSvc()
           .from('widget_conversas')
           .update({ agendamento_id: inserted.id, convertido: true })
           .eq('id', conversationId)
@@ -401,7 +403,7 @@ async function executeTool(dealershipId: string, toolName: string, input: any, c
         : input.urgencia === 'este_mes' ? 'morno'
         : 'frio'
 
-      await supabase
+      await getSvc()
         .from('widget_conversas')
         .update({
           lead_nome: input.nome,
@@ -434,12 +436,12 @@ async function saveConversation(
   ]
 
   if (conversationId) {
-    await supabase
+    await getSvc()
       .from('widget_conversas')
       .update({ mensagens: allMessages })
       .eq('id', conversationId)
   } else {
-    await supabase.from('widget_conversas').insert({
+    await getSvc().from('widget_conversas').insert({
       dealership_id: dealershipId,
       visitor_id: visitorId,
       mensagens: allMessages,

@@ -26,10 +26,12 @@ import type {
 // Allow up to 60s for AI generation + tool calls (Vercel Pro)
 export const maxDuration = 60
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+function getSvc() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+}
 
 // ─── POST: receive event ──────────────────────────────────────────────────────
 
@@ -102,7 +104,7 @@ async function handleIncomingMessage(
 
   // ── Deduplication: skip if this wasender_msg_id was already processed ────────
   if (key?.id) {
-    const { data: alreadyProcessed } = await supabase
+    const { data: alreadyProcessed } = await getSvc()
       .from('whatsapp_mensagens')
       .select('id')
       .eq('wasender_msg_id', key.id)
@@ -114,7 +116,7 @@ async function handleIncomingMessage(
   }
 
   // Load session — filter by dealership only; don't rely on status field
-  let sessaoQuery = supabase.from('whatsapp_sessoes').select('*')
+  let sessaoQuery = getSvc().from('whatsapp_sessoes').select('*')
   if (dealershipId) sessaoQuery = sessaoQuery.eq('dealership_id', dealershipId)
   const { data: sessao } = await sessaoQuery.single() as { data: WhatsAppSessao | null }
 
@@ -142,7 +144,7 @@ async function handleIncomingMessage(
   // (so it's persisted even if AI fails)
   const { tipo, conteudo, midiaUrl, midiaTipo } = parseMessageContent(msgContent, messageBody)
 
-  await supabase.from('whatsapp_mensagens').insert({
+  await getSvc().from('whatsapp_mensagens').insert({
     conversa_id:    conversa.id,
     dealership_id:  sessao.dealership_id,
     wasender_msg_id: key.id,
@@ -154,7 +156,7 @@ async function handleIncomingMessage(
     status:         'entregue',
   })
 
-  await supabase.from('whatsapp_conversas').update({
+  await getSvc().from('whatsapp_conversas').update({
     total_mensagens:   conversa.total_mensagens + 1,
     ultima_mensagem_em: new Date().toISOString(),
     atualizado_em:     new Date().toISOString(),
@@ -168,7 +170,7 @@ async function handleIncomingMessage(
   // trigger the AI — prevents duplicate/race-condition responses.
   await new Promise(r => setTimeout(r, 1500))
 
-  const { data: latestMsg } = await supabase
+  const { data: latestMsg } = await getSvc()
     .from('whatsapp_mensagens')
     .select('wasender_msg_id')
     .eq('conversa_id', conversa.id)
@@ -199,7 +201,7 @@ async function handleIncomingMessage(
   await sendPresenceUpdate(sessao.wasender_api_key, remoteJid, 'paused')
 
   // Save outgoing message record
-  const { data: outMsg } = await supabase
+  const { data: outMsg } = await getSvc()
     .from('whatsapp_mensagens')
     .insert({
       conversa_id:   conversa.id,
@@ -219,7 +221,7 @@ async function handleIncomingMessage(
     text:   aiResult.message,
   })
 
-  await supabase.from('whatsapp_mensagens').update({
+  await getSvc().from('whatsapp_mensagens').update({
     wasender_msg_id: sendResult.data?.msgId?.toString() ?? null,
     status:          sendResult.success ? 'enviado' : 'falhou',
     erro:            sendResult.error ?? null,
@@ -227,7 +229,7 @@ async function handleIncomingMessage(
   }).eq('id', outMsg?.id)
 
   // Update conversation intent
-  await supabase.from('whatsapp_conversas').update({
+  await getSvc().from('whatsapp_conversas').update({
     ultima_intencao: aiResult.intent,
     total_mensagens: conversa.total_mensagens + 2,
     atualizado_em:   new Date().toISOString(),
@@ -235,7 +237,7 @@ async function handleIncomingMessage(
 
   // Alert if human transfer requested
   if (aiResult.shouldTransferToHuman) {
-    await supabase.from('ai_alerts').insert({
+    await getSvc().from('ai_alerts').insert({
       dealership_id: sessao.dealership_id,
       type:          'warning',
       title:         'WhatsApp: atendimento requer humano',
@@ -255,7 +257,7 @@ async function handleSessionStatus(payload: WASenderWebhookPayload, dealershipId
   if (!dealershipId) return
 
   const status = (payload.data as any)?.status === 'connected' ? 'conectado' : 'desconectado'
-  await supabase.from('whatsapp_sessoes')
+  await getSvc().from('whatsapp_sessoes')
     .update({ status, ultimo_status_check: new Date().toISOString() })
     .eq('dealership_id', dealershipId)
 }
@@ -268,7 +270,7 @@ async function getOrCreateConversa(
   remoteJid: string,
   pushName?: string
 ) {
-  const { data: existing } = await supabase
+  const { data: existing } = await getSvc()
     .from('whatsapp_conversas')
     .select('*')
     .eq('dealership_id', dealershipId)
@@ -277,7 +279,7 @@ async function getOrCreateConversa(
 
   if (existing) {
     if (pushName && !existing.nome_contato) {
-      await supabase.from('whatsapp_conversas')
+      await getSvc().from('whatsapp_conversas')
         .update({ nome_contato: pushName })
         .eq('id', existing.id)
       return { ...existing, nome_contato: pushName }
@@ -285,7 +287,7 @@ async function getOrCreateConversa(
     return existing
   }
 
-  const { data: created } = await supabase
+  const { data: created } = await getSvc()
     .from('whatsapp_conversas')
     .insert({
       dealership_id:  dealershipId,

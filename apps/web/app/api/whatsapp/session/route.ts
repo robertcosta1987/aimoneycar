@@ -1,18 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@getSvc()/getSvc()-js'
 import { checkSessionStatus } from '@/lib/wasender/client'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+function getSvc() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+}
 
 // GET /api/whatsapp/session?dealershipId=xxx
 export async function GET(req: NextRequest) {
   const dealershipId = new URL(req.url).searchParams.get('dealershipId')
   if (!dealershipId) return NextResponse.json({ error: 'dealershipId required' }, { status: 400 })
 
-  const { data: sessao } = await supabase
+  const { data: sessao } = await getSvc()
     .from('whatsapp_sessoes')
     .select('*')
     .eq('dealership_id', dealershipId)
@@ -23,7 +25,7 @@ export async function GET(req: NextRequest) {
   // Best-effort status check — session is treated as active if credentials are saved
   const status = await checkSessionStatus(sessao.wasender_api_key)
   if (status.phone || status.name) {
-    await supabase.from('whatsapp_sessoes').update({
+    await getSvc().from('whatsapp_sessoes').update({
       status:              'conectado',
       telefone:            status.phone ?? sessao.telefone,
       nome:                status.name  ?? sessao.nome,
@@ -72,7 +74,7 @@ export async function POST(req: NextRequest) {
   // Status check is best-effort — don't block setup if it fails
   const status = await checkSessionStatus(wasenderApiKey)
 
-  const { data, error } = await supabase
+  const { data, error } = await getSvc()
     .from('whatsapp_sessoes')
     .upsert({
       dealership_id:              dealershipId,
@@ -116,7 +118,7 @@ export async function PUT(req: NextRequest) {
   if (updates.businessHoursEnd)              patch.horario_atendimento_fim     = updates.businessHoursEnd
   if (updates.outOfHoursMessage !== undefined) patch.mensagem_fora_horario     = updates.outOfHoursMessage
 
-  const { error } = await supabase
+  const { error } = await getSvc()
     .from('whatsapp_sessoes')
     .update(patch)
     .eq('dealership_id', dealershipId)
@@ -130,7 +132,7 @@ export async function DELETE(req: NextRequest) {
   const dealershipId = new URL(req.url).searchParams.get('dealershipId')
   if (!dealershipId) return NextResponse.json({ error: 'dealershipId required' }, { status: 400 })
 
-  const { error } = await supabase
+  const { error } = await getSvc()
     .from('whatsapp_sessoes')
     .delete()
     .eq('dealership_id', dealershipId)

@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@getSvc()/getSvc()-js'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+function getSvc() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+}
 
 // GET /api/whatsapp/conversations?dealershipId=&status=&page=&limit=
 export async function GET(req: NextRequest) {
@@ -16,7 +18,7 @@ export async function GET(req: NextRequest) {
 
   if (!dealershipId) return NextResponse.json({ error: 'dealershipId required' }, { status: 400 })
 
-  let query = supabase
+  let query = getSvc()
     .from('whatsapp_conversas')
     .select('*', { count: 'exact' })
     .eq('dealership_id', dealershipId)

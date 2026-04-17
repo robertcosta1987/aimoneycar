@@ -3,7 +3,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { getDashboardStats, demoVehicles, expensesByCategory, demoSales } from '@/lib/demo-data'
 import { formatCurrency, formatPercent } from '@/lib/utils'
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
+function getAI() { return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! }) }
 
 function buildDemoContext(): string {
   const stats = getDashboardStats()
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No messages' }, { status: 400 })
     }
 
-    const response = await anthropic.messages.create({
+    const response = await getAI().messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 1024,
       system: buildDemoContext(),

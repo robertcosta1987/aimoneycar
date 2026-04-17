@@ -1,16 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@getSvc()/getSvc()-js'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+function getSvc() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+}
 
 export async function GET(
   req: NextRequest,
   { params }: { params: { slug: string } }
 ) {
-  const { data: dealership } = await supabase
+  const { data: dealership } = await getSvc()
     .from('dealerships')
     .select('name, widget_color:calendario_config(widget_cor)')
     .eq('slug', params.slug)
