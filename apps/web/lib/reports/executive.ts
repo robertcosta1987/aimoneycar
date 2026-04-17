@@ -195,11 +195,11 @@ export async function computeExecutiveReport(
       .lte('sale_date', pEnd),
 
     // Financings table (primary source — populated by MDB import from tbFinanciamento)
+    // NOTE: start_date is unreliable (often null or sentinel 01/01/00); filter by vehicle_id
+    // against sold vehicles in the period instead of using a date range here.
     supabase.from('financings')
       .select('id,bank,total_amount,installments,installment_amount,interest_rate,down_payment,start_date,status,vehicle_id')
-      .eq('dealership_id', dealId)
-      .gte('start_date', pStart)
-      .lte('start_date', pEnd),
+      .eq('dealership_id', dealId),
   ])
 
   const sold        = (soldRaw        || []) as any[]
@@ -386,23 +386,32 @@ export async function computeExecutiveReport(
   // ─────────────────────────────────────────────────────────────────────────
   // 4.6 FINANCING OVERVIEW
   // Primary source: financings table (MDB import via tbFinanciamento)
-  // Secondary source: sales table payment_method (manually entered records)
+  // start_date is unreliable (often null / sentinel 01/01/00), so we match
+  // financings to the sold vehicles in the period via vehicle_id.
   // ─────────────────────────────────────────────────────────────────────────
 
-  // --- Primary: financings table ---
+  // Map sold vehicle UUIDs for O(1) lookup
+  const soldVehicleIdSet = new Set(sold.map((v: any) => v.id).filter(Boolean))
+
+  // Period financings = financings whose vehicle was sold in this period
+  const periodFinancings = financingsList.filter((f: any) => f.vehicle_id && soldVehicleIdSet.has(f.vehicle_id))
+
+  // If no period match (e.g. data not yet re-imported with fixed column names),
+  // fall back to all financings so the section is never empty
+  const activeFinancings = periodFinancings.length > 0 ? periodFinancings : financingsList
+
   const bankMap: Record<string, { count: number; total: number }> = {}
-  for (const f of financingsList) {
+  for (const f of activeFinancings) {
     const bank = f.bank || 'Não informado'
     if (!bankMap[bank]) bankMap[bank] = { count: 0, total: 0 }
     bankMap[bank].count++
     bankMap[bank].total = fromCents(toCents(bankMap[bank].total) + toCents(f.total_amount || 0))
   }
 
-  // --- Secondary: sales table (fallback for manually entered data not in financings) ---
-  // Only count a sale as "financed via sales table" if no matching vehicle_id in financings
-  const financedVehicleIds = new Set(financingsList.map((f: any) => f.vehicle_id).filter(Boolean))
+  // Secondary: sales table (manually entered records whose vehicle has no financing row)
+  const financedVehicleIds = new Set(activeFinancings.map((f: any) => f.vehicle_id).filter(Boolean))
   const salesFinanced = salesList.filter((s: any) => {
-    if (financedVehicleIds.has(s.id)) return false // already covered by financings table
+    if (financedVehicleIds.has(s.id)) return false
     const pm = (s.payment_method || '').toLowerCase()
     return pm.includes('financiamento') || pm.includes('banco') || pm.includes('financi')
   })
@@ -417,19 +426,19 @@ export async function computeExecutiveReport(
     .map(([bank, { count, total }]) => ({ bank, count, totalAmount: total }))
     .sort((a, b) => b.count - a.count)
 
-  const totalContracts     = financingsList.length + salesFinanced.length
+  const totalContracts      = activeFinancings.length + salesFinanced.length
   const totalFinancedAmount = fromCents(
-    financingsList.reduce((s: number, f: any) => s + toCents(f.total_amount || 0), 0) +
-    salesFinanced.reduce((s: number, f: any) => s + toCents(f.sale_price || 0), 0)
+    activeFinancings.reduce((s: number, f: any) => s + toCents(f.total_amount || 0), 0) +
+    salesFinanced.reduce((s: number, f: any)    => s + toCents(f.sale_price   || 0), 0)
   )
-  const cashSales   = salesList.filter((s: any) => !salesFinanced.some((f: any) => f.id === s.id) && !financedVehicleIds.has(s.id))
-  const cashAmount  = fromCents(cashSales.reduce((s: number, c: any) => s + toCents(c.sale_price || 0), 0))
-  const missingDataContracts = financingsList.filter((f: any) => !f.bank || !f.total_amount).length
+  const cashSales  = salesList.filter((s: any) => !salesFinanced.some((f: any) => f.id === s.id) && !financedVehicleIds.has(s.id))
+  const cashAmount = fromCents(cashSales.reduce((s: number, c: any) => s + toCents(c.sale_price || 0), 0))
+  const missingDataContracts = activeFinancings.filter((f: any) => !f.bank || !f.total_amount).length
 
-  // Installment averages (only from financings table — these have reliable data)
-  const withInstallments    = financingsList.filter((f: any) => f.installments && f.installments > 0)
-  const withInstAmount      = financingsList.filter((f: any) => f.installment_amount && f.installment_amount > 0)
-  const withRate            = financingsList.filter((f: any) => f.interest_rate != null && f.interest_rate > 0)
+  // Installment averages
+  const withInstallments = activeFinancings.filter((f: any) => f.installments && f.installments > 0)
+  const withInstAmount   = activeFinancings.filter((f: any) => f.installment_amount && f.installment_amount > 0)
+  const withRate         = activeFinancings.filter((f: any) => f.interest_rate != null && f.interest_rate > 0)
 
   const avgInstallments = withInstallments.length > 0
     ? Math.round(withInstallments.reduce((s: number, f: any) => s + f.installments, 0) / withInstallments.length)

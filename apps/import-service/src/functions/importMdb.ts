@@ -165,7 +165,7 @@ async function parseMDB(buffer: Buffer, log: (msg: string) => void) {
     tbveiculoTroca:              ['trcID', 'carID', 'carIDEntregue', 'cliID', 'trcData', 'trcValorEntrada', 'trcDiferenca', 'trcObservacoes', 'trcObs'],
     tbRateioVeiculo:             ['ratID', 'carID', 'plaID', 'ratValor', 'ratData', 'ratDescri'],
     tbDespesaPosVenda:           ['dpvID', 'carID', 'dpvDescri', 'dpvValor', 'dpvData', 'plaID'],
-    tbFinanciamento:             ['finID', 'carID', 'cliID', 'finBanco', 'finValor', 'finParcelas', 'finTaxa', 'finValorParcela', 'finEntrada', 'finData', 'finContrato', 'finObservacoes', 'finObs'],
+    tbFinanciamento:             ['finID', 'carID', 'forID', 'finValor', 'finParcelas', 'finTaxa', 'finParcelaValor', 'finOBS', 'finData1Parcela'],
     tbSeguro:                    ['segID', 'carID', 'cliID', 'segEmpresa', 'segApolice', 'segValor', 'segPremio', 'segDataInicio', 'segDataFim', 'segTipoCobertura', 'segObservacoes', 'segObs'],
     tbComissao:                  ['comID', 'carID', 'funID', 'comValor', 'comPercentual', 'comData', 'comDataPagamento', 'comPago', 'comObservacoes', 'comObs'],
     tbPedidosClientes:           ['pedID', 'cliID', 'carID', 'funID', 'pedData', 'pedValor', 'pedStatus', 'pedFormaPagamento', 'pedEntrada', 'pedObservacoes', 'pedObs'],
@@ -568,10 +568,11 @@ async function processImportInBackground(
 
   // ── Phase C: UUID maps ──────────────────────────────────────────────────
 
-  const [{ data: custMap }, { data: empMap }, { data: vehMap }] = await Promise.all([
+  const [{ data: custMap }, { data: empMap }, { data: vehMap }, { data: vendorMap }] = await Promise.all([
     getSvc().from('customers').select('id, external_id').eq('dealership_id', D).not('external_id', 'is', null),
     getSvc().from('employees').select('id, external_id').eq('dealership_id', D).not('external_id', 'is', null),
     getSvc().from('vehicles').select('id, external_id').eq('dealership_id', D).not('external_id', 'is', null),
+    getSvc().from('vendors').select('id, external_id, name').eq('dealership_id', D).not('external_id', 'is', null),
   ])
   const customerIdByExternal: Record<string, string> = {}
   ;(custMap ?? []).forEach((c: any) => { customerIdByExternal[c.external_id] = c.id })
@@ -579,6 +580,13 @@ async function processImportInBackground(
   ;(empMap ?? []).forEach((e: any) => { employeeIdByExternal[e.external_id] = e.id })
   const vehicleIdByExternal: Record<string, string> = {}
   ;(vehMap ?? []).forEach((v: any) => { vehicleIdByExternal[v.external_id] = v.id })
+  // vendorNameByExternal: used to resolve bank name from tbFinanciamento.forID
+  const vendorNameByExternal: Record<string, string> = {}
+  const vendorIdByExternal: Record<string, string> = {}
+  ;(vendorMap ?? []).forEach((v: any) => {
+    vendorNameByExternal[v.external_id] = v.name
+    vendorIdByExternal[v.external_id] = v.id
+  })
 
   // ── Phase D: Dependent tables (parallel with sequential inner chains) ────
 
@@ -779,20 +787,25 @@ async function processImportInBackground(
         date: parseDate(r.dpvData), plan_account_external_id: r.plaID ? String(r.plaID) : null,
       })), 'dealership_id,external_id', errors),
     upsertBatch('financings',
-      (await rawTables['tbFinanciamento']).filter((r: any) => r.finID).map((r: any) => ({
-        dealership_id: D, external_id: String(r.finID),
-        vehicle_external_id: r.carID ? String(r.carID) : null,
-        vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
-        customer_external_id: r.cliID ? String(r.cliID) : null,
-        customer_id: r.cliID ? (customerIdByExternal[String(r.cliID)] ?? null) : null,
-        bank: str(r.finBanco), total_amount: r.finValor ? parseNum(r.finValor) : null,
-        installments: r.finParcelas ? parseInt(String(r.finParcelas)) : null,
-        interest_rate: r.finTaxa ? parseNum(r.finTaxa) : null,
-        installment_amount: r.finValorParcela ? parseNum(r.finValorParcela) : null,
-        down_payment: r.finEntrada ? parseNum(r.finEntrada) : null,
-        start_date: parseDate(r.finData), contract_number: str(r.finContrato),
-        notes: str(r.finObservacoes ?? r.finObs, 1000),
-      })), 'dealership_id,external_id', errors),
+      (await rawTables['tbFinanciamento']).filter((r: any) => r.finID && (r.finValor ?? 0) > 0).map((r: any) => {
+        // Bank name: tbFinanciamento has no finBanco column; resolve from forID → vendors table
+        const bankName = r.forID ? (vendorNameByExternal[String(r.forID)] ?? null) : null
+        // finData1Parcela stores first installment date; sentinel 01/01/00 means not set
+        const rawDate = parseDate(r.finData1Parcela)
+        const startDate = rawDate && rawDate > '2000-01-02' ? rawDate : null
+        return {
+          dealership_id: D, external_id: String(r.finID),
+          vehicle_external_id: r.carID ? String(r.carID) : null,
+          vehicle_id: r.carID ? (vehicleIdByExternal[String(r.carID)] ?? null) : null,
+          bank: bankName,
+          total_amount: r.finValor ? parseNum(r.finValor) : null,
+          installments: r.finParcelas ? parseInt(String(r.finParcelas)) : null,
+          interest_rate: r.finTaxa ? parseNum(r.finTaxa) : null,
+          installment_amount: r.finParcelaValor ? parseNum(r.finParcelaValor) : null,
+          start_date: startDate,
+          notes: str(r.finOBS, 1000),
+        }
+      }), 'dealership_id,external_id', errors),
     upsertBatch('insurances',
       (await rawTables['tbSeguro']).filter((r: any) => r.segID).map((r: any) => ({
         dealership_id: D, external_id: String(r.segID),
