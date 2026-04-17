@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { fetchAll } from '@/lib/supabase/fetch-all'
 import Link from 'next/link'
 import {
   Car, TrendingUp, AlertTriangle, DollarSign, Clock,
@@ -34,8 +35,10 @@ export default async function DashboardPage() {
     { data: alerts },
     { data: sales },
     { data: costRaw },
+    agingAll,
   ] = await Promise.all([
     supabase.rpc('get_dashboard_stats', { d_id: dealId }),
+    // Preview list only — top 10 for the "Veículos em Estoque" card
     supabase.from('vehicles').select('id, brand, model, plate, sale_price, purchase_price, days_in_stock, status')
       .eq('dealership_id', dealId).eq('status', 'available')
       .order('days_in_stock', { ascending: false }).limit(10),
@@ -46,11 +49,16 @@ export default async function DashboardPage() {
       .eq('dealership_id', dealId)
       .eq('status', 'sold')
       .order('sale_date', { ascending: false }).limit(5),
-    // CostHealthWidget: available inventory only — avoids loading full history on main dashboard
+    // CostHealthWidget: available inventory with expenses
     supabase.from('vehicles')
       .select('id, status, purchase_price, sale_price, days_in_stock, purchase_date, sale_date, brand, model, plate, chassis, renavam, version, year_fab, year_model, color, mileage, fuel, transmission, fipe_price, min_price, supplier_name, customer_id, photos, notes, source, external_id, created_at, updated_at, dealership_id, expenses:expenses(id, dealership_id, vehicle_id, category, description, amount, date, vendor_name, payment_method, receipt_url, created_by, external_id, created_at, updated_at)')
       .eq('dealership_id', dealId)
       .eq('status', 'available'),
+    // AgingWidget: ALL available vehicles (lightweight — no expenses) for accurate counts
+    fetchAll<{ id: string; days_in_stock: number; sale_price: number | null }>(
+      supabase.from('vehicles').select('id, days_in_stock, sale_price')
+        .eq('dealership_id', dealId).eq('status', 'available')
+    ),
   ])
 
   const stats = statsData as any || {}
@@ -107,7 +115,7 @@ export default async function DashboardPage() {
     success: 'bg-success/10 border-success/20',
   }
 
-  const agingWidgetVehicles = (vehicles || []).map((v: any) => ({
+  const agingWidgetVehicles = agingAll.map(v => ({
     id: v.id,
     days_in_stock: v.days_in_stock ?? 0,
     sale_price: v.sale_price ?? null,
@@ -125,7 +133,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <AgingNotifications vehicles={(vehicles || []).map((v: any) => ({ id: v.id, days_in_stock: v.days_in_stock ?? 0 }))} />
+      <AgingNotifications vehicles={agingWidgetVehicles} />
       <div>
         <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
         <p className="text-foreground-muted text-sm mt-1">Visão geral da sua revenda</p>
