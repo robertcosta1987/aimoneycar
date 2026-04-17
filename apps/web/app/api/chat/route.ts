@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
 
       // Financings
       svc.from('financings')
-        .select('vehicle_external_id, bank, total_amount, installments, interest_rate, start_date, status')
+        .select('vehicle_external_id, customer_external_id, bank, total_amount, installments, installment_amount, interest_rate, down_payment, contract_number, start_date, status, notes')
         .eq('dealership_id', D)
         .limit(200),
 

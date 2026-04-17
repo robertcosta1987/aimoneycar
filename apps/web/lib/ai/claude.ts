@@ -459,8 +459,15 @@ function buildSystemPrompt(ctx: FullDealershipContext): string {
 
   if (ctx.financings.length > 0) {
     lines.push(`\n## Financiamentos (${ctx.financings.length})`)
-    ctx.financings.slice(0, 30).forEach(f => {
-      lines.push(`- Veículo ${f.vehicle_external_id ?? '?'} | ${f.bank ?? '—'} | R$ ${brl(f.total_amount ?? 0)} | ${f.installments ?? '?'}x | ${f.status}`)
+    lines.push(`| Veículo | Banco | Valor Total | Entrada | Parcelas | Valor/Parcela | Taxa Mensal | Início | Status |`)
+    lines.push(`|---------|-------|-------------|---------|----------|---------------|-------------|--------|--------|`)
+    ctx.financings.slice(0, 50).forEach(f => {
+      lines.push(
+        `| ${f.vehicle_external_id ?? '?'} | ${f.bank ?? '—'} | R$ ${brl(f.total_amount ?? 0)}` +
+        ` | R$ ${brl(f.down_payment ?? 0)} | ${f.installments ?? '?'}x` +
+        ` | R$ ${brl(f.installment_amount ?? 0)} | ${f.interest_rate != null ? `${f.interest_rate}% a.m.` : '—'}` +
+        ` | ${f.start_date ?? '—'} | ${f.status ?? '—'} |`
+      )
     })
   }
 

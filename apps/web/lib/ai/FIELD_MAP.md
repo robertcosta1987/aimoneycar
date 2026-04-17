@@ -293,16 +293,38 @@
 
 ## 14. FINANCIAMENTOS (tabela: `financings`)
 
+> **Quando usar:** detalhes de cada financiamento de veículo — banco, valor total, entrada, número de parcelas, valor de cada parcela e taxa de juros. Um veículo pode ter um financiamento associado. Para calcular o custo mensal do cliente use `installment_amount`. Para saber o valor total financiado use `total_amount`. Sempre fazer JOIN com `vehicles` via `vehicle_external_id` ou `vehicle_id`.
+
 | Campo no Banco | Nome Legível (PT-BR) | Perguntas que este campo responde |
 |---|---|---|
+| `id` | Código do Financiamento | identificador interno |
 | `dealership_id` | Revenda (FK) | "financiamentos de qual loja?" |
-| `vehicle_external_id` | Veículo (FK externo) | "financiamento de qual carro?" |
-| `bank` | Banco / Financeira | "qual banco financiou?", "financiamentos por banco" |
-| `total_amount` | Valor Financiado (R$) | "quanto foi financiado?" |
-| `installments` | Número de Parcelas | "quantas parcelas?", "em quantas vezes?" |
-| `interest_rate` | Taxa de Juros (%) | "qual a taxa?", "juros do financiamento" |
-| `start_date` | Data de Início | "quando começou o financiamento?" |
-| `status` | Status | "aprovado?", "pendente?", "financiamentos aprovados" |
+| `external_id` | ID Moneycar | código original (finID) |
+| `vehicle_id` | Veículo (FK UUID) | chave para join com `vehicles` |
+| `vehicle_external_id` | ID Moneycar do Veículo | "financiamento de qual carro?" |
+| `customer_id` | Cliente (FK UUID) | chave para join com `customers` |
+| `customer_external_id` | ID Moneycar do Cliente | "financiamento de qual cliente?" |
+| `bank` | Banco / Financeira | "qual banco financiou?", "financiamentos por banco", "quais bancos usamos?" |
+| `total_amount` | Valor Total Financiado (R$) | "quanto foi financiado?", "valor do financiamento", "total do contrato" |
+| `down_payment` | Entrada (R$) | "qual foi a entrada?", "quanto o cliente deu de entrada?", "sinal do financiamento" |
+| `installments` | Número de Parcelas | "quantas parcelas?", "em quantas vezes?", "prazo do financiamento" |
+| `installment_amount` | Valor de Cada Parcela (R$) | "quanto é a parcela?", "valor mensal?", "quanto paga por mês?", "prestação mensal" |
+| `interest_rate` | Taxa de Juros Mensal (%) | "qual a taxa?", "juros do financiamento", "taxa ao mês", "% ao mês" |
+| `start_date` | Data de Início | "quando começou o financiamento?", "data do contrato" |
+| `contract_number` | Número do Contrato | "qual o número do contrato?", "contrato do financiamento" |
+| `status` | Status | "está ativo?", "já foi quitado?", "foi cancelado?", "financiamentos ativos" |
+| `notes` | Observações | "alguma nota sobre o financiamento?" |
+
+**Valores do campo `status`:** `active` (ativo/em andamento), `paid` (quitado), `cancelled` (cancelado)
+
+### Cálculos financeiros úteis:
+| Métrica | Fórmula | Pergunta respondida |
+|---|---|---|
+| Custo total do cliente | `down_payment + (installment_amount × installments)` | "quanto vai pagar no total?" |
+| Custo financeiro (juros) | `(installment_amount × installments) - total_amount` | "quanto vai pagar de juros?" |
+| Financiamentos ativos | `COUNT(*) WHERE status = 'active'` | "quantos financiamentos estão em andamento?" |
+| Total financiado (período) | `SUM(total_amount) WHERE start_date BETWEEN ...` | "quanto financiamos no mês?" |
+| Banco mais usado | `GROUP BY bank ORDER BY COUNT(*) DESC` | "qual banco financiou mais?" |
 
 ---
 
@@ -325,6 +347,23 @@
 | `is_paid` | Paga? | "já foi paga?", "multas pendentes", "multas em aberto" |
 | `paid_date` | Data do Pagamento | "quando foi paga?" |
 | `notes` | Observações | "alguma nota sobre a multa?" |
+
+---
+
+## 15b. RATEIO / PARCELAS DE PAGAMENTO (tabela: `vehicle_apportionment`)
+
+> **Quando usar:** detalhamento das formas de pagamento usadas na compra ou venda de um veículo — como o valor foi dividido entre dinheiro, cheque, cartão, financiamento, etc. Cada veículo pode ter de 1 a 10 registros aqui, um por forma de pagamento. Fonte: tbRateioVeiculo do sistema Moneycar antigo.
+
+| Campo no Banco | Nome Legível (PT-BR) | Perguntas que este campo responde |
+|---|---|---|
+| `id` | Código | identificador interno |
+| `dealership_id` | Revenda (FK) | "rateios de qual loja?" |
+| `vehicle_id` | Veículo (FK UUID) | chave para join com `vehicles` |
+| `vehicle_external_id` | ID Moneycar do Veículo | "rateio de qual veículo?" |
+| `plan_account_id` | Plano de Contas (FK) | classificação contábil do pagamento |
+| `amount` | Valor (R$) | "quanto foi pago nessa forma?", "valor do rateio" |
+| `date` | Data do Rateio | "quando foi pago?" |
+| `description` | Descrição | "descrição do rateio", "o que é esse pagamento?" |
 
 ---
 
@@ -611,6 +650,18 @@ Este guia resolve confusão entre tabelas com dados parecidos. Leia ANTES de res
 | KM no momento da venda (veículos do MDB) | `sale_data.mileage` | Dado importado do sistema antigo |
 | Forma de pagamento detalhada da venda do MDB | `sale_data.payment_method` | Dado importado do sistema antigo |
 
+### Dados de financiamento:
+| O usuário pergunta sobre... | Use esta tabela | Por quê |
+|---|---|---|
+| Valor mensal da parcela | `financings.installment_amount` | Campo direto com o valor de cada prestação |
+| Quantas parcelas | `financings.installments` | Prazo total em meses |
+| Taxa de juros | `financings.interest_rate` | % ao mês |
+| Entrada paga | `financings.down_payment` | Valor dado no ato |
+| Qual banco financiou | `financings.bank` | Nome da financeira/banco |
+| Valor total financiado | `financings.total_amount` | Valor do contrato sem entrada |
+| Como o pagamento foi dividido em formas | `vehicle_apportionment` | Detalha cada forma (dinheiro, cheque, cartão, etc.) |
+| Financiamento de um veículo específico | `financings WHERE vehicle_external_id = ?` | JOIN via vehicle_external_id ou vehicle_id |
+
 ### Dados de comissão:
 | O usuário pergunta sobre... | Use esta tabela | Por quê |
 |---|---|---|
@@ -657,6 +708,7 @@ As tabelas abaixo existem no banco mas **não têm dados carregados no prompt**.
 - `customer_asset_references` — bens e contas bancárias do cliente
 - `purchase_data` — detalhes de aquisição de veículos
 - `sale_data` — detalhes de venda de veículos (dados brutos MDB)
+- `vehicle_apportionment` — rateio de formas de pagamento por veículo
 - `imports` — histórico de importações de arquivos
 
 **Quando o usuário perguntar sobre dados dessas tabelas**, responda com base no que você sabe pela estrutura da tabela descrita neste mapa. Se precisar de valores específicos, informe que os dados estão disponíveis no banco mas não foram carregados nesta sessão.
