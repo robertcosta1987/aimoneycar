@@ -3,7 +3,6 @@ import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { generateDailyAlerts } from '@/lib/ai/alerts'
 import type { Vehicle, Expense } from '@/types'
 export const dynamic = 'force-dynamic'
-export const maxDuration = 60
 
 export async function POST() {
   try {
