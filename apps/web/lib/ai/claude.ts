@@ -12,7 +12,7 @@ function svc() {
   )
 }
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
+function getAI() { return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! }) }
 
 const brl = (n: number) =>
   n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -516,7 +516,7 @@ export async function chatWithClaude(
 
   // Agentic loop: keep calling Claude until it stops using tools
   while (true) {
-    const response = await anthropic.messages.create({
+    const response = await getAI().messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 4096,
       system: systemPrompt,

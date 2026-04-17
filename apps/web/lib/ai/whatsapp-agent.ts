@@ -10,12 +10,13 @@ import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@supabase/supabase-js'
 import type { AIResponse, AIVehicle } from '@/types/whatsapp'
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+function getAI() { return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! }) }
+function getSvc() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+}
 
 // ─── Slot logic (mirrors widget exactly) ──────────────────────────────────────
 // 9:00–18:00 BRT, 30-min appointments, 15-min gap = 45-min cycle, max 2 concurrent
@@ -284,7 +285,7 @@ async function executeTool(
       }
 
       case 'cancelar_agendamento': {
-        const { data } = await supabase.rpc('cancelar_agendamento', {
+        const { data } = await getSvc().rpc('cancelar_agendamento', {
           p_agendamento_id: input.agendamento_id,
           p_motivo:         input.motivo || null,
         })
@@ -527,7 +528,7 @@ export async function generateAIResponse(params: GenerateResponseParams): Promis
     while (iterations < MAX_ITERATIONS) {
       iterations++
 
-      const response = await anthropic.messages.create({
+      const response = await getAI().messages.create({
         model,
         max_tokens: 1024,
         system:     systemPrompt,

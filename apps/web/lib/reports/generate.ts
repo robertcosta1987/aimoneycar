@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { SupabaseClient } from '@supabase/supabase-js'
 import { ReportType, ReportPayload } from '@/types/reports'
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
+function getAI() { return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! }) }
 
 export async function generateReport(
   supabase: SupabaseClient,
@@ -195,7 +195,7 @@ export async function generateReport(
 
   // AI Insights
   try {
-    const msg = await anthropic.messages.create({
+    const msg = await getAI().messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 400,
       messages: [{

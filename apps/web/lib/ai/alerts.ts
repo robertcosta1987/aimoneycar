@@ -1,9 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import type { Vehicle, Expense, AIAlert } from '@/types'
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY!,
-})
+function getAI() { return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! }) }
 
 export interface AlertCandidate {
   vehicle?: Vehicle
@@ -81,7 +79,7 @@ Responda APENAS com um array JSON válido. Exemplo:
   let alerts: Omit<AIAlert, 'id' | 'created_at'>[] = []
 
   try {
-    const response = await anthropic.messages.create({
+    const response = await getAI().messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 2048,
       messages: [{ role: 'user', content: prompt }],
