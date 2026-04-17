@@ -3,6 +3,7 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { ReportType } from '@/types/reports'
 import { generateReport } from '@/lib/reports/generate'
+export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {
   const cookieStore = await cookies()

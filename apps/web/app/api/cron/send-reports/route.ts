@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+export const dynamic = 'force-dynamic'
 
 // Runs every 30 minutes via Vercel Cron
 // Finds all active scheduled reports that are due and sends them

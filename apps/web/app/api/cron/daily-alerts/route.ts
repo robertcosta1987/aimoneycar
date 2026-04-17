@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase/server'
 import { generateDailyAlerts } from '@/lib/ai/alerts'
 import { sendWhatsAppMessage, formatDailyAlertMessage } from '@/lib/whatsapp/evolution'
 import type { Vehicle, Expense, Dealership } from '@/types'
+export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
   // Verify Vercel Cron secret

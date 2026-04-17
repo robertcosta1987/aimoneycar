@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import MDBReader from 'mdb-reader'
+export const dynamic = 'force-dynamic'
 
 export const maxDuration = 60
 

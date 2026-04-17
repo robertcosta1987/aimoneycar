@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { checkSessionStatus } from '@/lib/wasender/client'
+export const dynamic = 'force-dynamic'
 
 function getSvc() {
   return createClient(

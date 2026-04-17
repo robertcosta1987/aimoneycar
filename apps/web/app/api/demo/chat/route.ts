@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { getDashboardStats, demoVehicles, expensesByCategory, demoSales } from '@/lib/demo-data'
 import { formatCurrency, formatPercent } from '@/lib/utils'
+export const dynamic = 'force-dynamic'
 
 function getAI() { return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! }) }
 

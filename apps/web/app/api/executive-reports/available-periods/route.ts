@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+export const dynamic = 'force-dynamic'
 
 export interface AvailablePeriod {
   value: string    // ISO date of first day of month: "2026-03-01"

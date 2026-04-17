@@ -7,6 +7,7 @@ import { ReportPayload } from '@/types/reports'
 import { buildReportEmail } from '@/lib/email/report-email'
 import { generateReport } from '@/lib/reports/generate'
 import {
+export const dynamic = 'force-dynamic'
   salesByDayChartUrl,
   stockHealthChartUrl,
   expenseByCategoryChartUrl,

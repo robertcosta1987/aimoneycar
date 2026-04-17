@@ -18,6 +18,7 @@ import {
 } from '@/lib/wasender/client'
 import { generateAIResponse, shouldUseSmartModel } from '@/lib/ai/whatsapp-agent'
 import type {
+export const dynamic = 'force-dynamic'
   WASenderWebhookPayload,
   WASenderIncomingMessage,
   WhatsAppSessao,

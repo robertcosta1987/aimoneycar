@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
+export const dynamic = 'force-dynamic'
 
 async function getDealershipId(userId: string) {
   const { data } = await createServiceClient()

@@ -3,6 +3,7 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import type { ReportType } from '@/types/report.types'
 import { computeExecutiveReport } from '@/lib/reports/executive'
+export const dynamic = 'force-dynamic'
 
 function makeSupabase() {
   const cookieStore = cookies()
