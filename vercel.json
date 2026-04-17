@@ -1,0 +1,22 @@
+{
+  "framework": "nextjs",
+  "installCommand": "npx --yes pnpm@9.15.4 install",
+  "buildCommand": "pnpm turbo build",
+  "outputDirectory": "apps/web/.next",
+  "functions": {
+    "apps/web/app/api/**": {
+      "maxDuration": 60,
+      "memory": 1024
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/daily-alerts",
+      "schedule": "0 11 * * *"
+    },
+    {
+      "path": "/api/cron/send-reports",
+      "schedule": "0 10 * * 1"
+    }
+  ]
+}
