@@ -235,6 +235,25 @@ function mapExpenseRow(
   }
 }
 
+// ─── Fetch all rows from Supabase (bypasses default 1000-row limit) ──────────
+
+async function fetchAll<T extends Record<string, any>>(
+  query: any // SupabaseQueryBuilder — call .select(...).eq(...) before passing
+): Promise<T[]> {
+  const PAGE = 1000
+  const results: T[] = []
+  let from = 0
+  while (true) {
+    const { data, error } = await query.range(from, from + PAGE - 1)
+    if (error) throw error
+    if (!data || data.length === 0) break
+    results.push(...data)
+    if (data.length < PAGE) break
+    from += PAGE
+  }
+  return results
+}
+
 // ─── Batch helpers ────────────────────────────────────────────────────────────
 
 async function upsertBatch(
@@ -270,9 +289,15 @@ async function insertBatch(
   let count = 0
   for (let i = 0; i < rows.length; i += 100) {
     const chunk = rows.slice(i, i + 100)
-    const { error } = await getSvc().from(table).insert(chunk)
-    if (error) errors.push(`${table} insert batch ${Math.floor(i / 100) + 1}: ${error.message}`)
-    else count += chunk.length
+    const batchNum = Math.floor(i / 100) + 1
+    let lastErr: any
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const { error } = await getSvc().from(table).insert(chunk)
+      if (!error) { count += chunk.length; lastErr = null; break }
+      lastErr = error
+      if (attempt < 3) await new Promise(r => setTimeout(r, attempt * 2000))
+    }
+    if (lastErr) errors.push(`${table} insert batch ${batchNum}: ${lastErr.message}`)
   }
   return count
 }
@@ -556,6 +581,7 @@ async function processImportInBackground(
           const sampleFun = funRows[0]
           const sampleForn = sampleFun.forID ? fornById[String(sampleFun.forID)] : null
           ctx.log(`[employees] sample funID=${sampleFun.funID} forID=${sampleFun.forID} funNome=${sampleFun.funNome} | forn keys=${sampleForn ? Object.keys(sampleForn).join(',') : 'NOT FOUND'}`)
+          if (sampleForn) ctx.log(`[employees] forn values: forRazSoc=${JSON.stringify(sampleForn.forRazSoc)} forNome=${JSON.stringify(sampleForn.forNome)} forFantasia=${JSON.stringify(sampleForn.forFantasia)}`)
         }
         return upsertBatch('employees',
           funRows.filter((r: any) => r.funID).map((r: any) => {
@@ -596,22 +622,22 @@ async function processImportInBackground(
 
   // ── Phase C: UUID maps ──────────────────────────────────────────────────
 
-  const [{ data: custMap }, { data: empMap }, { data: vehMap }, { data: vendorMap }] = await Promise.all([
-    getSvc().from('customers').select('id, external_id').eq('dealership_id', D).not('external_id', 'is', null),
-    getSvc().from('employees').select('id, external_id').eq('dealership_id', D).not('external_id', 'is', null),
-    getSvc().from('vehicles').select('id, external_id').eq('dealership_id', D).not('external_id', 'is', null),
-    getSvc().from('vendors').select('id, external_id, name').eq('dealership_id', D).not('external_id', 'is', null),
+  const [custMap, empMap, vehMap, vendorMap] = await Promise.all([
+    fetchAll(getSvc().from('customers').select('id, external_id').eq('dealership_id', D).not('external_id', 'is', null)),
+    fetchAll(getSvc().from('employees').select('id, external_id').eq('dealership_id', D).not('external_id', 'is', null)),
+    fetchAll(getSvc().from('vehicles').select('id, external_id').eq('dealership_id', D).not('external_id', 'is', null)),
+    fetchAll(getSvc().from('vendors').select('id, external_id, name').eq('dealership_id', D).not('external_id', 'is', null)),
   ])
   const customerIdByExternal: Record<string, string> = {}
-  ;(custMap ?? []).forEach((c: any) => { customerIdByExternal[c.external_id] = c.id })
+  custMap.forEach((c: any) => { customerIdByExternal[c.external_id] = c.id })
   const employeeIdByExternal: Record<string, string> = {}
-  ;(empMap ?? []).forEach((e: any) => { employeeIdByExternal[e.external_id] = e.id })
+  empMap.forEach((e: any) => { employeeIdByExternal[e.external_id] = e.id })
   const vehicleIdByExternal: Record<string, string> = {}
-  ;(vehMap ?? []).forEach((v: any) => { vehicleIdByExternal[v.external_id] = v.id })
+  vehMap.forEach((v: any) => { vehicleIdByExternal[v.external_id] = v.id })
   // vendorNameByExternal: used to resolve bank name from tbFinanciamento.forID
   const vendorNameByExternal: Record<string, string> = {}
   const vendorIdByExternal: Record<string, string> = {}
-  ;(vendorMap ?? []).forEach((v: any) => {
+  vendorMap.forEach((v: any) => {
     vendorNameByExternal[v.external_id] = v.name
     vendorIdByExternal[v.external_id] = v.id
   })
@@ -1105,9 +1131,15 @@ async function clearDataHandler(req: HttpRequest, ctx: InvocationContext): Promi
         }
         if (!data || data.length === 0) break
         const ids = (data as any[]).map(r => r.id)
-        const { error: delErr } = await getSvc().from(table).delete().in('id', ids)
-        if (delErr) {
+        let retries = 3
+        while (retries-- > 0) {
+          const { error: delErr } = await getSvc().from(table).delete().in('id', ids)
+          if (!delErr) break
           if (isNotFound(delErr.message)) return
+          if (delErr.message.includes('deadlock') && retries > 0) {
+            await new Promise(r => setTimeout(r, 500 + Math.random() * 500))
+            continue
+          }
           throw new Error(`Failed to delete batch from ${table}: ${delErr.message}`)
         }
         if (data.length < size) break
@@ -1131,8 +1163,9 @@ async function clearDataHandler(req: HttpRequest, ctx: InvocationContext): Promi
     // Level 2: depend on vehicles/customers
     await Promise.all(['expenses', 'insurances', 'financings', 'orders'].map(t => delBatched(t)))
 
-    // Level 3: main entities
-    await Promise.all([delBatched('vehicles'), delBatched('customers')])
+    // Level 3: main entities (sequential to avoid deadlocks on large datasets)
+    await delBatched('vehicles')
+    await delBatched('customers')
 
     // Level 4: reference tables
     // Null out calendario_config.ultimo_salesperson_id first — it FK-references employees

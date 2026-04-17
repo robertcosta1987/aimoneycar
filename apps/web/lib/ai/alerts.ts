@@ -19,8 +19,8 @@ export async function generateDailyAlerts(
   // Pre-compute candidates locally for deterministic alerts
   const candidates: AlertCandidate[] = []
 
-  // Vehicles over 60 days
-  const critical = vehicles.filter(v => v.status === 'available' && v.days_in_stock > 60)
+  // Vehicles over 90 days
+  const critical = vehicles.filter(v => v.status === 'available' && v.days_in_stock > 90)
   critical.forEach(v => {
     candidates.push({
       vehicle: v,
@@ -28,8 +28,8 @@ export async function generateDailyAlerts(
     })
   })
 
-  // Vehicles between 30-60 days
-  const warning = vehicles.filter(v => v.status === 'available' && v.days_in_stock >= 30 && v.days_in_stock <= 60)
+  // Vehicles between 46-90 days
+  const warning = vehicles.filter(v => v.status === 'available' && v.days_in_stock >= 46 && v.days_in_stock <= 90)
   warning.slice(0, 3).forEach(v => {
     candidates.push({
       vehicle: v,

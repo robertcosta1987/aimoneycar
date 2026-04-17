@@ -27,13 +27,11 @@ interface AgingWidgetProps {
   vehicles: WidgetVehicle[]
 }
 
-const BRACKETS = [
-  { label: '0–15d',  min: 0,  max: 15,       color: '#22C55E' },
-  { label: '16–30d', min: 16, max: 30,        color: '#84CC16' },
-  { label: '31–45d', min: 31, max: 45,        color: '#EAB308' },
-  { label: '46–90d', min: 46, max: 90,        color: '#F97316' },
-  { label: '90d+',   min: 91, max: Infinity,  color: '#EF4444' },
-]
+const LEVEL_BUCKETS = [
+  { label: 'OK',      level: 'ok',        color: '#22C55E' },
+  { label: 'Atenção', level: 'attention',  color: '#EAB308' },
+  { label: 'Crítico', level: 'critical',   color: '#EF4444' },
+] as const
 
 export function AgingWidget({ vehicles }: AgingWidgetProps) {
   const { thresholds, loaded } = useAgingThresholds()
@@ -46,12 +44,12 @@ export function AgingWidget({ vehicles }: AgingWidgetProps) {
   }, [vehicles, thresholds])
 
   const chartData = useMemo(() =>
-    BRACKETS.map(b => ({
+    LEVEL_BUCKETS.map(b => ({
       label: b.label,
-      count: vehicles.filter(v => v.days_in_stock >= b.min && v.days_in_stock <= b.max).length,
+      count: vehicles.filter(v => getAgingStatus(v.days_in_stock, thresholds).level === b.level).length,
       color: b.color,
     })),
-    [vehicles]
+    [vehicles, thresholds]
   )
 
   if (!loaded || vehicles.length === 0) return null

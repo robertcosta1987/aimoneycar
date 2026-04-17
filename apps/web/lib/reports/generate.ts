@@ -59,12 +59,12 @@ export async function generateReport(
     const list = avail ?? []
     rawData = {
       total: list.length,
-      healthy: list.filter((v: any) => v.days_in_stock <= 30).length,
-      warning: list.filter((v: any) => v.days_in_stock > 30 && v.days_in_stock <= 60).length,
-      critical: list.filter((v: any) => v.days_in_stock > 60).length,
+      healthy: list.filter((v: any) => v.days_in_stock <= 45).length,
+      warning: list.filter((v: any) => v.days_in_stock > 45 && v.days_in_stock <= 90).length,
+      critical: list.filter((v: any) => v.days_in_stock > 90).length,
       avgDays: list.length ? Math.round(list.reduce((s, v: any) => s + v.days_in_stock, 0) / list.length) : 0,
       criticalVehicles: list
-        .filter((v: any) => v.days_in_stock > 60)
+        .filter((v: any) => v.days_in_stock > 90)
         .slice(0, 5)
         .map((v: any) => ({ name: `${v.brand} ${v.model}`, plate: v.plate, days: v.days_in_stock, price: v.sale_price })),
     }

@@ -44,7 +44,7 @@ export function AgingSettings({ vehicleDays }: AgingSettingsProps) {
   }
 
   function handleReset() {
-    const defaults = { attention: 30, critical: 60 }
+    const defaults = { attention: 45, critical: 90 }
     setDraft(defaults)
     setThresholds(defaults)
   }

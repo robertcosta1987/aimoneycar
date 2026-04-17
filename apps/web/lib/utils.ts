@@ -78,8 +78,8 @@ export function calculateMargin(
  * Get status color based on days in stock
  */
 export function getStockStatusColor(days: number): 'success' | 'warning' | 'danger' {
-  if (days <= 30) return 'success';
-  if (days <= 60) return 'warning';
+  if (days <= 45) return 'success';
+  if (days <= 90) return 'warning';
   return 'danger';
 }
 

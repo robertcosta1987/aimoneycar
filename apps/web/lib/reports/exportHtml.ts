@@ -182,7 +182,7 @@ function renderInventory(d: ExecutiveReportData['inventory']): string {
     : ''
 
   const critTable = d.criticalVehicles.length > 0
-    ? `<h3 style="font-size:13px;font-weight:600;margin:16px 0 8px;color:#dc2626">🔴 Veículos Críticos (+90 dias)</h3>` +
+    ? `<h3 style="font-size:13px;font-weight:600;margin:16px 0 8px;color:#dc2626">🔴 Veículos Críticos (+91 dias)</h3>` +
       table(
         ['Veículo', 'Placa', 'Dias', 'Preço'],
         d.criticalVehicles.map(v => [v.name, v.plate ?? '—', String(v.daysInStock), brl(v.salePrice ?? 0)])

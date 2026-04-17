@@ -331,15 +331,13 @@ export async function computeExecutiveReport(
   })
 
   const attentionVehicles  = inventory.filter((v: any) => v.days_in_stock >= 46 && v.days_in_stock <= 90).map(toInvRow)
-  const criticalVehicles   = inventory.filter((v: any) => v.days_in_stock > 90).map(toInvRow)
+  const criticalVehicles   = inventory.filter((v: any) => v.days_in_stock >= 91).map(toInvRow)
   const missingPriceVehicles = inventory.filter((v: any) => !v.sale_price || v.sale_price === 0).map(toInvRow)
 
   const agingDistribution: AgingBucket[] = [
-    { label: '0–15d',  count: inventory.filter((v: any) => v.days_in_stock >= 0  && v.days_in_stock <= 15).length, color: '#22C55E' },
-    { label: '16–30d', count: inventory.filter((v: any) => v.days_in_stock >= 16 && v.days_in_stock <= 30).length, color: '#4ADE80' },
-    { label: '31–45d', count: inventory.filter((v: any) => v.days_in_stock >= 31 && v.days_in_stock <= 45).length, color: '#EAB308' },
+    { label: '0–45d',  count: inventory.filter((v: any) => v.days_in_stock >= 0  && v.days_in_stock <= 45).length, color: '#22C55E' },
     { label: '46–90d', count: inventory.filter((v: any) => v.days_in_stock >= 46 && v.days_in_stock <= 90).length, color: '#EAB308' },
-    { label: '>90d',   count: inventory.filter((v: any) => v.days_in_stock > 90).length,                           color: '#EF4444' },
+    { label: '91d+',   count: inventory.filter((v: any) => v.days_in_stock >= 91).length,                          color: '#EF4444' },
   ]
 
   const inventoryHealth: InventoryHealth = {
@@ -495,7 +493,7 @@ export async function computeExecutiveReport(
   if (criticalVehicles.length > 0) {
     alerts.push({
       level: 'red', icon: '🔴',
-      message: `${criticalVehicles.length} veículo${criticalVehicles.length > 1 ? 's' : ''} há mais de 60 dias em estoque`,
+      message: `${criticalVehicles.length} veículo${criticalVehicles.length > 1 ? 's' : ''} há mais de 90 dias em estoque`,
       recommendation: 'Considere revisão de preço ou ação promocional para esses veículos.',
     })
   }
@@ -542,7 +540,7 @@ export async function computeExecutiveReport(
   if (attentionVehicles.length > 3) {
     alerts.push({
       level: 'yellow', icon: '🟡',
-      message: `${attentionVehicles.length} veículos na zona de atenção (30–60 dias)`,
+      message: `${attentionVehicles.length} veículos na zona de atenção (46–90 dias)`,
       recommendation: 'Avalie ações de marketing direcionado para acelerar a venda.',
     })
   }
