@@ -27,11 +27,12 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip,
   ResponsiveContainer, Cell,
 } from 'recharts'
-import { ChevronDown, ChevronUp, AlertTriangle, CheckCircle2, AlertCircle, Pencil } from 'lucide-react'
+import { ChevronDown, ChevronUp, AlertTriangle, CheckCircle2, AlertCircle, Pencil, Lightbulb } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { buildCostSummary, checkMarginAlerts } from '@/utils/vehicleCost'
+import { PricingSuggestion } from '@/components/cost/PricingSuggestion'
 import { formatCurrency, formatDate, formatPercent } from '@/lib/utils'
 import { CATEGORY_COLORS, DEFAULT_CATEGORY_COLOR, getMarginDisplay } from '@/types/cost'
 import type { VehicleForCost } from '@/types/cost'
@@ -45,6 +46,7 @@ interface VehicleCostPanelProps {
 export function VehicleCostPanel({ vehicle, onEditCosts }: VehicleCostPanelProps) {
   const [showExpenses, setShowExpenses] = useState(false)
   const [showQuality, setShowQuality] = useState(false)
+  const [showPricing, setShowPricing] = useState(true)
 
   const summary = useMemo(() => buildCostSummary(vehicle), [vehicle])
   const alerts = useMemo(() => checkMarginAlerts(summary), [summary])
@@ -162,7 +164,35 @@ export function VehicleCostPanel({ vehicle, onEditCosts }: VehicleCostPanelProps
         </CardContent>
       </Card>
 
-      {/* ── Section 2: Expense Breakdown ────────────────────────────── */}
+      {/* ── Section 2: Pricing Intelligence ─────────────────────────── */}
+      <Card>
+        <CardHeader className="pb-3">
+          <button
+            onClick={() => setShowPricing(s => !s)}
+            className="flex items-center justify-between w-full text-left"
+            aria-expanded={showPricing}
+          >
+            <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <Lightbulb className="w-4 h-4 text-primary" />
+              Sugestão de Preço
+            </CardTitle>
+            {showPricing
+              ? <ChevronUp className="w-4 h-4 text-foreground-muted" />
+              : <ChevronDown className="w-4 h-4 text-foreground-muted" />}
+          </button>
+        </CardHeader>
+        {showPricing && (
+          <CardContent>
+            <PricingSuggestion
+              vehicleId={vehicle.id}
+              brand={vehicle.brand}
+              model={vehicle.model}
+            />
+          </CardContent>
+        )}
+      </Card>
+
+      {/* ── Section 4: Expense Breakdown ────────────────────────────── */}
       <Card>
         <CardHeader className="pb-3">
           <button
@@ -288,7 +318,7 @@ export function VehicleCostPanel({ vehicle, onEditCosts }: VehicleCostPanelProps
         )}
       </Card>
 
-      {/* ── Section 3: Data Quality ──────────────────────────────────── */}
+      {/* ── Section 5: Data Quality ──────────────────────────────────── */}
       <Card>
         <CardHeader className="pb-3">
           <button
