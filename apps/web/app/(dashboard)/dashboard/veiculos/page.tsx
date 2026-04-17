@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Search, Car, Plus } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { fetchAll } from '@/lib/supabase/fetch-all'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -47,9 +48,9 @@ export default function VeiculosPage() {
         query = query.or(`brand.ilike.%${search}%,model.ilike.%${search}%,plate.ilike.%${search}%`)
       }
 
-      const { data } = await query.order('days_in_stock', { ascending: false })
+      const data = await fetchAll(query.order('days_in_stock', { ascending: false }))
 
-      const enriched: VehicleForCost[] = (data || []).map((v: any) => ({
+      const enriched: VehicleForCost[] = data.map((v: any) => ({
         ...v,
         purchase_price: v.purchase_price ?? 0,
         sale_price: v.sale_price ?? null,

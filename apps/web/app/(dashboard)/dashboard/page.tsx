@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { fetchAll } from '@/lib/supabase/fetch-all'
 import Link from 'next/link'
 import {
   Car, TrendingUp, AlertTriangle, DollarSign, Clock,
@@ -33,7 +34,7 @@ export default async function DashboardPage() {
     { data: vehicles },
     { data: alerts },
     { data: sales },
-    { data: costRaw },
+    costRaw,
   ] = await Promise.all([
     supabase.rpc('get_dashboard_stats', { d_id: dealId }),
     supabase.from('vehicles').select('id, brand, model, plate, sale_price, purchase_price, days_in_stock, status')
@@ -46,10 +47,10 @@ export default async function DashboardPage() {
       .eq('dealership_id', dealId)
       .eq('status', 'sold')
       .order('sale_date', { ascending: false }).limit(5),
-    // Lightweight fleet data for CostHealthWidget
-    supabase.from('vehicles')
+    // Lightweight fleet data for CostHealthWidget — paginated to bypass 1000-row cap
+    fetchAll(supabase.from('vehicles')
       .select('id, status, purchase_price, sale_price, days_in_stock, purchase_date, sale_date, brand, model, plate, chassis, renavam, version, year_fab, year_model, color, mileage, fuel, transmission, fipe_price, min_price, supplier_name, customer_id, photos, notes, source, external_id, created_at, updated_at, dealership_id, expenses:expenses(id, dealership_id, vehicle_id, category, description, amount, date, vendor_name, payment_method, receipt_url, created_by, external_id, created_at, updated_at)')
-      .eq('dealership_id', dealId),
+      .eq('dealership_id', dealId)),
   ])
 
   const stats = statsData as any || {}
@@ -112,7 +113,7 @@ export default async function DashboardPage() {
     sale_price: v.sale_price ?? null,
   }))
 
-  const costVehicles: VehicleForCost[] = (costRaw || []).map((v: any) => ({
+  const costVehicles: VehicleForCost[] = costRaw.map((v: any) => ({
     ...v,
     purchase_price: v.purchase_price ?? 0,
     sale_price: v.sale_price ?? null,

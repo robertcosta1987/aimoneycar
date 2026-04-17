@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { fetchAll } from '@/lib/supabase/fetch-all'
 export const dynamic = 'force-dynamic'
 
 export interface AvailablePeriod {
@@ -30,16 +31,16 @@ export async function GET() {
   const dealId = userData?.dealership_id
   if (!dealId) return NextResponse.json({ error: 'No dealership' }, { status: 400 })
 
-  // Fetch all sale dates for this dealership
-  const { data: rows } = await supabase
+  // Fetch all sale dates for this dealership (paginated — bypasses 1000-row cap)
+  const rows = await fetchAll(supabase
     .from('vehicles')
     .select('sale_date')
     .eq('dealership_id', dealId)
     .eq('status', 'sold')
     .not('sale_date', 'is', null)
-    .order('sale_date', { ascending: false })
+    .order('sale_date', { ascending: false }))
 
-  if (!rows || rows.length === 0) {
+  if (!rows.length) {
     return NextResponse.json({ periods: [] })
   }
 

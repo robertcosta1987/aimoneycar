@@ -13,6 +13,7 @@ import { createClient } from '@/lib/supabase/server'
 import type { VehicleForCost } from '@/types/cost'
 import type { Expense } from '@/types/index'
 import { CustosPageClient } from './CustosPageClient'
+import { fetchAll } from '@/lib/supabase/fetch-all'
 
 export default async function CustosPage() {
   const supabase = createClient()
@@ -27,7 +28,7 @@ export default async function CustosPage() {
 
   const dealId = userData?.dealership_id
 
-  const { data: raw } = await supabase
+  const raw = await fetchAll(supabase
     .from('vehicles')
     .select(`
       id, dealership_id, plate, chassis, renavam, brand, model, version,
@@ -43,9 +44,9 @@ export default async function CustosPage() {
       )
     `)
     .eq('dealership_id', dealId)
-    .order('days_in_stock', { ascending: false })
+    .order('days_in_stock', { ascending: false }))
 
-  const vehicles: VehicleForCost[] = (raw || []).map((v: any) => ({
+  const vehicles: VehicleForCost[] = raw.map((v: any) => ({
     ...v,
     purchase_price: v.purchase_price ?? 0,
     sale_price: v.sale_price ?? null,

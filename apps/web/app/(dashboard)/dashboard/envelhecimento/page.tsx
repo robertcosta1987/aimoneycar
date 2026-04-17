@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/server'
 import { AgingDashboard } from '@/components/aging/AgingDashboard'
 import { AgingSettings } from '@/components/aging/AgingSettings'
 import type { AgingVehicle } from '@/types/aging'
+import { fetchAll } from '@/lib/supabase/fetch-all'
 
 export default async function EnvelhecimentoPage() {
   const supabase = createClient()
@@ -22,14 +23,14 @@ export default async function EnvelhecimentoPage() {
 
   const dealId = userData?.dealership_id
 
-  const { data: raw } = await supabase
+  const raw = await fetchAll(supabase
     .from('vehicles')
     .select('id, brand, model, version, plate, year_fab, year_model, purchase_price, sale_price, days_in_stock, purchase_date, status, expenses:expenses(amount)')
     .eq('dealership_id', dealId)
     .eq('status', 'available')
-    .order('days_in_stock', { ascending: false })
+    .order('days_in_stock', { ascending: false }))
 
-  const vehicles: AgingVehicle[] = (raw || []).map((v: any) => {
+  const vehicles: AgingVehicle[] = raw.map((v: any) => {
     const totalExpenses = (v.expenses || []).reduce((s: number, e: any) => s + e.amount, 0)
     return {
       id: v.id,

@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { BarChart3, TrendingUp, DollarSign, Car, Receipt, Calendar, CalendarClock, ChevronLeft, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
+import { fetchAll } from '@/lib/supabase/fetch-all'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -33,14 +34,14 @@ export default function RelatoriosPage() {
       const did = userData?.dealership_id
       if (!did) return
 
-      const { data } = await supabase
+      const data = await fetchAll(supabase
         .from('vehicles')
         .select('sale_date')
         .eq('dealership_id', did)
         .eq('status', 'sold')
-        .not('sale_date', 'is', null)
+        .not('sale_date', 'is', null))
 
-      if (!data) return
+      if (!data.length) return
 
       const monthMap = new Map<string, number>()
       for (const v of data) {
@@ -111,20 +112,20 @@ export default function RelatoriosPage() {
         .gte('date', dateStart)
       if (dateEnd) expQ = expQ.lte('date', dateEnd)
 
-      const [{ data: salesData }, { data: vehiclesData }, { data: expensesData }] = await Promise.all([
-        salesQ,
-        supabase
+      const [salesData, vehiclesData, expensesData] = await Promise.all([
+        fetchAll(salesQ),
+        fetchAll(supabase
           .from('vehicles')
           .select('id, brand, model, plate, year_fab, year_model, color, mileage, fuel, purchase_price, sale_price, days_in_stock, status, purchase_date')
           .eq('dealership_id', did)
           .neq('status', 'sold')
-          .order('days_in_stock', { ascending: false }),
-        expQ,
+          .order('days_in_stock', { ascending: false })),
+        fetchAll(expQ),
       ])
 
-      setSales(salesData || [])
-      setVehicles(vehiclesData || [])
-      setExpenses(expensesData || [])
+      setSales(salesData)
+      setVehicles(vehiclesData)
+      setExpenses(expensesData)
       setLoading(false)
     }
     if (mode === 'rolling' || (mode === 'month' && selectedMonth)) load()
