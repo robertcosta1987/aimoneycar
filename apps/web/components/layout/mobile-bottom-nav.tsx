@@ -5,7 +5,7 @@ import {
   LayoutDashboard, MessageSquare, Car, Bell, Receipt,
   BarChart3, Upload, Settings, LogOut, X, Menu, Zap,
   CalendarDays, Users, CalendarClock, Timer, DollarSign,
-  FileBarChart2, MessageCircle, Sparkles,
+  FileBarChart2, MessageCircle, Sparkles, BrainCircuit,
 } from 'lucide-react'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
@@ -42,6 +42,7 @@ const moreGroups: NavGroup[] = [
     items: [
       { href: '/dashboard/relatorios',                    icon: BarChart3,     label: 'Performance'    },
       { href: '/dashboard/relatorios-executivos',         icon: FileBarChart2, label: 'Rel. Executivo' },
+      { href: '/dashboard/inteligencia',                  icon: BrainCircuit,  label: 'Inteligência'   },
       { href: '/dashboard/relatorios/roi-valor-agregado', icon: Sparkles,      label: 'ROI & Valor'    },
       { href: '/dashboard/relatorios/agendar',            icon: CalendarClock, label: 'Email Reports'  },
     ],
