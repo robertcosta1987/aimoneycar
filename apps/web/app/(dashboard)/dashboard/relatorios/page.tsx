@@ -189,14 +189,13 @@ export default function RelatoriosPage() {
   // ── Estoque ──────────────────────────────────────────────────────────────────
   const available    = vehicles.filter(v => v.status === 'available')
   const stockBuckets = [
-    { range: '0-15 dias',  count: available.filter(v => v.days_in_stock <= 15).length, color: '#00E676' },
-    { range: '16-30 dias', count: available.filter(v => v.days_in_stock > 15 && v.days_in_stock <= 30).length, color: '#00D9FF' },
-    { range: '31-60 dias', count: available.filter(v => v.days_in_stock > 30 && v.days_in_stock <= 60).length, color: '#FFB800' },
-    { range: '+60 dias',   count: available.filter(v => v.days_in_stock > 60).length, color: '#FF5252' },
+    { range: '0–45 dias',  count: available.filter(v => v.days_in_stock <= 45).length,                                        color: '#22C55E' },
+    { range: '46–90 dias', count: available.filter(v => v.days_in_stock > 45 && v.days_in_stock <= 90).length, color: '#EAB308' },
+    { range: '91+ dias',   count: available.filter(v => v.days_in_stock > 90).length,                                         color: '#EF4444' },
   ]
-  const healthy  = available.filter(v => v.days_in_stock <= 30).length
-  const warning  = available.filter(v => v.days_in_stock > 30 && v.days_in_stock <= 60).length
-  const critical = available.filter(v => v.days_in_stock > 60).length
+  const healthy  = available.filter(v => v.days_in_stock <= 45).length
+  const warning  = available.filter(v => v.days_in_stock > 45 && v.days_in_stock <= 90).length
+  const critical = available.filter(v => v.days_in_stock > 90).length
   const avgDays  = available.length
     ? Math.round(available.reduce((s, v) => s + v.days_in_stock, 0) / available.length)
     : 0
