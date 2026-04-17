@@ -505,7 +505,10 @@ export async function chatWithClaude(
   context: FullDealershipContext
 ): Promise<{ reply: string; dashboard?: DashboardConfig }> {
   const systemPrompt = buildSystemPrompt(context)
-  const apiMessages: Anthropic.MessageParam[] = messages.map(m => ({
+  // Anthropic requires conversations to start with a user message — strip any leading assistant turns
+  const trimmed = [...messages]
+  while (trimmed.length > 0 && trimmed[0].role === 'assistant') trimmed.shift()
+  const apiMessages: Anthropic.MessageParam[] = trimmed.map(m => ({
     role: m.role,
     content: m.content,
   }))
