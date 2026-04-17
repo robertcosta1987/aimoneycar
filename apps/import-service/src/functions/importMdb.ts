@@ -1106,6 +1106,8 @@ async function clearDataHandler(req: HttpRequest, ctx: InvocationContext): Promi
     await Promise.all([delBatched('vehicles'), delBatched('customers')])
 
     // Level 4: reference tables
+    // Null out calendario_config.ultimo_salesperson_id first — it FK-references employees
+    await getSvc().from('calendario_config').update({ ultimo_salesperson_id: null }).eq('dealership_id', D)
     await Promise.all([
       'manufacturers', 'fuel_types', 'plan_accounts', 'customer_origins',
       'cancellation_reasons', 'standard_pendencies', 'standard_expenses', 'optionals',
