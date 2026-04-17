@@ -13,8 +13,6 @@ import {
   marginChartUrl,
 } from '@/lib/charts/quickchart'
 
-const resend = new Resend(process.env.RESEND_API_KEY!)
-
 function buildChartUrls(payload: ReportPayload): string[] {
   const d = payload.data as Record<string, unknown>
   const urls: string[] = []
@@ -74,6 +72,7 @@ export async function POST(req: NextRequest) {
     const chartUrls = buildChartUrls(payload)
     const { subject, html } = buildReportEmail(payload, chartUrls)
 
+    const resend = new Resend(process.env.RESEND_API_KEY!)
     const { data: sent, error: sendError } = await resend.emails.send({
       from: process.env.RESEND_FROM_EMAIL ?? 'relatorios@moneycarai.com.br',
       to: rel.destinatarios,
