@@ -12,7 +12,12 @@ function svc() {
   )
 }
 
-function getAI() { return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! }) }
+function getAI() {
+  return new Anthropic({
+    apiKey: process.env.ANTHROPIC_API_KEY!,
+    defaultHeaders: { 'anthropic-beta': 'prompt-caching-2024-07-31' },
+  })
+}
 
 const brl = (n: number) =>
   n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -830,10 +835,10 @@ export async function chatWithClaude(
     const response = await getAI().messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 4096,
-      system: systemPrompt,
+      system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
       tools: ALL_TOOLS,
       messages: apiMessages,
-    })
+    } as any)
 
     // If Claude is done (no tool calls), return the text + any captured dashboard
     if (response.stop_reason === 'end_turn') {
