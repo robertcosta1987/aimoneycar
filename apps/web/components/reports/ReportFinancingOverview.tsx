@@ -7,7 +7,10 @@ import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recha
 interface Props { data: FinancingOverview }
 
 export function ReportFinancingOverview({ data }: Props) {
-  const { totalContracts, totalFinancedAmount, cashCount, cashAmount, byBank, missingDataContracts } = data
+  const {
+    totalContracts, totalFinancedAmount, cashCount, cashAmount, byBank,
+    missingDataContracts, avgInstallments, avgInstallmentAmount, avgInterestRate,
+  } = data
 
   const paymentSplit = [
     { name: 'Financiado', value: totalContracts, color: '#00D9FF' },
@@ -22,7 +25,7 @@ export function ReportFinancingOverview({ data }: Props) {
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: 'Financiamentos', value: String(totalContracts), color: 'text-primary' },
+          { label: 'Contratos', value: String(totalContracts), color: 'text-primary' },
           { label: 'Volume Financiado', value: formatCurrency(totalFinancedAmount), color: 'text-primary' },
           { label: 'Vendas à Vista', value: String(cashCount), color: 'text-success' },
           { label: 'Volume à Vista', value: formatCurrency(cashAmount), color: 'text-success' },
@@ -33,6 +36,29 @@ export function ReportFinancingOverview({ data }: Props) {
           </div>
         ))}
       </div>
+
+      {(avgInstallments != null || avgInstallmentAmount != null || avgInterestRate != null) && (
+        <div className="grid grid-cols-3 gap-3">
+          {avgInstallments != null && (
+            <div className="p-4 rounded-xl bg-background-elevated">
+              <p className="text-xs text-foreground-muted mb-1">Prazo Médio</p>
+              <p className="text-xl font-bold text-foreground">{avgInstallments}x</p>
+            </div>
+          )}
+          {avgInstallmentAmount != null && (
+            <div className="p-4 rounded-xl bg-background-elevated">
+              <p className="text-xs text-foreground-muted mb-1">Parcela Média</p>
+              <p className="text-xl font-bold text-foreground">{formatCurrency(avgInstallmentAmount)}</p>
+            </div>
+          )}
+          {avgInterestRate != null && (
+            <div className="p-4 rounded-xl bg-background-elevated">
+              <p className="text-xs text-foreground-muted mb-1">Taxa Média a.m.</p>
+              <p className="text-xl font-bold text-foreground">{avgInterestRate}%</p>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {paymentSplit.length > 0 && (
@@ -78,10 +104,6 @@ export function ReportFinancingOverview({ data }: Props) {
           </Card>
         )}
       </div>
-
-      <p className="text-xs text-foreground-subtle italic">
-        Nota: dados de parcelamento (36x/48x/60x) não disponíveis no esquema atual.
-      </p>
     </section>
   )
 }

@@ -146,7 +146,9 @@ export interface FinancingOverview {
   cashAmount: number
   byBank: FinancingByBank[]
   missingDataContracts: number
-  // NOTE: installment plan (36x/48x/60x) not available in current schema
+  avgInstallments: number | null
+  avgInstallmentAmount: number | null
+  avgInterestRate: number | null
 }
 
 // ─── Section 4.7 — Operational Metrics ───────────────────────────────────────

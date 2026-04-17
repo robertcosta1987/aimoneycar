@@ -152,6 +152,7 @@ export async function computeExecutiveReport(
     { data: acquiredRaw },
     { data: expensesRaw },
     { data: salesRaw },
+    { data: financingsRaw },
   ] = await Promise.all([
     // Dealership info
     supabase.from('users').select('dealership_id, dealerships!inner(name, address, city, state)')
@@ -186,19 +187,27 @@ export async function computeExecutiveReport(
       .gte('date', pStart)
       .lte('date', pEnd),
 
-    // Sales records (for financing overview)
+    // Sales records (for cash-vs-financed split on manually entered data)
     supabase.from('sales')
-      .select('id,sale_price,purchase_price,total_expenses,payment_method,financing_bank,down_payment')
+      .select('id,sale_price,payment_method,financing_bank')
       .eq('dealership_id', dealId)
       .gte('sale_date', pStart)
       .lte('sale_date', pEnd),
+
+    // Financings table (primary source — populated by MDB import from tbFinanciamento)
+    supabase.from('financings')
+      .select('id,bank,total_amount,installments,installment_amount,interest_rate,down_payment,start_date,status,vehicle_id')
+      .eq('dealership_id', dealId)
+      .gte('start_date', pStart)
+      .lte('start_date', pEnd),
   ])
 
-  const sold      = (soldRaw      || []) as any[]
-  const inventory = (inventoryRaw || []) as any[]
-  const acquired  = (acquiredRaw  || []) as any[]
-  const expenses  = (expensesRaw  || []) as any[]
-  const salesList = (salesRaw     || []) as any[]
+  const sold        = (soldRaw        || []) as any[]
+  const inventory   = (inventoryRaw   || []) as any[]
+  const acquired    = (acquiredRaw    || []) as any[]
+  const expenses    = (expensesRaw    || []) as any[]
+  const salesList   = (salesRaw       || []) as any[]
+  const financingsList = (financingsRaw || []) as any[]
 
   const dealership = (dealershipData as any)?.dealerships as any
   const dealershipName    = dealership?.name ?? 'Revenda'
@@ -376,36 +385,72 @@ export async function computeExecutiveReport(
 
   // ─────────────────────────────────────────────────────────────────────────
   // 4.6 FINANCING OVERVIEW
+  // Primary source: financings table (MDB import via tbFinanciamento)
+  // Secondary source: sales table payment_method (manually entered records)
   // ─────────────────────────────────────────────────────────────────────────
 
-  const financed  = salesList.filter(s => {
+  // --- Primary: financings table ---
+  const bankMap: Record<string, { count: number; total: number }> = {}
+  for (const f of financingsList) {
+    const bank = f.bank || 'Não informado'
+    if (!bankMap[bank]) bankMap[bank] = { count: 0, total: 0 }
+    bankMap[bank].count++
+    bankMap[bank].total = fromCents(toCents(bankMap[bank].total) + toCents(f.total_amount || 0))
+  }
+
+  // --- Secondary: sales table (fallback for manually entered data not in financings) ---
+  // Only count a sale as "financed via sales table" if no matching vehicle_id in financings
+  const financedVehicleIds = new Set(financingsList.map((f: any) => f.vehicle_id).filter(Boolean))
+  const salesFinanced = salesList.filter((s: any) => {
+    if (financedVehicleIds.has(s.id)) return false // already covered by financings table
     const pm = (s.payment_method || '').toLowerCase()
     return pm.includes('financiamento') || pm.includes('banco') || pm.includes('financi')
   })
-  const cashSales = salesList.filter(s => !financed.some(f => f.id === s.id))
-
-  const bankMap: Record<string, { count: number; total: number }> = {}
-  for (const s of financed) {
+  for (const s of salesFinanced) {
     const bank = s.financing_bank || 'Não informado'
     if (!bankMap[bank]) bankMap[bank] = { count: 0, total: 0 }
     bankMap[bank].count++
     bankMap[bank].total = fromCents(toCents(bankMap[bank].total) + toCents(s.sale_price || 0))
   }
+
   const byBank: FinancingByBank[] = Object.entries(bankMap)
     .map(([bank, { count, total }]) => ({ bank, count, totalAmount: total }))
     .sort((a, b) => b.count - a.count)
 
-  const totalFinancedAmount = fromCents(financed.reduce((s, f) => s + toCents(f.sale_price || 0), 0))
-  const cashAmount = fromCents(cashSales.reduce((s, c) => s + toCents(c.sale_price || 0), 0))
-  const missingDataContracts = financed.filter(s => !s.financing_bank || s.sale_price === 0).length
+  const totalContracts     = financingsList.length + salesFinanced.length
+  const totalFinancedAmount = fromCents(
+    financingsList.reduce((s: number, f: any) => s + toCents(f.total_amount || 0), 0) +
+    salesFinanced.reduce((s: number, f: any) => s + toCents(f.sale_price || 0), 0)
+  )
+  const cashSales   = salesList.filter((s: any) => !salesFinanced.some((f: any) => f.id === s.id) && !financedVehicleIds.has(s.id))
+  const cashAmount  = fromCents(cashSales.reduce((s: number, c: any) => s + toCents(c.sale_price || 0), 0))
+  const missingDataContracts = financingsList.filter((f: any) => !f.bank || !f.total_amount).length
+
+  // Installment averages (only from financings table — these have reliable data)
+  const withInstallments    = financingsList.filter((f: any) => f.installments && f.installments > 0)
+  const withInstAmount      = financingsList.filter((f: any) => f.installment_amount && f.installment_amount > 0)
+  const withRate            = financingsList.filter((f: any) => f.interest_rate != null && f.interest_rate > 0)
+
+  const avgInstallments = withInstallments.length > 0
+    ? Math.round(withInstallments.reduce((s: number, f: any) => s + f.installments, 0) / withInstallments.length)
+    : null
+  const avgInstallmentAmount = withInstAmount.length > 0
+    ? fromCents(Math.round(withInstAmount.reduce((s: number, f: any) => s + toCents(f.installment_amount), 0) / withInstAmount.length))
+    : null
+  const avgInterestRate = withRate.length > 0
+    ? Math.round((withRate.reduce((s: number, f: any) => s + f.interest_rate, 0) / withRate.length) * 100) / 100
+    : null
 
   const financing: FinancingOverview = {
-    totalContracts: financed.length,
+    totalContracts,
     totalFinancedAmount,
     cashCount: cashSales.length,
     cashAmount,
     byBank,
     missingDataContracts,
+    avgInstallments,
+    avgInstallmentAmount,
+    avgInterestRate,
   }
 
   // ─────────────────────────────────────────────────────────────────────────
