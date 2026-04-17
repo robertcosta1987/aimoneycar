@@ -148,8 +148,8 @@ async function parseMDB(buffer: Buffer, log: (msg: string) => void) {
     tbNaturezaOp:                ['natID', 'natDescri', 'natNome', 'natCFOP'],
     tbBancosCadastro:            ['bancID', 'bancNome', 'bancDescri', 'bancCodigo', 'bancAgencia', 'bancConta'],
     tbCliente:                   ['cliid', 'cliNome', 'cliStatus', 'cliEmail', 'cliFone1', 'cliFone2', 'cliFone3', 'cliCNPJ_CPF', 'cliRG_IE', 'CliEnd', 'cliEnd_n', 'cliCompl', 'cliBairro', 'cliCidade', 'cliEstado', 'cliCEP', 'cliOBS', 'empID', 'cliContato', 'cliFone1Compl', 'cliFone2Compl', 'cliDataNasc', 'cliNascimento', 'oriID'],
-    tbFornecedor:                ['forID', 'forNome', 'forRazaoSocial', 'forCategoria', 'forTelefone', 'forEmail', 'forCNPJ', 'forEndereco', 'forLogradouro', 'forBairro', 'forCidade', 'forEstado', 'forCEP', 'forObservacoes', 'forObs'],
-    tbFuncionario:               ['funID', 'funNome', 'funCPF', 'funRG', 'funCargo', 'funEmail', 'funTelefone', 'funEndereco', 'funLogradouro', 'funCidade', 'funEstado', 'funCEP', 'funDataAdmissao', 'funDataDemissao', 'funSalario', 'funComissao', 'funObservacoes', 'funObs'],
+    tbFornecedor:                ['forID', 'forNome', 'forRazSoc', 'forRazaoSocial', 'forFantasia', 'forCategoria', 'forFone1', 'forFone2', 'forTelefone', 'forEmail', 'forCNPJ', 'forEnd', 'forEndereco', 'forLogradouro', 'forBairro', 'forCidade', 'forEstado', 'forCEP', 'forOBS', 'forObservacoes', 'forObs'],
+    tbFuncionario:               ['funID', 'forID', 'funNome', 'funCPF', 'funRG', 'funCargo', 'funEmail', 'funTelefone', 'funEndereco', 'funLogradouro', 'funCidade', 'funEstado', 'funCEP', 'funDtAdmissao', 'funDataAdmissao', 'funDtDemissao', 'funDataDemissao', 'funSalario', 'funComissao', 'funObservacoes', 'funObs'],
     tbContasCorrentes:           ['ctaID', 'ctaNome', 'ctaDescri', 'bancID', 'ctaAgencia', 'ctaConta', 'ctaSaldo'],
     tbClienteComplemento:        ['cliID', 'cliPai', 'cliMae', 'cliConjuge', 'cliEsposo', 'cliCPFConjuge', 'cliRenda', 'cliProfissao', 'cliEmpresa', 'cliTelEmpresa', 'cliEndEmpresa', 'cliCidEmpresa'],
     tbClienteDadosComerciais:    ['cliID', 'cliRazaoSocial', 'cliEmpresa', 'cliCNPJ', 'cliAtividade', 'cliFaturamento', 'cliEndereco', 'cliCidade', 'cliEstado', 'cliTelefone'],
@@ -554,7 +554,7 @@ async function processImportInBackground(
             const terminated = parseDate(r.funDtDemissao ?? r.funDataDemissao)
             return {
               dealership_id: D, external_id: String(r.funID),
-              name: str(forn.forRazSoc) ?? str(forn.forRazaoSocial) ?? str(forn.forFantasia) ?? 'Sem nome',
+              name: str(forn.forRazSoc) ?? str(forn.forRazaoSocial) ?? str(forn.forFantasia) ?? str(r.funNome) ?? 'Sem nome',
               cpf: str(forn.forCNPJ ?? r.funCPF), rg: str(r.funRG),
               email: str(forn.forEmail ?? r.funEmail),
               phone: str(forn.forFone1 ?? forn.forFone2 ?? r.funTelefone),
