@@ -127,18 +127,24 @@
 
 ## 5. COMPLEMENTO DO CLIENTE (tabela: `customer_complements`)
 
+> **Quando usar:** dados demográficos e de renda do cliente. Sempre fazer JOIN com `customers` via `customer_id`. Um cliente pode não ter complemento se nunca foi cadastrado no sistema antigo.
+
 | Campo no Banco | Nome Legível (PT-BR) | Perguntas que este campo responde |
 |---|---|---|
-| `customer_id` | Cliente (FK) | liga ao cliente principal |
-| `father_name` | Nome do Pai | "nome do pai" |
-| `mother_name` | Nome da Mãe | "nome da mãe" |
-| `spouse_name` | Nome do Cônjuge | "nome do cônjuge" |
+| `id` | Código do Complemento | identificador interno |
+| `dealership_id` | Revenda (FK) | "complementos de qual loja?" |
+| `customer_id` | Cliente (FK) | liga ao cliente principal em `customers` |
+| `customer_external_id` | ID Moneycar do Cliente | código original no Moneycar |
+| `father_name` | Nome do Pai | "nome do pai", "filiação paterna" |
+| `mother_name` | Nome da Mãe | "nome da mãe", "filiação materna" |
+| `spouse_name` | Nome do Cônjuge | "nome do cônjuge", "cônjuge do cliente" |
 | `spouse_cpf` | CPF do Cônjuge | "CPF do cônjuge" |
-| `monthly_income` | Renda Mensal (R$) | "qual a renda?", "renda do cliente" |
-| `profession` | Profissão | "qual a profissão?" |
-| `employer` | Empregador | "onde trabalha?" |
-| `employer_phone` | Telefone do Trabalho | "telefone comercial" |
-| `employer_address` | Endereço do Trabalho | "endereço comercial" |
+| `spouse_income` | Renda do Cônjuge (R$) | "renda do cônjuge", "renda familiar total" |
+| `monthly_income` | Renda Mensal (R$) | "qual a renda?", "renda do cliente", "renda mensal" |
+| `profession` | Profissão | "qual a profissão?", "o que faz?" |
+| `employer` | Empregador / Empresa | "onde trabalha?", "nome da empresa" |
+| `employer_phone` | Telefone do Trabalho | "telefone comercial", "telefone da empresa" |
+| `employer_address` | Endereço do Trabalho | "endereço comercial", "endereço da empresa" |
 | `employer_city` | Cidade do Trabalho | "cidade onde trabalha" |
 
 ---
@@ -198,27 +204,43 @@
 
 ---
 
-## 9. SALÁRIOS (tabela: `employee_salaries`)
+## 9. SALÁRIOS E PAGAMENTOS (tabela: `employee_salaries`)
+
+> **Quando usar:** histórico de pagamentos feitos a funcionários — salário, adiantamento, comissão paga, bônus, desconto. Para saber a REGRA de comissão de um funcionário (percentual, teto), use `commission_standards` em vez desta tabela.
 
 | Campo no Banco | Nome Legível (PT-BR) | Perguntas que este campo responde |
 |---|---|---|
-| `employee_id` | Funcionário (FK) | "salário de qual funcionário?" |
-| `date` | Data / Competência | "salário de qual mês?" |
-| `amount` | Valor Pago (R$) | "quanto pagou?", "folha de pagamento" |
-| `type` | Tipo | "tipo de pagamento" |
-| `description` | Descrição | "descrição do pagamento" |
+| `id` | Código do Pagamento | identificador interno |
+| `dealership_id` | Revenda (FK) | "pagamentos de qual loja?" |
+| `external_id` | ID Moneycar | código original |
+| `employee_id` | Funcionário (FK) | "pagamentos de qual funcionário?" |
+| `employee_external_id` | ID Moneycar do Funcionário | referência ao sistema antigo |
+| `date` | Data / Competência | "salário de qual mês?", "quando foi pago?", "folha de março" |
+| `amount` | Valor Pago (R$) | "quanto pagou?", "total da folha de pagamento", "quanto custou em salários?" |
+| `type` | Tipo de Pagamento | "é salário, adiantamento ou bônus?" |
+| `description` | Descrição | "o que foi esse pagamento?" |
+| `bank_account_id` | Conta Bancária (FK) | "pago por qual conta?" |
+
+**Valores do campo `type`:** `SALARIO` (salário base), `ADIANTAMENTO` (adiantamento salarial), `COMISSAO` (comissão paga), `BONUS` (bônus), `DESCONTO` (desconto/estorno)
 
 ---
 
 ## 10. REGRAS DE COMISSÃO (tabela: `commission_standards`)
 
+> **Quando usar:** configuração/regra de quanto cada funcionário ganha de comissão. São os PARÂMETROS definidos pela revenda, não os valores pagos. Para comissões JÁ PAGAS em transações específicas use `commissions`. Para o valor de salário pago use `employee_salaries`.
+
 | Campo no Banco | Nome Legível (PT-BR) | Perguntas que este campo responde |
 |---|---|---|
-| `employee_id` | Funcionário (FK) | "comissão de qual funcionário?" |
-| `percent` | Percentual (%) | "qual a porcentagem?" |
-| `min_value` | Valor Mínimo (R$) | "comissão mínima" |
-| `max_value` | Valor Máximo (R$) | "comissão máxima / teto" |
-| `type` | Tipo | "tipo de comissão" |
+| `id` | Código da Regra | identificador interno |
+| `dealership_id` | Revenda (FK) | "regras de qual loja?" |
+| `external_id` | ID Moneycar | código original |
+| `employee_id` | Funcionário (FK) | "regra de comissão de qual funcionário?", "como calcula a comissão do João?" |
+| `employee_external_id` | ID Moneycar do Funcionário | referência ao sistema antigo |
+| `percent` | Percentual de Comissão (%) | "qual a porcentagem de comissão?", "quanto % ganha?", "comissão do vendedor" |
+| `min_value` | Valor Mínimo (R$) | "qual o mínimo de comissão?", "piso de comissão" |
+| `max_value` | Valor Máximo (R$) | "qual o teto de comissão?", "comissão máxima" |
+| `type` | Tipo de Negócio | "comissão sobre venda? financiamento? seguro?" |
+| `is_active` | Ativo? | "essa regra está vigente?" |
 
 ---
 
@@ -284,16 +306,25 @@
 
 ---
 
-## 15. MULTAS (tabela: `vehicle_fines`)
+## 15. MULTAS DE TRÂNSITO (tabela: `vehicle_fines`)
+
+> **Quando usar:** multas de trânsito em veículos do estoque, vinculadas ao período em que a revenda era proprietária. Para saber o total geral de multas, use o resumo já calculado no contexto. Para detalhar multas de um veículo específico, consulte esta tabela filtrando por `vehicle_id`.
 
 | Campo no Banco | Nome Legível (PT-BR) | Perguntas que este campo responde |
 |---|---|---|
+| `id` | Código da Multa | identificador interno |
 | `dealership_id` | Revenda (FK) | "multas de qual loja?" |
-| `vehicle_external_id` | Veículo (FK externo) | "multas de qual carro?" |
-| `date` | Data da Multa | "quando foi a multa?" |
-| `amount` | Valor (R$) | "quanto foi a multa?", "total em multas" |
-| `issuing_agency` | Órgão Autuador | "quem aplicou a multa?" |
-| `is_paid` | Paga? | "já foi paga?", "multas pendentes" |
+| `external_id` | ID Moneycar | código original |
+| `vehicle_id` | Veículo (FK UUID) | chave para join com `vehicles` |
+| `vehicle_external_id` | ID Moneycar do Veículo | "multas de qual carro?", filtrar por veículo |
+| `date` | Data da Multa | "quando foi a multa?", "multas do mês" |
+| `description` | Descrição da Infração | "qual foi a infração?", "descrição da multa" |
+| `amount` | Valor (R$) | "quanto foi a multa?", "total em multas", "valor das multas pendentes" |
+| `issuing_agency` | Órgão Autuador | "quem aplicou a multa?", "multas do DETRAN", "multas da PRF" |
+| `infraction_code` | Código da Infração | "qual o código da infração?" |
+| `is_paid` | Paga? | "já foi paga?", "multas pendentes", "multas em aberto" |
+| `paid_date` | Data do Pagamento | "quando foi paga?" |
+| `notes` | Observações | "alguma nota sobre a multa?" |
 
 ---
 
@@ -437,45 +468,76 @@
 
 ## 24. IMPORTAÇÕES (tabela: `imports`)
 
+> **Quando usar:** histórico de importações de arquivos MDB (sistema Moneycar antigo) feitas pela revenda. Cada linha é uma importação de arquivo. Use para saber quando foi a última importação, se deu erro, quantos registros foram processados.
+
 | Campo no Banco | Nome Legível (PT-BR) | Perguntas que este campo responde |
 |---|---|---|
 | `id` | Código da Importação | "qual importação?" |
-| `dealership_id` | Revenda (FK) | "importação de qual loja?" |
-| `filename` | Nome do Arquivo | "qual arquivo foi importado?" |
+| `dealership_id` | Revenda (FK) | "importações de qual loja?" |
+| `filename` | Nome do Arquivo | "qual arquivo foi importado?", "nome do MDB" |
 | `file_type` | Tipo de Arquivo | "era MDB, CSV ou XLSX?" |
-| `file_size` | Tamanho do Arquivo | "qual o tamanho?" |
-| `status` | Status | "terminou?", "deu erro?" |
-| `records_imported` | Registros Importados | "quantos registros importou?" |
-| `errors` | Erros (JSON) | "teve algum erro?" |
-| `created_by` | Feito por (FK) | "quem importou?" |
-| `completed_at` | Finalizado em | "quando terminou?" |
+| `file_size` | Tamanho do Arquivo (bytes) | "qual o tamanho do arquivo?" |
+| `status` | Status Atual | "terminou?", "deu erro?", "está processando?", "qual a fase?" |
+| `records_imported` | Registros Importados | "quantos registros importou?", "quantos veículos/clientes vieram?" |
+| `errors` | Erros (JSON array) | "teve algum erro?", "o que deu errado?" |
+| `created_by` | Feito por (FK) | "quem importou?", "qual usuário fez a importação?" |
+| `created_at` | Iniciado em | "quando começou?", "data da importação" |
+| `completed_at` | Finalizado em | "quando terminou?", "duração da importação" |
+
+**Valores do campo `status`:**
+- `pending` — aguardando início
+- `downloading` — baixando o arquivo
+- `parsing` — lendo o MDB
+- `importing_referencias` — importando tabelas de referência (fornecedores, funcionários, contas)
+- `importing_entidades` — importando entidades principais (veículos, clientes)
+- `importing_detalhes` — importando dados detalhados (compras, vendas, financiamentos, despesas)
+- `complete` — concluído com sucesso
+- `error` — falhou (ver campo `errors` para detalhes)
 
 ---
 
-## 25. DADOS DE COMPRA HISTÓRICOS (tabela: `purchase_data`)
+## 25. DADOS DE COMPRA (tabela: `purchase_data`)
+
+> **Quando usar:** detalhes brutos da COMPRA de um veículo — quem vendeu para a revenda, quando, com quantos km, e como foi pago. Esta tabela complementa `vehicles`: o veículo fica em `vehicles`, os detalhes da transação de aquisição ficam aqui. Sempre fazer JOIN com `vehicles` via `vehicle_id`. Diferença de `vehicles.purchase_price`: `purchase_data.purchase_price` é o valor exato registrado na transação de compra (fonte: sistema Moneycar antigo), enquanto `vehicles.purchase_price` é o valor de trabalho atual.
 
 | Campo no Banco | Nome Legível (PT-BR) | Perguntas que este campo responde |
 |---|---|---|
-| `vehicle_id` | Veículo (FK) | "dados de compra de qual veículo?" |
-| `purchase_date` | Data da Compra | "quando compramos?" |
-| `mileage` | KM na Compra | "com quantos km compramos?" |
-| `purchase_price` | Preço de Compra (R$) | "quanto pagamos?" |
-| `supplier_external_id` | Fornecedor (FK) | "de quem compramos?" |
-| `payment_method` | Forma de Pagamento | "como pagamos?" |
-| `notes` | Observações | "notas da compra" |
+| `id` | Código | identificador interno |
+| `dealership_id` | Revenda (FK) | "compras de qual loja?" |
+| `vehicle_id` | Veículo (FK UUID) | chave para join com `vehicles` |
+| `vehicle_external_id` | ID Moneycar do Veículo | "dados de compra de qual veículo?" |
+| `purchase_date` | Data da Compra | "quando compramos?", "data de aquisição deste veículo" |
+| `mileage` | KM na Compra | "com quantos km compramos?", "km no momento da compra" |
+| `purchase_price` | Preço de Compra (R$) | "quanto pagamos exatamente?", "valor registrado na compra" |
+| `supplier_id` | Fornecedor (FK UUID) | chave para join com `vendors` |
+| `supplier_external_id` | ID Moneycar do Fornecedor | referência original |
+| `supplier_name` | Nome do Fornecedor | "de quem compramos?", "nome de quem vendeu para a revenda" |
+| `payment_method` | Forma de Pagamento | "como pagamos?", "foi à vista?", "financiado?" |
+| `notes` | Observações | "alguma nota da compra?" |
 
 ---
 
-## 26. DADOS DE VENDA HISTÓRICOS (tabela: `sale_data`)
+## 26. DADOS DE VENDA (tabela: `sale_data`)
+
+> **Quando usar:** detalhes brutos da VENDA de um veículo — para quem vendeu, quando, com quantos km, e como foi pago. Esta tabela complementa `sales` e `vehicles`. Diferença entre tabelas de venda:
+> - `sales` → tabela de vendas com lucro, margem, dados do cliente copiados no momento da venda. Use para análise financeira.
+> - `sale_data` → dados brutos vindos do sistema Moneycar antigo (MDB). Use quando precisar de dados históricos de veículos importados, especialmente km e forma de pagamento.
+> Sempre fazer JOIN com `vehicles` via `vehicle_id` ou com `customers` via `customer_id`.
 
 | Campo no Banco | Nome Legível (PT-BR) | Perguntas que este campo responde |
 |---|---|---|
-| `vehicle_id` | Veículo (FK) | "dados de venda de qual veículo?" |
-| `sale_date` | Data da Venda | "quando vendemos?" |
-| `customer_external_id` | Cliente (FK) | "para quem vendemos?" |
-| `amount` | Valor (R$) | "por quanto vendemos?" |
-| `payment_method` | Forma de Pagamento | "como o cliente pagou?" |
-| `notes` | Observações | "notas da venda" |
+| `id` | Código | identificador interno |
+| `dealership_id` | Revenda (FK) | "vendas de qual loja?" |
+| `vehicle_id` | Veículo (FK UUID) | chave para join com `vehicles` |
+| `vehicle_external_id` | ID Moneycar do Veículo | "dados de venda de qual veículo?" |
+| `sale_date` | Data da Venda | "quando vendemos?", "data de saída do veículo" |
+| `mileage` | KM na Venda | "com quantos km vendemos?", "km no momento da venda" |
+| `sale_price` | Valor da Venda (R$) | "por quanto vendemos?", "preço de venda registrado" |
+| `customer_id` | Cliente (FK UUID) | chave para join com `customers` |
+| `customer_external_id` | ID Moneycar do Cliente | "para quem vendemos?" (referência original) |
+| `payment_method` | Forma de Pagamento | "como o cliente pagou?", "foi à vista?", "financiado?" |
+| `notes` | Observações | "alguma nota da venda?" |
+| `sale_record_id` | Venda (FK para `sales`) | link para o registro de venda com lucro calculado |
 
 ---
 
@@ -525,6 +587,79 @@
 | `get_calendario_dashboard(dealership, inicio, fim, vendedor)` | Compromissos do calendário | "agenda do dia", "agendamentos da semana" |
 | `criar_agendamento(...)` | Cria novo agendamento | "agendar visita", "marcar test drive" |
 | `cancelar_agendamento(id, motivo)` | Cancela agendamento | "cancelar visita", "desmarcar agendamento" |
+
+---
+
+## GUIA DE DISAMBIGUAÇÃO — Quando usar qual tabela
+
+Este guia resolve confusão entre tabelas com dados parecidos. Leia ANTES de responder perguntas sobre as tabelas abaixo.
+
+### Dados de compra de veículos:
+| O usuário pergunta sobre... | Use esta tabela | Por quê |
+|---|---|---|
+| Preço de compra atual, custo para calcular lucro | `vehicles.purchase_price` | Valor de trabalho, sempre atualizado |
+| Histórico de quem vendeu o veículo para a revenda | `purchase_data.supplier_name` | Detalhe da transação de aquisição |
+| Data exata e km no momento da aquisição | `purchase_data.purchase_date`, `purchase_data.mileage` | Dados brutos do MDB |
+| Como foi pago na compra | `purchase_data.payment_method` | Apenas disponível aqui |
+
+### Dados de venda de veículos:
+| O usuário pergunta sobre... | Use esta tabela | Por quê |
+|---|---|---|
+| Lucro, margem, análise financeira de vendas | `sales` | Tem `profit`, `profit_percent`, snapshot completo |
+| Para quem foi vendido, contato do comprador | `sales.customer_name`, `sales.customer_phone`, `sales.customer_cpf` | Dados copiados no momento da venda |
+| Vendas por vendedor, ranking | `sales.salesperson_name` | Apenas aqui |
+| KM no momento da venda (veículos do MDB) | `sale_data.mileage` | Dado importado do sistema antigo |
+| Forma de pagamento detalhada da venda do MDB | `sale_data.payment_method` | Dado importado do sistema antigo |
+
+### Dados de comissão:
+| O usuário pergunta sobre... | Use esta tabela | Por quê |
+|---|---|---|
+| Quanto % um funcionário ganha de comissão (regra) | `commission_standards.percent` | Configuração/regra por funcionário |
+| Teto ou piso de comissão | `commission_standards.max_value`, `commission_standards.min_value` | Parâmetros da regra |
+| Comissão recebida em uma venda específica | `commissions.amount` | Registro do valor efetivamente pago |
+| Total de comissões pagas no mês | `SUM(commissions.amount)` | Histórico de pagamentos |
+| Salário base e adiantamentos pagos | `employee_salaries` | type = SALARIO ou ADIANTAMENTO |
+
+### Dados do cliente:
+| O usuário pergunta sobre... | Use esta tabela | Por quê |
+|---|---|---|
+| Nome, telefone, CPF, endereço | `customers` | Dados principais |
+| Renda mensal, profissão, empregador | `customer_complements` | JOIN via customer_id |
+| Dados do cônjuge | `customer_complements.spouse_*` | JOIN via customer_id |
+| CNPJ da empresa, faturamento mensal da empresa | `customer_commercial_data` | JOIN via customer_id |
+| Bens declarados, contas bancárias do cliente | `customer_asset_references` | JOIN via customer_id |
+
+### Multas:
+| O usuário pergunta sobre... | Use esta tabela | Por quê |
+|---|---|---|
+| Resumo de multas (total, não pagas) | Contexto já carregado no prompt | Dados agregados disponíveis |
+| Multas de um veículo específico | `vehicle_fines WHERE vehicle_id = ?` | Detalhe por veículo |
+| Infração específica, órgão, data | `vehicle_fines.description`, `vehicle_fines.issuing_agency` | Detalhes individuais |
+
+### Importações:
+| O usuário pergunta sobre... | Use esta tabela | Por quê |
+|---|---|---|
+| Última importação feita | `imports ORDER BY created_at DESC LIMIT 1` | Histórico de importações |
+| Se a importação deu erro | `imports.status = 'error'` ou `imports.errors` | Log de erros |
+| Quantos registros foram importados | `imports.records_imported` | Contador de registros |
+| Em que fase está a importação atual | `imports.status` | Ver valores de status na seção 24 |
+
+---
+
+## TABELAS SEM DADOS NO CONTEXTO ATUAL
+
+As tabelas abaixo existem no banco mas **não têm dados carregados no prompt**. Para responder perguntas sobre elas, a IA precisa informar ao usuário que pode buscar os dados, mas eles não estão pré-carregados na conversa atual:
+
+- `commission_standards` — regras de comissão por funcionário
+- `employee_salaries` — histórico de pagamentos de salários
+- `customer_complements` — dados de renda, filiação e emprego do cliente
+- `customer_commercial_data` — dados da empresa do cliente
+- `customer_asset_references` — bens e contas bancárias do cliente
+- `purchase_data` — detalhes de aquisição de veículos
+- `sale_data` — detalhes de venda de veículos (dados brutos MDB)
+- `imports` — histórico de importações de arquivos
+
+**Quando o usuário perguntar sobre dados dessas tabelas**, responda com base no que você sabe pela estrutura da tabela descrita neste mapa. Se precisar de valores específicos, informe que os dados estão disponíveis no banco mas não foram carregados nesta sessão.
 
 ---
 

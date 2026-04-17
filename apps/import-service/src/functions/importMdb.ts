@@ -61,19 +61,31 @@ function str(v: any, max = 255): string | null {
 
 // ─── MDB parser ──────────────────────────────────────────────────────────────
 
-async function parseMDB(buffer: Buffer) {
+async function parseMDB(buffer: Buffer, log: (msg: string) => void) {
+  log(`parseMDB: creating reader (bufferMB=${(buffer.length/1024/1024).toFixed(1)})`)
   const reader = new MDBReader(buffer)
   const tableNames = reader.getTableNames()
+  log(`parseMDB: reader ready, tables=${tableNames.length}`)
 
   const tableSet = new Set(tableNames)
   const tableCache: Record<string, Record<string, any>[]> = {}
   const yield_ = () => new Promise<void>(resolve => setImmediate(resolve))
 
-  const t = async (name: string): Promise<Record<string, any>[]> => {
+  const t = async (name: string, columns?: string[]): Promise<Record<string, any>[]> => {
     if (!(name in tableCache)) {
       if (!tableSet.has(name)) return (tableCache[name] = [])
-      await yield_() // yield to event loop between table loads
-      try { tableCache[name] = reader.getTable(name).getData() as Record<string, any>[] } catch { tableCache[name] = [] }
+      await yield_()
+      const t0 = Date.now()
+      log(`parseMDB: loading ${name}...`)
+      try {
+        const table = reader.getTable(name)
+        const opts = columns ? { columns } : {}
+        tableCache[name] = table.getData(opts) as Record<string, any>[]
+        log(`parseMDB: loaded ${name}: ${tableCache[name].length} rows in ${Date.now()-t0}ms`)
+      } catch (e: any) {
+        log(`parseMDB: error loading ${name}: ${e?.message}`)
+        tableCache[name] = []
+      }
     }
     return tableCache[name]
   }
@@ -89,12 +101,12 @@ async function parseMDB(buffer: Buffer) {
   ;(await t('tbPlanoContas')).forEach((r: any) => { if (r.plaID && r.PlaNome) planMap[r.plaID] = String(r.PlaNome) })
 
   const purchaseMap: Record<number, { date: any; km: any; valor: any }> = {}
-  ;(await t('tbDadosCompra')).forEach((r: any) => { if (r.carID) purchaseMap[r.carID] = { date: r.cData, km: r.cKM, valor: r.cValor } })
+  ;(await t('tbDadosCompra', ['carID', 'cData', 'cKM', 'cValor', 'forID', 'cFormaPagamento', 'cObservacoes', 'cObs'])).forEach((r: any) => { if (r.carID) purchaseMap[r.carID] = { date: r.cData, km: r.cKM, valor: r.cValor } })
 
   const saleMap: Record<number, { date: any; km: any; valor: any; cliID: any }> = {}
-  ;(await t('tbDadosVenda')).forEach((r: any) => { if (r.carID) saleMap[r.carID] = { date: r.vData, km: r.vKM, valor: r.vValorVenda, cliID: r.cliID } })
+  ;(await t('tbDadosVenda', ['carID', 'vData', 'vKM', 'vValorVenda', 'cliID', 'vFormaPagamento', 'vObservacoes', 'vObs'])).forEach((r: any) => { if (r.carID) saleMap[r.carID] = { date: r.vData, km: r.vKM, valor: r.vValorVenda, cliID: r.cliID } })
 
-  const vehicleRows = (await t('tbVeiculo')).map((r: any) => ({
+  const vehicleRows = (await t('tbVeiculo', ['carID', 'carPlaca', 'carDescri', 'carAno', 'carAnoModelo', 'carValorCompra', 'carValorTabela', 'carChassi', 'carRenavan', 'carCor', 'carMotor', 'fabID', 'gazID'])).map((r: any) => ({
     carID: r.carID, carPlaca: r.carPlaca, carDescri: r.carDescri,
     carAno: r.carAno, carAnoModelo: r.carAnoModelo,
     carValorCompra: r.carValorCompra, carValorTabela: r.carValorTabela,
@@ -107,7 +119,7 @@ async function parseMDB(buffer: Buffer) {
   delete tableCache['tbVeiculo']
 
   const EXCLUDE_PLANS = ['VEICULO', 'VEÍCULO', 'COMPRA', 'VENDA']
-  const expenseRows = (await t('tbMovimento'))
+  const expenseRows = (await t('tbMovimento', ['movID', 'movValor', 'carReferencia', 'movData', 'movDescri', 'plaID']))
     .filter((r: any) => {
       if (!r.carReferencia || r.carReferencia === 0) return false
       if (parseNum(r.movValor) <= 0) return false
@@ -120,10 +132,54 @@ async function parseMDB(buffer: Buffer) {
     }))
   delete tableCache['tbMovimento']
 
+  // Column whitelist for tables with binary/OLE columns that slow getData() dramatically.
+  const proxyColumnFilters: Record<string, string[]> = {
+    tbFabricantes:               ['fabID', 'fabNome'],
+    tbCombustivel:               ['gazID', 'gazDescri'],
+    tbPlanoContas:               ['plaID', 'PlaNome', 'plaCategoria', 'plaTipo'],
+    tbOrigemCliente:             ['oriID', 'oriDescri', 'oriNome'],
+    tbMotivoCancelamento:        ['mcanID', 'mcanDescri', 'mcanNome'],
+    tbPendenciaPadrao:           ['ppnID', 'ppnDescri', 'ppnNome', 'ppnCategoria'],
+    tbDespesaPadrao:             ['dpaID', 'dpaDescri', 'dpaNome', 'plaID', 'dpaValor'],
+    tbOpcionais:                 ['opcID', 'opcDescri', 'opcNome', 'opcCategoria'],
+    tbEnumGeral:                 ['enuID', 'enuTipo', 'enuCodigo', 'enuDescri', 'enuNome'],
+    tbCadastroTextos:            ['texID', 'texDescri', 'texNome', 'texConteudo', 'texTipo'],
+    tbNCM:                       ['ncmID', 'ncmCodigo', 'ncmDescri'],
+    tbNaturezaOp:                ['natID', 'natDescri', 'natNome', 'natCFOP'],
+    tbBancosCadastro:            ['bancID', 'bancNome', 'bancDescri', 'bancCodigo', 'bancAgencia', 'bancConta'],
+    tbCliente:                   ['cliid', 'cliNome', 'cliStatus', 'cliEmail', 'cliFone1', 'cliFone2', 'cliFone3', 'cliCNPJ_CPF', 'cliRG_IE', 'CliEnd', 'cliEnd_n', 'cliCompl', 'cliBairro', 'cliCidade', 'cliEstado', 'cliCEP', 'cliOBS', 'empID', 'cliContato', 'cliFone1Compl', 'cliFone2Compl', 'cliDataNasc', 'cliNascimento', 'oriID'],
+    tbFornecedor:                ['forID', 'forNome', 'forRazaoSocial', 'forCategoria', 'forTelefone', 'forEmail', 'forCNPJ', 'forEndereco', 'forLogradouro', 'forBairro', 'forCidade', 'forEstado', 'forCEP', 'forObservacoes', 'forObs'],
+    tbFuncionario:               ['funID', 'funNome', 'funCPF', 'funRG', 'funCargo', 'funEmail', 'funTelefone', 'funEndereco', 'funLogradouro', 'funCidade', 'funEstado', 'funCEP', 'funDataAdmissao', 'funDataDemissao', 'funSalario', 'funComissao', 'funObservacoes', 'funObs'],
+    tbContasCorrentes:           ['ctaID', 'ctaNome', 'ctaDescri', 'bancID', 'ctaAgencia', 'ctaConta', 'ctaSaldo'],
+    tbClienteComplemento:        ['cliID', 'cliPai', 'cliMae', 'cliConjuge', 'cliEsposo', 'cliCPFConjuge', 'cliRenda', 'cliProfissao', 'cliEmpresa', 'cliTelEmpresa', 'cliEndEmpresa', 'cliCidEmpresa'],
+    tbClienteDadosComerciais:    ['cliID', 'cliRazaoSocial', 'cliEmpresa', 'cliCNPJ', 'cliAtividade', 'cliFaturamento', 'cliEndereco', 'cliCidade', 'cliEstado', 'cliTelefone'],
+    tbClienteReferenciasBens:    ['cliID', 'refID', 'refTipo', 'refDescri', 'refValor', 'refBanco', 'refParcela'],
+    tbfuncionarioSalario:        ['salID', 'funID', 'salData', 'salValor', 'salTipo', 'salDescri', 'salObservacoes'],
+    tbComissaoPadrao:            ['cpaID', 'funID', 'cpaPercentual', 'cpaValorMin', 'cpaValorMax', 'cpaTipo'],
+    tbVeiculoMulta:              ['mulID', 'carID', 'mulData', 'mulValor', 'mulDescri', 'mulOrgao', 'mulCodigo', 'mulPago', 'mulDataPagamento', 'mulObservacoes', 'mulObs'],
+    tbVeiculoDocumento:          ['docID', 'carID', 'docTipo', 'docNumero', 'docData', 'docValidade', 'docArquivo', 'docObservacoes', 'docObs'],
+    tbVeiculoDocumentoCompra:    ['dcoID', 'carID', 'dcoTipo', 'dcoNumero', 'dcoData', 'dcoValor', 'dcoArquivo', 'dcoObservacoes', 'dcoObs'],
+    tbVeiculoOpcionais:          ['voID', 'carID', 'opcID', 'voDescri', 'opcDescri'],
+    tbVeiculoPendencia:          ['vpnID', 'carID', 'ppnID', 'vpnDescri', 'vpnStatus', 'vpnData', 'vpnValor', 'vpnDataResolucao', 'vpnDataFim', 'vpnObservacoes', 'vpnObs'],
+    tbVeiculoProtocoloEntrega:   ['proID', 'carID', 'cliID', 'proData', 'proKM', 'proNivelCombustivel', 'proCombustivel', 'proDescri', 'proAssinatura', 'proObservacoes', 'proObs'],
+    tbveiculoTroca:              ['trcID', 'carID', 'carIDEntregue', 'cliID', 'trcData', 'trcValorEntrada', 'trcDiferenca', 'trcObservacoes', 'trcObs'],
+    tbRateioVeiculo:             ['ratID', 'carID', 'plaID', 'ratValor', 'ratData', 'ratDescri'],
+    tbDespesaPosVenda:           ['dpvID', 'carID', 'dpvDescri', 'dpvValor', 'dpvData', 'plaID'],
+    tbFinanciamento:             ['finID', 'carID', 'cliID', 'finBanco', 'finValor', 'finParcelas', 'finTaxa', 'finValorParcela', 'finEntrada', 'finData', 'finContrato', 'finObservacoes', 'finObs'],
+    tbSeguro:                    ['segID', 'carID', 'cliID', 'segEmpresa', 'segApolice', 'segValor', 'segPremio', 'segDataInicio', 'segDataFim', 'segTipoCobertura', 'segObservacoes', 'segObs'],
+    tbComissao:                  ['comID', 'carID', 'funID', 'comValor', 'comPercentual', 'comData', 'comDataPagamento', 'comPago', 'comObservacoes', 'comObs'],
+    tbPedidosClientes:           ['pedID', 'cliID', 'carID', 'funID', 'pedData', 'pedValor', 'pedStatus', 'pedFormaPagamento', 'pedEntrada', 'pedObservacoes', 'pedObs'],
+    tbPedidosFollowUp:           ['fupID', 'pedID', 'funID', 'fupData', 'fupDescri', 'fupStatus', 'fupProximoContato', 'fupDataRetorno'],
+    'tbNFe ide':                 ['nfeID', 'nfeChave', 'chNFe', 'nNF', 'nfeNumero', 'serie', 'nfeSerie', 'mod', 'nfeModelo', 'dhEmi', 'nfeDataEmissao', 'natOp', 'tpNF', 'vNF', 'nfeStatus', 'carID'],
+    'tbNFe emit':                ['nfeEmitID', 'nfeID', 'cnpj', 'CNPJ', 'xNome', 'xFant', 'xLgr', 'endereco', 'xMun', 'cidade', 'UF', 'estado', 'CEP', 'fone', 'telefone', 'IE'],
+    'tbNFe dest':                ['nfeDestID', 'nfeID', 'CPF', 'CNPJ', 'cpfCNPJ', 'xNome', 'xLgr', 'endereco', 'xMun', 'cidade', 'UF', 'estado', 'CEP', 'fone', 'telefone', 'email', 'IE'],
+    'tbNFe prod':                ['nfeProdID', 'nfeID', 'cProd', 'cEAN', 'xProd', 'NCM', 'CFOP', 'uCom', 'qCom', 'vUnCom', 'vProd', 'carID'],
+  }
+
   // Lazy proxy: each property access returns a Promise that loads the table on first access.
   // freeTable() is called after each phase to bound peak memory.
   const tables = new Proxy<Record<string, Promise<Record<string, any>[]>>>({} as any, {
-    get: (_, name) => typeof name === 'string' ? t(name) : undefined,
+    get: (_, name) => typeof name === 'string' ? t(name, proxyColumnFilters[name]) : undefined,
   })
 
   return { vehicleRows, expenseRows, tables, freeTable, tableNames }
@@ -339,9 +395,10 @@ async function processImportInBackground(
   }
 
   // Parse MDB (async with setImmediate yields to keep event loop responsive)
+  ctx.log('Starting parseMDB...')
   let mdbData: Awaited<ReturnType<typeof parseMDB>>
   try {
-    mdbData = await parseMDB(buffer)
+    mdbData = await parseMDB(buffer, (msg) => ctx.log(msg))
     ;(buffer as any) = null // free the 544MB buffer after parsing
   } catch (e: any) {
     errors.push(`Parse error: ${e.message}`)
@@ -448,21 +505,29 @@ async function processImportInBackground(
     .filter((r): r is Record<string, any> => r !== null)
   mdbData.vehicleRows = []
 
+  const clienteRows = await rawTables['tbCliente']
+
   ;[counts.customers, counts.vendors, counts.employees, counts.bank_accounts, counts.vehicles] =
     await Promise.all([
       upsertBatch('customers',
-        (await rawTables['tbCliente']).filter((r: any) => r.cliID).map((r: any) => ({
-          dealership_id: D, external_id: String(r.cliID),
-          name: str(r.cliNome) ?? str(r.cliRazaoSocial) ?? 'Sem nome',
-          phone: str(r.cliTelefone) ?? str(r.cliTelResidencial),
-          email: str(r.cliEmail), cpf: str(r.cliCPF), cnpj: str(r.cliCNPJ),
-          rg: str(r.cliRG), birth_date: parseDate(r.cliDataNasc ?? r.cliNascimento),
-          address: str(r.cliEndereco ?? r.cliLogradouro), neighborhood: str(r.cliBairro),
-          city: str(r.cliCidade), state: str(r.cliEstado, 2), zip_code: str(r.cliCEP),
-          origin_external_id: r.oriID ? String(r.oriID) : null,
-          source: r.oriID ? String(r.oriID) : null,
-          notes: str(r.cliObservacoes ?? r.cliObs, 1000),
-        })), 'dealership_id,external_id', errors),
+        clienteRows.filter((r: any) => r.cliid).map((r: any) => {
+          const docRaw = str(r.cliCNPJ_CPF) ?? ''
+          const docDigits = docRaw.replace(/\D/g, '')
+          return {
+            dealership_id: D, external_id: String(r.cliid),
+            name: str(r.cliNome) ?? 'Sem nome',
+            phone: str(r.cliFone1) ?? str(r.cliFone2),
+            email: str(r.cliEmail),
+            cpf: docDigits.length === 11 ? docRaw : null,
+            cnpj: docDigits.length === 14 ? docRaw : null,
+            rg: str(r.cliRG_IE),
+            birth_date: parseDate(r.cliDataNasc ?? r.cliNascimento),
+            address: str(r.CliEnd), neighborhood: str(r.cliBairro),
+            city: str(r.cliCidade), state: str(r.cliEstado, 2), zip_code: str(r.cliCEP),
+            origin_external_id: null, source: null,
+            notes: str(r.cliOBS, 1000),
+          }
+        }), 'dealership_id,external_id', errors),
       upsertBatch('vendors',
         (await rawTables['tbFornecedor']).filter((r: any) => r.forID).map((r: any) => ({
           dealership_id: D, external_id: String(r.forID),
@@ -877,6 +942,7 @@ async function processImportInBackground(
 
   const totalImported = Object.values(counts).reduce((a, b) => a + (b ?? 0), 0)
   ctx.log(`Import complete. Total: ${totalImported}, Errors: ${errors.length}`)
+  if (errors.length > 0) ctx.log(`Error details: ${errors.slice(0, 20).join(' | ')}`)
 
   await getSvc().from('imports').update({
     status: errors.length > 0 && (counts.vehicles ?? 0) === 0 ? 'error' : 'complete',
@@ -972,6 +1038,7 @@ async function clearDataHandler(req: HttpRequest, ctx: InvocationContext): Promi
       'vehicle_delivery_protocols', 'vehicle_purchase_documents', 'vehicle_trades',
       'purchase_data', 'sale_data', 'nfe_prod', 'nfe_dest', 'nfe_emit', 'nfe_ide',
       'commissions', 'commission_standards', 'employee_salaries', 'ai_alerts',
+      'customer_complements', 'customer_commercial_data', 'customer_asset_references',
     ].map(t => delBatched(t)))
 
     // Level 2: depend on vehicles/customers
