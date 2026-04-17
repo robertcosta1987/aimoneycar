@@ -424,11 +424,49 @@ interface ModelStats {
   score: number
 }
 
+type SortKey = keyof Pick<ModelStats, 'count' | 'avgMargin' | 'avgDays' | 'avgSalePrice' | 'totalProfit' | 'score'>
+type SortDir = 'asc' | 'desc'
+
+function SortableTh({ label, sortKey, active, dir, onSort, align = 'right' }: {
+  label: string; sortKey: SortKey; active: boolean; dir: SortDir
+  onSort: (k: SortKey) => void; align?: 'left' | 'right'
+}) {
+  return (
+    <th
+      className={cn(
+        'px-4 py-3 text-xs font-medium cursor-pointer select-none whitespace-nowrap',
+        'hover:text-foreground transition-colors',
+        active ? 'text-primary' : 'text-foreground-muted',
+        align === 'right' ? 'text-right' : 'text-left'
+      )}
+      onClick={() => onSort(sortKey)}
+    >
+      <span className="inline-flex items-center gap-1" style={{ justifyContent: align === 'right' ? 'flex-end' : 'flex-start' }}>
+        {label}
+        <span className="text-[10px] leading-none">
+          {active ? (dir === 'desc' ? '↓' : '↑') : <span className="opacity-30">↕</span>}
+        </span>
+      </span>
+    </th>
+  )
+}
+
 function AquisicaoTab() {
   const supabase  = createClient()
   const [loading, setLoading] = useState(true)
   const [models, setModels]   = useState<ModelStats[]>([])
   const [minCount, setMinCount] = useState(2)
+  const [sortKey, setSortKey]   = useState<SortKey>('score')
+  const [sortDir, setSortDir]   = useState<SortDir>('desc')
+
+  function handleSort(key: SortKey) {
+    if (key === sortKey) {
+      setSortDir(d => d === 'desc' ? 'asc' : 'desc')
+    } else {
+      setSortKey(key)
+      setSortDir('desc')
+    }
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -494,7 +532,10 @@ function AquisicaoTab() {
 
   if (loading) return <LoadingSkeleton />
 
-  const filtered = models.filter(m => m.count >= minCount)
+  const filtered = [...models.filter(m => m.count >= minCount)].sort((a, b) => {
+    const v = sortDir === 'desc' ? b[sortKey] - a[sortKey] : a[sortKey] - b[sortKey]
+    return v
+  })
   const chartData = filtered.slice(0, 10).map(m => ({
     name: `${m.brand} ${m.model}`.slice(0, 22),
     score: m.score,
@@ -571,12 +612,12 @@ function AquisicaoTab() {
                     <tr className="border-b border-border">
                       <th className="text-left px-4 py-3 text-xs text-foreground-muted font-medium w-8">#</th>
                       <th className="text-left px-4 py-3 text-xs text-foreground-muted font-medium">Modelo</th>
-                      <th className="text-right px-4 py-3 text-xs text-foreground-muted font-medium">Vendas</th>
-                      <th className="text-right px-4 py-3 text-xs text-foreground-muted font-medium">Margem Méd.</th>
-                      <th className="text-right px-4 py-3 text-xs text-foreground-muted font-medium">Dias Méd.</th>
-                      <th className="text-right px-4 py-3 text-xs text-foreground-muted font-medium">Ticket Méd.</th>
-                      <th className="text-right px-4 py-3 text-xs text-foreground-muted font-medium">Lucro Total</th>
-                      <th className="text-right px-4 py-3 text-xs text-foreground-muted font-medium">Score</th>
+                      <SortableTh label="Vendas"      sortKey="count"        active={sortKey==='count'}        dir={sortDir} onSort={handleSort} />
+                      <SortableTh label="Margem Méd." sortKey="avgMargin"    active={sortKey==='avgMargin'}    dir={sortDir} onSort={handleSort} />
+                      <SortableTh label="Dias Méd."   sortKey="avgDays"      active={sortKey==='avgDays'}      dir={sortDir} onSort={handleSort} />
+                      <SortableTh label="Ticket Méd." sortKey="avgSalePrice" active={sortKey==='avgSalePrice'} dir={sortDir} onSort={handleSort} />
+                      <SortableTh label="Lucro Total" sortKey="totalProfit"  active={sortKey==='totalProfit'}  dir={sortDir} onSort={handleSort} />
+                      <SortableTh label="Score"       sortKey="score"        active={sortKey==='score'}        dir={sortDir} onSort={handleSort} />
                     </tr>
                   </thead>
                   <tbody>
