@@ -4,7 +4,6 @@ import type { ChatMessage } from '@/types'
 import type { DashboardConfig } from '@/types/dashboard'
 import * as fipe from '@/lib/fipe/client'
 import { getFieldMap } from '@/lib/ai/field-map'
-import { generateSchemaPrompt } from '@moneycar/schema'
 
 function svc() {
   return createSupabaseClient(
@@ -420,8 +419,6 @@ function buildSystemPrompt(ctx: FullDealershipContext): string {
   lines.push(`usando os campos certos, os valores corretos dos enums, e as fórmulas de lucro/margem exatas.`)
   lines.push(``)
   lines.push(getFieldMap())
-  lines.push(``)
-  lines.push(generateSchemaPrompt())
 
   lines.push(`\n## Resumo Geral`)
   lines.push(`- Estoque: ${s.availableCount} disponíveis | ${s.soldCount} vendidos | ${s.totalVehicles} total`)
