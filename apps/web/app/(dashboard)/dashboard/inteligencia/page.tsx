@@ -459,7 +459,7 @@ function AquisicaoTab() {
       }
 
       const stats: ModelStats[] = []
-      for (const [key, { vehicles }] of map.entries()) {
+      for (const [key, { vehicles }] of Array.from(map.entries())) {
         if (vehicles.length < 1) continue
         const [brand, model] = key.split('|||')
         const count = vehicles.length
