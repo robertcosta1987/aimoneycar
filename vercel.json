@@ -1,5 +1,4 @@
 {
-  "framework": "nextjs",
   "installCommand": "npx --yes pnpm@9.15.4 install",
   "buildCommand": "pnpm turbo build",
   "outputDirectory": "apps/web/.next",
