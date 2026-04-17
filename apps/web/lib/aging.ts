@@ -64,12 +64,12 @@ export function getAgingStatus(
   thresholds: AgingThresholds = DEFAULT_THRESHOLDS
 ): AgingStatus {
   if (days >= thresholds.critical) {
-    return { level: 'critical', label: '🔴 CRÍTICO', color: '#FF5252', badgeVariant: 'destructive', days }
+    return { level: 'critical', label: '🔴 CRÍTICO', color: '#EF4444', badgeVariant: 'destructive', days }
   }
   if (days >= thresholds.attention) {
-    return { level: 'attention', label: '⚠️ ATENÇÃO', color: '#FFB800', badgeVariant: 'warning', days }
+    return { level: 'attention', label: '⚠️ ATENÇÃO', color: '#EAB308', badgeVariant: 'warning', days }
   }
-  return { level: 'ok', label: 'OK', color: '#00E676', badgeVariant: 'success', days }
+  return { level: 'ok', label: 'OK', color: '#22C55E', badgeVariant: 'success', days }
 }
 
 /** Internal BRL formatter without the R$ symbol (used inside suggestion strings) */

@@ -217,7 +217,7 @@ export function VehicleCostPanel({ vehicle, onEditCosts }: VehicleCostPanelProps
                         tickLine={false}
                       />
                       <RTooltip
-                        contentStyle={{ background: '#111820', border: '1px solid #1E2A3A', borderRadius: 8, fontSize: 11 }}
+                        contentStyle={{ background: '#111820', border: '1px solid #1E2A3A', borderRadius: 8, fontSize: 11, color: '#E2E8F0' }}
                         formatter={(value: number) => [formatCurrency(value), 'Valor']}
                       />
                       <Bar dataKey="amount" radius={[0, 3, 3, 0]}>
@@ -315,8 +315,8 @@ export function VehicleCostPanel({ vehicle, onEditCosts }: VehicleCostPanelProps
                   <circle cx="18" cy="18" r="14" fill="none" stroke="#1E2A3A" strokeWidth="3" />
                   <circle
                     cx="18" cy="18" r="14" fill="none"
-                    stroke={summary.dataQuality.level === 'complete' ? '#00E676' :
-                            summary.dataQuality.level === 'partial' ? '#FFB800' : '#FF5252'}
+                    stroke={summary.dataQuality.level === 'complete' ? '#22C55E' :
+                            summary.dataQuality.level === 'partial' ? '#EAB308' : '#EF4444'}
                     strokeWidth="3"
                     strokeDasharray={`${(summary.dataQuality.score / 100) * 87.96} 87.96`}
                     strokeLinecap="round"

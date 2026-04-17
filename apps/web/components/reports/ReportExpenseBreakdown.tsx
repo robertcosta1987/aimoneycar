@@ -7,7 +7,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 interface Props { data: ExpenseBreakdown }
 
 const CATEGORY_COLORS = [
-  '#00D9FF','#00E676','#FF9100','#FF5252','#7B61FF','#FFB800','#4ECDC4',
+  '#3B82F6','#8B5CF6','#06B6D4','#F97316','#EC4899','#6366F1','#14B8A6',
 ]
 
 export function ReportExpenseBreakdown({ data }: Props) {
@@ -54,7 +54,8 @@ export function ReportExpenseBreakdown({ data }: Props) {
                   <XAxis type="number" tick={{ fontSize: 10, fill: '#8B9EB3' }} tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
                   <YAxis type="category" dataKey="category" tick={{ fontSize: 10, fill: '#8B9EB3' }} width={80} />
                   <Tooltip
-                    contentStyle={{ background: '#111820', border: '1px solid #1E2A3A', borderRadius: 10 }}
+                    contentStyle={{ background: '#111820', border: '1px solid #1E2A3A', borderRadius: 10, color: '#E2E8F0' }}
+                    labelStyle={{ color: '#E2E8F0' }}
                     formatter={(v: number) => formatCurrency(v)}
                   />
                   <Bar dataKey="total" name="Total" radius={[0,4,4,0]}>

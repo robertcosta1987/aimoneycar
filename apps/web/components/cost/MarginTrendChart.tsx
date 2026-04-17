@@ -171,24 +171,24 @@ export function MarginTrendChart({ vehicles }: MarginTrendChartProps) {
             {/* 15% target reference line */}
             <ReferenceLine
               y={15}
-              stroke="#00E676"
+              stroke="#22C55E"
               strokeDasharray="6 3"
               strokeWidth={1}
-              label={{ value: 'Meta 15%', position: 'right', fontSize: 9, fill: '#00E676' }}
+              label={{ value: 'Meta 15%', position: 'right', fontSize: 9, fill: '#22C55E' }}
             />
 
             {/* Fleet average reference line */}
             {avgMargin !== null && (
               <ReferenceLine
                 y={avgMargin}
-                stroke="#00D9FF"
+                stroke="#3B82F6"
                 strokeDasharray="4 2"
                 strokeWidth={1}
                 label={{
                   value: `Média ${avgMargin.toFixed(1)}%`,
                   position: 'right',
                   fontSize: 9,
-                  fill: '#00D9FF',
+                  fill: '#3B82F6',
                 }}
               />
             )}
@@ -200,9 +200,9 @@ export function MarginTrendChart({ vehicles }: MarginTrendChartProps) {
                   key={p.label}
                   fill={
                     p.hasMissingCost ? '#374151' :
-                    p.margin < 0 ? '#FF5252' :
-                    p.margin < 5 ? '#FF9100' :
-                    p.margin < 15 ? '#FFB800' : '#00E676'
+                    p.margin < 0 ? '#EF4444' :
+                    p.margin < 5 ? '#EAB308' :
+                    p.margin < 15 ? '#EAB308' : '#22C55E'
                   }
                 />
               ))}
@@ -213,7 +213,7 @@ export function MarginTrendChart({ vehicles }: MarginTrendChartProps) {
               type="monotone"
               dataKey="movingAvg"
               name="Média Móvel (5)"
-              stroke="#00D9FF"
+              stroke="#3B82F6"
               strokeWidth={2}
               dot={false}
               connectNulls
@@ -223,23 +223,19 @@ export function MarginTrendChart({ vehicles }: MarginTrendChartProps) {
 
         <div className="flex flex-wrap gap-4 mt-2 justify-center text-xs text-foreground-muted">
           <span className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-sm inline-block" style={{ background: '#00E676' }} />
+            <span className="w-3 h-3 rounded-sm inline-block" style={{ background: '#22C55E' }} />
             &gt; 15%
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-sm inline-block" style={{ background: '#FFB800' }} />
-            5–15%
+            <span className="w-3 h-3 rounded-sm inline-block" style={{ background: '#EAB308' }} />
+            0–15%
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-sm inline-block" style={{ background: '#FF9100' }} />
-            0–5%
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-sm inline-block" style={{ background: '#FF5252' }} />
+            <span className="w-3 h-3 rounded-sm inline-block" style={{ background: '#EF4444' }} />
             Negativa
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="w-3 h-1 rounded-full inline-block" style={{ background: '#00D9FF' }} />
+            <span className="w-3 h-1 rounded-full inline-block" style={{ background: '#3B82F6' }} />
             Média Móvel
           </span>
         </div>

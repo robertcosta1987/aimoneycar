@@ -129,9 +129,8 @@ export function FleetCostAnalysis({ vehicles, onEditCosts }: FleetCostAnalysisPr
         return r.summary.grossMargin >= b.min && r.summary.grossMargin < b.max
       }).length,
       color:
-        b.max <= 0 ? '#FF5252' :
-        b.max <= 5 ? '#FF9100' :
-        b.max <= 15 ? '#FFB800' : '#00E676',
+        b.max <= 0 ? '#EF4444' :
+        b.max <= 15 ? '#EAB308' : '#22C55E',
     }))
 
     // True Cost vs Sale Price (sold vehicles with data)
@@ -310,7 +309,7 @@ export function FleetCostAnalysis({ vehicles, onEditCosts }: FleetCostAnalysisPr
                       ))}
                     </Pie>
                     <Tooltip
-                      contentStyle={{ background: '#111820', border: '1px solid #1E2A3A', borderRadius: 8, fontSize: 10 }}
+                      contentStyle={{ background: '#111820', border: '1px solid #1E2A3A', borderRadius: 8, fontSize: 10, color: '#E2E8F0' }}
                       formatter={(v: number) => [formatCurrency(v), '']}
                     />
                   </PieChart>
@@ -347,7 +346,7 @@ export function FleetCostAnalysis({ vehicles, onEditCosts }: FleetCostAnalysisPr
                 <XAxis dataKey="label" tick={{ fontSize: 9, fill: '#8B9EB3' }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 9, fill: '#8B9EB3' }} axisLine={false} tickLine={false} allowDecimals={false} />
                 <Tooltip
-                  contentStyle={{ background: '#111820', border: '1px solid #1E2A3A', borderRadius: 8, fontSize: 11 }}
+                  contentStyle={{ background: '#111820', border: '1px solid #1E2A3A', borderRadius: 8, fontSize: 11, color: '#E2E8F0' }}
                   formatter={(v: number) => [`${v} veículo${v !== 1 ? 's' : ''}`, '']}
                 />
                 <Bar dataKey="count" radius={[3, 3, 0, 0]}>
@@ -384,7 +383,7 @@ export function FleetCostAnalysis({ vehicles, onEditCosts }: FleetCostAnalysisPr
                     tickFormatter={v => `${(v as number / 1000).toFixed(0)}k`}
                   />
                   <Tooltip
-                    contentStyle={{ background: '#111820', border: '1px solid #1E2A3A', borderRadius: 8, fontSize: 10 }}
+                    contentStyle={{ background: '#111820', border: '1px solid #1E2A3A', borderRadius: 8, fontSize: 10, color: '#E2E8F0' }}
                     formatter={(v: number, name: string) => [
                       formatCurrency(v),
                       name === 'trueCost' ? 'Custo Real' : 'Preço Venda',
@@ -394,8 +393,8 @@ export function FleetCostAnalysis({ vehicles, onEditCosts }: FleetCostAnalysisPr
                     formatter={v => v === 'trueCost' ? 'Custo Real' : 'Preço Venda'}
                     wrapperStyle={{ fontSize: 10 }}
                   />
-                  <Bar dataKey="trueCost" fill="#FF9100" radius={[2, 2, 0, 0]} />
-                  <Bar dataKey="salePrice" fill="#00D9FF" radius={[2, 2, 0, 0]} />
+                  <Bar dataKey="trueCost" fill="#EF4444" radius={[2, 2, 0, 0]} />
+                  <Bar dataKey="salePrice" fill="#3B82F6" radius={[2, 2, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -432,7 +431,7 @@ export function FleetCostAnalysis({ vehicles, onEditCosts }: FleetCostAnalysisPr
                     tickLine={false}
                   />
                   <Tooltip
-                    contentStyle={{ background: '#111820', border: '1px solid #1E2A3A', borderRadius: 8, fontSize: 10 }}
+                    contentStyle={{ background: '#111820', border: '1px solid #1E2A3A', borderRadius: 8, fontSize: 10, color: '#E2E8F0' }}
                     formatter={(v: number) => [formatCurrency(v), 'Despesas']}
                   />
                   <Bar dataKey="expenses" fill="#FFB800" radius={[0, 3, 3, 0]} />

@@ -47,10 +47,10 @@ export function ReportOperationalMetrics({ data }: Props) {
                 <CartesianGrid strokeDasharray="3 3" stroke="#1E2A3A" />
                 <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#8B9EB3' }} />
                 <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#8B9EB3' }} />
-                <Tooltip contentStyle={{ background: '#111820', border: '1px solid #1E2A3A', borderRadius: 10 }} />
+                <Tooltip contentStyle={{ background: '#111820', border: '1px solid #1E2A3A', borderRadius: 10, color: '#E2E8F0' }} labelStyle={{ color: '#E2E8F0' }} />
                 <Legend iconType="circle" iconSize={8} formatter={(v) => <span className="text-xs text-foreground-muted">{v}</span>} />
-                <Bar dataKey="acquired" name="Adquiridos" fill="#00D9FF" radius={[4,4,0,0]} opacity={0.8} />
-                <Bar dataKey="sold"     name="Vendidos"   fill="#00E676" radius={[4,4,0,0]} opacity={0.8} />
+                <Bar dataKey="acquired" name="Adquiridos" fill="#3B82F6" radius={[4,4,0,0]} opacity={0.85} />
+                <Bar dataKey="sold"     name="Vendidos"   fill="#22C55E" radius={[4,4,0,0]} opacity={0.85} />
               </ComposedChart>
             </ResponsiveContainer>
           </CardContent>

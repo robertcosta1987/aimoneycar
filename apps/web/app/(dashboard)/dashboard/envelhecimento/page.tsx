@@ -46,7 +46,7 @@ export default async function EnvelhecimentoPage() {
       status: v.status,
       totalExpenses,
       // agingStatus and suggestions are computed client-side in AgingDashboard
-      agingStatus: { level: 'ok', label: 'OK', color: '#00E676', badgeVariant: 'success', days: v.days_in_stock ?? 0 },
+      agingStatus: { level: 'ok', label: 'OK', color: '#22C55E', badgeVariant: 'success', days: v.days_in_stock ?? 0 },
       suggestions: [],
       missingPurchasePrice: !v.purchase_price || v.purchase_price === 0,
     }

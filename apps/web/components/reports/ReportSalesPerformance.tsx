@@ -60,8 +60,8 @@ export function ReportSalesPerformance({ data }: Props) {
                 <CartesianGrid strokeDasharray="3 3" stroke="#1E2A3A" />
                 <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#8B9EB3' }} />
                 <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#8B9EB3' }} />
-                <Tooltip contentStyle={{ background: '#111820', border: '1px solid #1E2A3A', borderRadius: 10 }} />
-                <Bar dataKey="units" name="Veículos" fill="#00D9FF" radius={[4,4,0,0]} />
+                <Tooltip contentStyle={{ background: '#111820', border: '1px solid #1E2A3A', borderRadius: 10, color: '#E2E8F0' }} labelStyle={{ color: '#E2E8F0' }} />
+                <Bar dataKey="units" name="Veículos" fill="#3B82F6" radius={[4,4,0,0]} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>

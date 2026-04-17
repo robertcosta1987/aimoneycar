@@ -150,7 +150,7 @@ export function CostHealthWidget({ vehicles }: CostHealthWidgetProps) {
                     ))}
                   </Pie>
                   <Tooltip
-                    contentStyle={{ background: '#111820', border: '1px solid #1E2A3A', borderRadius: 8, fontSize: 10 }}
+                    contentStyle={{ background: '#111820', border: '1px solid #1E2A3A', borderRadius: 8, fontSize: 10, color: '#E2E8F0' }}
                     formatter={(value: number) => [formatCurrency(value), '']}
                   />
                 </PieChart>

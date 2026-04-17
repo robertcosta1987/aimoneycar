@@ -53,15 +53,16 @@ export function ReportFinancialOverview({ data }: Props) {
                 <YAxis yAxisId="money" tick={{ fontSize: 10, fill: '#8B9EB3' }} tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
                 <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 10, fill: '#8B9EB3' }} tickFormatter={v => `${v.toFixed(0)}%`} domain={[0, 'auto']} />
                 <Tooltip
-                  contentStyle={{ background: '#111820', border: '1px solid #1E2A3A', borderRadius: 10 }}
+                  contentStyle={{ background: '#111820', border: '1px solid #1E2A3A', borderRadius: 10, color: '#E2E8F0' }}
+                  labelStyle={{ color: '#E2E8F0' }}
                   formatter={(v: number, name: string) =>
                     name === 'Margem' ? [`${v.toFixed(1)}%`, name] : [formatCurrency(v), name]
                   }
                 />
-                <Bar yAxisId="money" dataKey="revenue"  name="Receita"   fill="#00D9FF" radius={[4,4,0,0]} opacity={0.8} />
-                <Bar yAxisId="money" dataKey="profit"   name="Lucro"     fill="#00E676" radius={[4,4,0,0]} opacity={0.8} />
-                <Bar yAxisId="money" dataKey="expenses" name="Despesas"  fill="#FF9100" radius={[4,4,0,0]} opacity={0.6} />
-                <Line yAxisId="pct"  dataKey="margin"   name="Margem"    stroke="#FF5252" dot={false} strokeWidth={2} />
+                <Bar yAxisId="money" dataKey="revenue"  name="Receita"   fill="#3B82F6" radius={[4,4,0,0]} opacity={0.85} />
+                <Bar yAxisId="money" dataKey="profit"   name="Lucro"     fill="#22C55E" radius={[4,4,0,0]} opacity={0.85} />
+                <Bar yAxisId="money" dataKey="expenses" name="Despesas"  fill="#EF4444" radius={[4,4,0,0]} opacity={0.75} />
+                <Line yAxisId="pct"  dataKey="margin"   name="Margem"    stroke="#EAB308" dot={false} strokeWidth={2} />
               </ComposedChart>
             </ResponsiveContainer>
           </CardContent>

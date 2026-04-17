@@ -28,11 +28,11 @@ interface AgingWidgetProps {
 }
 
 const BRACKETS = [
-  { label: '0–15d',  min: 0,  max: 15,       color: '#16A34A' },
-  { label: '16–30d', min: 16, max: 30,        color: '#22C55E' },
-  { label: '31–45d', min: 31, max: 45,        color: '#4ADE80' },
+  { label: '0–15d',  min: 0,  max: 15,       color: '#22C55E' },
+  { label: '16–30d', min: 16, max: 30,        color: '#4ADE80' },
+  { label: '31–45d', min: 31, max: 45,        color: '#EAB308' },
   { label: '46–90d', min: 46, max: 90,        color: '#EAB308' },
-  { label: '90d+',   min: 91, max: Infinity,  color: '#DC2626' },
+  { label: '90d+',   min: 91, max: Infinity,  color: '#EF4444' },
 ]
 
 export function AgingWidget({ vehicles }: AgingWidgetProps) {
