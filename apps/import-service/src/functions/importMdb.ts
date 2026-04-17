@@ -548,13 +548,25 @@ async function processImportInBackground(
         const fornRows = await rawTables['tbFornecedor']
         const fornById: Record<string, any> = {}
         fornRows.forEach((r: any) => { if (r.forID) fornById[String(r.forID)] = r })
+        const funRows = await rawTables['tbFuncionario']
+        // Diagnostic: log first row keys so we can verify which columns are present
+        if (funRows.length > 0) {
+          ctx.log(`[employees] tbFuncionario cols: ${Object.keys(funRows[0]).join(', ')}`)
+          ctx.log(`[employees] tbFuncionario rows=${funRows.length}, tbFornecedor indexed=${Object.keys(fornById).length}`)
+          const sampleFun = funRows[0]
+          const sampleForn = sampleFun.forID ? fornById[String(sampleFun.forID)] : null
+          ctx.log(`[employees] sample funID=${sampleFun.funID} forID=${sampleFun.forID} funNome=${sampleFun.funNome} | forn keys=${sampleForn ? Object.keys(sampleForn).join(',') : 'NOT FOUND'}`)
+        }
         return upsertBatch('employees',
-          (await rawTables['tbFuncionario']).filter((r: any) => r.funID).map((r: any) => {
+          funRows.filter((r: any) => r.funID).map((r: any) => {
             const forn = r.forID ? (fornById[String(r.forID)] ?? {}) : {}
             const terminated = parseDate(r.funDtDemissao ?? r.funDataDemissao)
+            const name =
+              str(forn.forRazSoc) ?? str(forn.forNome) ?? str(forn.forRazaoSocial) ??
+              str(forn.forFantasia) ?? str(r.funNome) ?? 'Sem nome'
             return {
               dealership_id: D, external_id: String(r.funID),
-              name: str(forn.forRazSoc) ?? str(forn.forRazaoSocial) ?? str(forn.forFantasia) ?? str(r.funNome) ?? 'Sem nome',
+              name,
               cpf: str(forn.forCNPJ ?? r.funCPF), rg: str(r.funRG),
               email: str(forn.forEmail ?? r.funEmail),
               phone: str(forn.forFone1 ?? forn.forFone2 ?? r.funTelefone),
