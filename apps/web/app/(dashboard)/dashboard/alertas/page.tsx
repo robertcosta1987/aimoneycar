@@ -18,6 +18,8 @@ export default function AlertasPage() {
   const [alerts, setAlerts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
+  const [genError, setGenError] = useState<string | null>(null)
+  const [genMessage, setGenMessage] = useState<string | null>(null)
   const autoTriggered = useRef(false)
   const supabase = createClient()
 
@@ -47,11 +49,14 @@ export default function AlertasPage() {
 
   const generateAlerts = async () => {
     setGenerating(true)
+    setGenError(null)
+    setGenMessage(null)
     try {
       const res = await fetch('/api/alerts/generate', { method: 'POST' })
       const json = await res.json()
-      if (json.generated > 0) {
-        // Reload from DB to get the freshly inserted alerts with vehicle joins
+      if (json.error) {
+        setGenError(json.error)
+      } else if (json.generated > 0) {
         const { data: userData } = await supabase.from('users').select('dealership_id').single()
         const { data } = await supabase
           .from('ai_alerts')
@@ -60,9 +65,12 @@ export default function AlertasPage() {
           .eq('is_dismissed', false)
           .order('created_at', { ascending: false })
         setAlerts(data || [])
+        setGenMessage(`${json.generated} alertas gerados com sucesso.`)
+      } else {
+        setGenMessage(json.message ?? 'Nenhuma situação de alerta encontrada.')
       }
-    } catch (err) {
-      console.error('Alert generation failed:', err)
+    } catch (err: any) {
+      setGenError(err?.message ?? 'Erro ao gerar alertas')
     } finally {
       setGenerating(false)
     }
@@ -150,6 +158,17 @@ export default function AlertasPage() {
           {generating ? 'Gerando...' : 'Gerar Alertas'}
         </Button>
       </div>
+
+      {genError && (
+        <div className="p-3 rounded-xl bg-danger/10 border border-danger/20 text-sm text-danger">
+          ⚠️ {genError}
+        </div>
+      )}
+      {genMessage && !genError && (
+        <div className="p-3 rounded-xl bg-success/10 border border-success/20 text-sm text-success">
+          ✅ {genMessage}
+        </div>
+      )}
 
       {(loading || generating) && alerts.length === 0 ? (
         <div className="space-y-3">
