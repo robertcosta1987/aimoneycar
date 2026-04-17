@@ -1,6 +1,6 @@
 'use client'
-import { useState, useEffect } from 'react'
-import { AlertTriangle, Bell, CheckCircle, Info, X } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { AlertTriangle, Bell, CheckCircle, Info, X, RefreshCw } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -17,6 +17,8 @@ const alertConfig: Record<string, { icon: any; color: string; bg: string; badge:
 export default function AlertasPage() {
   const [alerts, setAlerts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [generating, setGenerating] = useState(false)
+  const autoTriggered = useRef(false)
   const supabase = createClient()
 
   useEffect(() => {
@@ -32,8 +34,38 @@ export default function AlertasPage() {
       .eq('dealership_id', userData?.dealership_id)
       .eq('is_dismissed', false)
       .order('created_at', { ascending: false })
-    setAlerts(data || [])
+    const loaded = data || []
+    setAlerts(loaded)
     setLoading(false)
+
+    // Auto-generate on first load if table is empty
+    if (loaded.length === 0 && !autoTriggered.current) {
+      autoTriggered.current = true
+      await generateAlerts()
+    }
+  }
+
+  const generateAlerts = async () => {
+    setGenerating(true)
+    try {
+      const res = await fetch('/api/alerts/generate', { method: 'POST' })
+      const json = await res.json()
+      if (json.generated > 0) {
+        // Reload from DB to get the freshly inserted alerts with vehicle joins
+        const { data: userData } = await supabase.from('users').select('dealership_id').single()
+        const { data } = await supabase
+          .from('ai_alerts')
+          .select('*, vehicle:vehicles(brand, model, plate)')
+          .eq('dealership_id', userData?.dealership_id)
+          .eq('is_dismissed', false)
+          .order('created_at', { ascending: false })
+        setAlerts(data || [])
+      }
+    } catch (err) {
+      console.error('Alert generation failed:', err)
+    } finally {
+      setGenerating(false)
+    }
   }
 
   const dismiss = async (id: string) => {
@@ -102,40 +134,67 @@ export default function AlertasPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Alertas IA</h1>
-        <p className="text-foreground-muted text-sm mt-1">Recomendações geradas automaticamente</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Alertas IA</h1>
+          <p className="text-foreground-muted text-sm mt-1">Recomendações geradas automaticamente</p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-2"
+          onClick={generateAlerts}
+          disabled={generating || loading}
+        >
+          <RefreshCw className={`w-4 h-4 ${generating ? 'animate-spin' : ''}`} />
+          {generating ? 'Gerando...' : 'Gerar Alertas'}
+        </Button>
       </div>
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          { label: 'Críticos', count: counts.critical, color: 'text-danger', bg: 'bg-danger/10' },
-          { label: 'Atenção', count: counts.warning, color: 'text-warning', bg: 'bg-warning/10' },
-          { label: 'Positivos', count: counts.success, color: 'text-success', bg: 'bg-success/10' },
-          { label: 'Informativos', count: counts.info, color: 'text-primary', bg: 'bg-primary/10' },
-        ].map(s => (
-          <Card key={s.label}>
-            <CardContent className="p-4 text-center">
-              <p className={`text-2xl font-bold ${s.color}`}>{s.count}</p>
-              <p className="text-xs text-foreground-muted mt-1">{s.label}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      {(loading || generating) && alerts.length === 0 ? (
+        <div className="space-y-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-20 rounded-xl bg-background-elevated animate-pulse" />
+          ))}
+          {generating && (
+            <p className="text-center text-sm text-foreground-muted py-2">
+              A IA está analisando seu estoque...
+            </p>
+          )}
+        </div>
+      ) : (
+        <>
+          {/* Summary cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { label: 'Críticos', count: counts.critical, color: 'text-danger', bg: 'bg-danger/10' },
+              { label: 'Atenção', count: counts.warning, color: 'text-warning', bg: 'bg-warning/10' },
+              { label: 'Positivos', count: counts.success, color: 'text-success', bg: 'bg-success/10' },
+              { label: 'Informativos', count: counts.info, color: 'text-primary', bg: 'bg-primary/10' },
+            ].map(s => (
+              <Card key={s.label}>
+                <CardContent className="p-4 text-center">
+                  <p className={`text-2xl font-bold ${s.color}`}>{s.count}</p>
+                  <p className="text-xs text-foreground-muted mt-1">{s.label}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
 
-      <Tabs defaultValue="all">
-        <TabsList>
-          <TabsTrigger value="all">Todos ({counts.all})</TabsTrigger>
-          <TabsTrigger value="critical">Críticos ({counts.critical})</TabsTrigger>
-          <TabsTrigger value="warning">Atenção ({counts.warning})</TabsTrigger>
-          <TabsTrigger value="success">Positivos ({counts.success})</TabsTrigger>
-        </TabsList>
-        <TabsContent value="all">{renderAlerts(alerts)}</TabsContent>
-        <TabsContent value="critical">{renderAlerts(alerts.filter(a => a.type === 'critical'))}</TabsContent>
-        <TabsContent value="warning">{renderAlerts(alerts.filter(a => a.type === 'warning'))}</TabsContent>
-        <TabsContent value="success">{renderAlerts(alerts.filter(a => a.type === 'success'))}</TabsContent>
-      </Tabs>
+          <Tabs defaultValue="all">
+            <TabsList>
+              <TabsTrigger value="all">Todos ({counts.all})</TabsTrigger>
+              <TabsTrigger value="critical">Críticos ({counts.critical})</TabsTrigger>
+              <TabsTrigger value="warning">Atenção ({counts.warning})</TabsTrigger>
+              <TabsTrigger value="success">Positivos ({counts.success})</TabsTrigger>
+            </TabsList>
+            <TabsContent value="all">{renderAlerts(alerts)}</TabsContent>
+            <TabsContent value="critical">{renderAlerts(alerts.filter(a => a.type === 'critical'))}</TabsContent>
+            <TabsContent value="warning">{renderAlerts(alerts.filter(a => a.type === 'warning'))}</TabsContent>
+            <TabsContent value="success">{renderAlerts(alerts.filter(a => a.type === 'success'))}</TabsContent>
+          </Tabs>
+        </>
+      )}
     </div>
   )
 }

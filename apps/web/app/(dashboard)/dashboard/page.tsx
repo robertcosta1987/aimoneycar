@@ -29,12 +29,16 @@ export default async function DashboardPage() {
 
   const dealId = userData?.dealership_id
 
+  const costSelect = 'id, status, purchase_price, sale_price, days_in_stock, purchase_date, sale_date, brand, model, plate, chassis, renavam, version, year_fab, year_model, color, mileage, fuel, transmission, fipe_price, min_price, supplier_name, customer_id, photos, notes, source, external_id, created_at, updated_at, dealership_id, expenses:expenses(id, dealership_id, vehicle_id, category, description, amount, date, vendor_name, payment_method, receipt_url, created_by, external_id, created_at, updated_at)'
+  const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+
   const [
     { data: statsData },
     { data: vehicles },
     { data: alerts },
     { data: sales },
     { data: costRaw },
+    { data: soldRecent },
     agingAll,
   ] = await Promise.all([
     supabase.rpc('get_dashboard_stats', { d_id: dealId }),
@@ -50,10 +54,13 @@ export default async function DashboardPage() {
       .eq('status', 'sold')
       .order('sale_date', { ascending: false }).limit(5),
     // CostHealthWidget: available inventory with expenses
-    supabase.from('vehicles')
-      .select('id, status, purchase_price, sale_price, days_in_stock, purchase_date, sale_date, brand, model, plate, chassis, renavam, version, year_fab, year_model, color, mileage, fuel, transmission, fipe_price, min_price, supplier_name, customer_id, photos, notes, source, external_id, created_at, updated_at, dealership_id, expenses:expenses(id, dealership_id, vehicle_id, category, description, amount, date, vendor_name, payment_method, receipt_url, created_by, external_id, created_at, updated_at)')
-      .eq('dealership_id', dealId)
-      .eq('status', 'available'),
+    supabase.from('vehicles').select(costSelect)
+      .eq('dealership_id', dealId).eq('status', 'available'),
+    // CostHealthWidget: recent sold (last 90 days) to populate avgMargin
+    supabase.from('vehicles').select(costSelect)
+      .eq('dealership_id', dealId).eq('status', 'sold')
+      .gte('sale_date', ninetyDaysAgo)
+      .order('sale_date', { ascending: false }).limit(200),
     // AgingWidget: ALL available vehicles (lightweight — no expenses) for accurate counts
     fetchAll<{ id: string; days_in_stock: number; sale_price: number | null }>(
       supabase.from('vehicles').select('id, days_in_stock, sale_price')
@@ -121,7 +128,7 @@ export default async function DashboardPage() {
     sale_price: v.sale_price ?? null,
   }))
 
-  const costVehicles: VehicleForCost[] = (costRaw || []).map((v: any) => ({
+  const toVehicleForCost = (v: any): VehicleForCost => ({
     ...v,
     purchase_price: v.purchase_price ?? 0,
     sale_price: v.sale_price ?? null,
@@ -129,7 +136,11 @@ export default async function DashboardPage() {
     purchase_date: v.purchase_date ?? '',
     photos: v.photos ?? [],
     expenses: (v.expenses || []) as Expense[],
-  }))
+  })
+  const costVehicles: VehicleForCost[] = [
+    ...(costRaw || []).map(toVehicleForCost),
+    ...(soldRecent || []).map(toVehicleForCost),
+  ]
 
   return (
     <div className="space-y-6">

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
+import { fetchAll } from '@/lib/supabase/fetch-all'
 import { generateDailyAlerts } from '@/lib/ai/alerts'
 import { sendWhatsAppMessage, formatDailyAlertMessage } from '@/lib/whatsapp/evolution'
 import type { Vehicle, Expense, Dealership } from '@/types'
@@ -25,24 +26,12 @@ export async function GET(req: NextRequest) {
 
   for (const dealership of (dealerships as Dealership[])) {
     try {
-      const [{ data: vehicles }, { data: expenses }] = await Promise.all([
-        supabase
-          .from('vehicles')
-          .select('*')
-          .eq('dealership_id', dealership.id)
-          .eq('status', 'available'),
-        supabase
-          .from('expenses')
-          .select('*')
-          .eq('dealership_id', dealership.id),
+      const [vehicles, expenses] = await Promise.all([
+        fetchAll<Vehicle>(supabase.from('vehicles').select('*').eq('dealership_id', dealership.id).eq('status', 'available')),
+        fetchAll<Expense>(supabase.from('expenses').select('*').eq('dealership_id', dealership.id)),
       ])
 
-      const alerts = await generateDailyAlerts(
-        dealership.id,
-        dealership.name,
-        (vehicles as Vehicle[]) ?? [],
-        (expenses as Expense[]) ?? []
-      )
+      const alerts = await generateDailyAlerts(dealership.id, dealership.name, vehicles, expenses)
 
       if (alerts.length === 0) {
         results.push({ dealership: dealership.name, alerts: 0, whatsapp: false })
