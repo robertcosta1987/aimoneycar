@@ -7,12 +7,12 @@ import { ReportPayload } from '@/types/reports'
 import { buildReportEmail } from '@/lib/email/report-email'
 import { generateReport } from '@/lib/reports/generate'
 import {
-export const dynamic = 'force-dynamic'
   salesByDayChartUrl,
   stockHealthChartUrl,
   expenseByCategoryChartUrl,
   marginChartUrl,
 } from '@/lib/charts/quickchart'
+export const dynamic = 'force-dynamic'
 
 function buildChartUrls(payload: ReportPayload): string[] {
   const d = payload.data as Record<string, unknown>

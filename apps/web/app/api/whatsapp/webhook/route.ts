@@ -18,11 +18,11 @@ import {
 } from '@/lib/wasender/client'
 import { generateAIResponse, shouldUseSmartModel } from '@/lib/ai/whatsapp-agent'
 import type {
-export const dynamic = 'force-dynamic'
   WASenderWebhookPayload,
   WASenderIncomingMessage,
   WhatsAppSessao,
 } from '@/types/whatsapp'
+export const dynamic = 'force-dynamic'
 
 // Allow up to 60s for AI generation + tool calls (Vercel Pro)
 export const maxDuration = 60

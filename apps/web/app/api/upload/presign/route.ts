@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import {
-export const dynamic = 'force-dynamic'
   BlobServiceClient,
   BlobSASPermissions,
   SASProtocol,
   StorageSharedKeyCredential,
   generateBlobSASQueryParameters,
 } from '@azure/storage-blob'
+export const dynamic = 'force-dynamic'
 
 function azureBlobSasUrl(blobName: string, permissions: string, ttlSeconds: number): string {
   const accountName = process.env.AZURE_STORAGE_ACCOUNT_NAME!
