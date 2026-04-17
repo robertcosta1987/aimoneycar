@@ -699,15 +699,22 @@ async function processImportInBackground(
         payment_method: str(r.cFormaPagamento), notes: str(r.cObservacoes ?? r.cObs, 1000),
       })), 'dealership_id,vehicle_external_id', errors),
     upsertBatch('sale_data',
-      (await rawTables['tbDadosVenda']).filter((r: any) => r.carID).map((r: any) => ({
-        dealership_id: D, vehicle_external_id: String(r.carID),
-        vehicle_id: vehicleIdByExternal[String(r.carID)] ?? null,
-        sale_date: parseDate(r.vData), mileage: r.vKM ? Math.round(parseNum(r.vKM)) : null,
-        sale_price: r.vValorVenda ? parseNum(r.vValorVenda) : null,
-        customer_external_id: r.cliID ? String(r.cliID) : null,
-        customer_id: r.cliID ? (customerIdByExternal[String(r.cliID)] ?? null) : null,
-        payment_method: str(r.vFormaPagamento), notes: str(r.vObservacoes ?? r.vObs, 1000),
-      })), 'dealership_id,vehicle_external_id', errors),
+      (await rawTables['tbDadosVenda']).filter((r: any) => r.carID).map((r: any) => {
+        // Salesperson: try common field name variants used across MDB software versions
+        const vendFunId = r.vVendedorID ?? r.vFunID ?? r.vFuncionarioID ?? r.vendedorID ?? null
+        const employeeExtId = vendFunId ? String(vendFunId) : null
+        return {
+          dealership_id: D, vehicle_external_id: String(r.carID),
+          vehicle_id: vehicleIdByExternal[String(r.carID)] ?? null,
+          sale_date: parseDate(r.vData), mileage: r.vKM ? Math.round(parseNum(r.vKM)) : null,
+          sale_price: r.vValorVenda ? parseNum(r.vValorVenda) : null,
+          customer_external_id: r.cliID ? String(r.cliID) : null,
+          customer_id: r.cliID ? (customerIdByExternal[String(r.cliID)] ?? null) : null,
+          employee_external_id: employeeExtId,
+          employee_id: employeeExtId ? (employeeIdByExternal[employeeExtId] ?? null) : null,
+          payment_method: str(r.vFormaPagamento), notes: str(r.vObservacoes ?? r.vObs, 1000),
+        }
+      }), 'dealership_id,vehicle_external_id', errors),
     // Expenses
     (async () => {
       const mappedExpenses = mdbData.expenseRows

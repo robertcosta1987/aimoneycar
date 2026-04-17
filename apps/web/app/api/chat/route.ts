@@ -103,9 +103,9 @@ export async function POST(req: NextRequest) {
         .order('date', { ascending: false })
         .limit(300),
 
-      // Sale data — detailed sale records per vehicle
+      // Sale data — detailed sale records per vehicle (includes salesperson if tbDadosVenda had vVendedorID)
       svc.from('sale_data')
-        .select('id, vehicle_external_id, vehicle_id, sale_date, mileage, sale_price, customer_external_id, customer_id, payment_method, notes')
+        .select('id, vehicle_external_id, vehicle_id, sale_date, mileage, sale_price, customer_external_id, customer_id, employee_external_id, employee_id, payment_method, notes')
         .eq('dealership_id', D)
         .order('sale_date', { ascending: false })
         .limit(300),

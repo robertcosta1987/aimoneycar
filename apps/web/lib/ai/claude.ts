@@ -626,24 +626,46 @@ function buildSystemPrompt(ctx: FullDealershipContext): string {
   if (ctx.saleData.length > 0) {
     const custById: Record<string, string> = {}
     ctx.customers.forEach(c => { custById[c.id] = c.name; if (c.external_id) custById[c.external_id] = c.name })
+    const empById: Record<string, string> = {}
+    ctx.employees.forEach(e => { empById[e.id] = e.name; if (e.external_id) empById[e.external_id] = e.name })
     const payMethodCount: Record<string, number> = {}
     ctx.saleData.forEach(s => {
       const pm = s.payment_method ?? 'Não informado'
       payMethodCount[pm] = (payMethodCount[pm] ?? 0) + 1
     })
+    const saleDataWithEmployee = ctx.saleData.filter(s => s.employee_external_id)
     lines.push(`\n## Dados de Venda (${ctx.saleData.length} registros)`)
+    lines.push(`- Registros com vendedor identificado diretamente: ${saleDataWithEmployee.length}`)
     lines.push(`Formas de pagamento:`)
     Object.entries(payMethodCount).sort((a, b) => b[1] - a[1]).forEach(([pm, n]) => {
       lines.push(`- ${pm}: ${n} vendas`)
     })
+    // If sale_data has employee fields, show ranking from it
+    if (saleDataWithEmployee.length > 0) {
+      const byEmpSale: Record<string, { name: string; count: number; total: number }> = {}
+      saleDataWithEmployee.forEach(s => {
+        const key = s.employee_id ?? s.employee_external_id
+        const name = empById[key] ?? empById[s.employee_external_id] ?? s.employee_external_id
+        if (!byEmpSale[key]) byEmpSale[key] = { name, count: 0, total: 0 }
+        byEmpSale[key].count++
+        byEmpSale[key].total += s.sale_price ?? 0
+      })
+      lines.push(`\n### Ranking de Vendedores (via sale_data.employee_external_id)`)
+      lines.push(`| Vendedor | Qtd Vendas | Valor Total |`)
+      lines.push(`|----------|-----------|-------------|`)
+      Object.values(byEmpSale).sort((a, b) => b.total - a.total).forEach(e => {
+        lines.push(`| ${e.name} | ${e.count} | R$ ${brl(e.total)} |`)
+      })
+    }
     // Recent sales detail (last 30)
     lines.push(`\n### Vendas Recentes (últimas ${Math.min(30, ctx.saleData.length)})`)
-    lines.push(`| Veículo (extID) | Cliente | Valor | Forma Pgto | Data |`)
-    lines.push(`|-----------------|---------|-------|-----------|------|`)
+    lines.push(`| Veículo (extID) | Cliente | Vendedor | Valor | Forma Pgto | Data |`)
+    lines.push(`|-----------------|---------|----------|-------|-----------|------|`)
     ctx.saleData.slice(0, 30).forEach(s => {
       const custName = custById[s.customer_id] ?? custById[s.customer_external_id] ?? s.customer_external_id ?? '—'
+      const empName = s.employee_id ? (empById[s.employee_id] ?? s.employee_external_id ?? '—') : (s.employee_external_id ? (empById[s.employee_external_id] ?? s.employee_external_id) : '—')
       lines.push(
-        `| ${s.vehicle_external_id ?? '?'} | ${custName}` +
+        `| ${s.vehicle_external_id ?? '?'} | ${custName} | ${empName}` +
         ` | R$ ${brl(s.sale_price ?? 0)} | ${s.payment_method ?? '—'} | ${s.sale_date ?? '—'} |`
       )
     })
@@ -716,6 +738,24 @@ function buildSystemPrompt(ctx: FullDealershipContext): string {
     })
   }
 
+  // ── Salesperson ranking ───────────────────────────────────────────────────
+  lines.push(`\n## COMO IDENTIFICAR O VENDEDOR DE CADA VENDA`)
+  lines.push(`IMPORTANTE: o campo vendedor NÃO está em sale_data diretamente — use a hierarquia abaixo:`)
+  lines.push(``)
+  lines.push(`1. **sale_data.employee_external_id** → se preenchido, é o campo mais direto (vVendedorID do MDB).`)
+  lines.push(`2. **commissions.vehicle_external_id** = vehicle.external_id → commissions.employee_external_id → employees.name`)
+  lines.push(`   Esta é a ligação mais completa: cada comissão registra exatamente qual funcionário vendeu qual veículo.`)
+  lines.push(`3. **orders.vehicle_external_id** = vehicle.external_id → orders.employee_external_id → employees.name`)
+  lines.push(`   ATENÇÃO: nesta revenda os pedidos (orders) NÃO têm vehicle_external_id preenchido.`)
+  lines.push(`   Portanto esta rota NÃO funciona para ranking de vendedor por veículo.`)
+  lines.push(``)
+  lines.push(`**Para gerar ranking de melhores vendedores:**`)
+  lines.push(`- Agrupe commissions por employee_external_id (→ employees.name)`)
+  lines.push(`- Some commission.amount por funcionário → total de comissões geradas`)
+  lines.push(`- Conte registros por funcionário → número de vendas`)
+  lines.push(`- Se commissions estiver vazia mas sale_data.employee_external_id estiver preenchido, use sale_data`)
+  lines.push(``)
+
   // ── Relationship map ──────────────────────────────────────────────────────
   lines.push(`\n## MAPA DE RELACIONAMENTOS ENTRE TABELAS`)
   lines.push(`Use este mapa para correlacionar dados entre tabelas ao responder perguntas:`)
@@ -748,9 +788,11 @@ function buildSystemPrompt(ctx: FullDealershipContext): string {
   lines.push(`- customer.id → vehicle_trades.customer_id (troca realizada pelo cliente)`)
   lines.push(``)
   lines.push(`**PEDIDO** (orders) ↔ **VENDA** (sale_data):`)
-  lines.push(`- orders.vehicle_external_id = sale_data.vehicle_external_id (mesmo veículo)`)
-  lines.push(`- orders.employee_external_id identifica o vendedor que fechou o pedido`)
-  lines.push(`- Para saber quem vendeu um veículo: orders.employee_external_id → employees.external_id → employees.name`)
+  lines.push(`- orders.employee_external_id → employees.external_id: identifica o vendedor responsável pelo pedido`)
+  lines.push(`- ATENÇÃO: nesta revenda orders.vehicle_external_id está NULO em todos os registros.`)
+  lines.push(`  Não use orders para correlacionar veículo ↔ vendedor. Use commissions.`)
+  lines.push(`- Para ranquear vendedores por veículo vendido: use commissions (vehicle_external_id + employee_external_id)`)
+  lines.push(`- Para ranquear vendedores por número de pedidos: use orders (employee_external_id), mas sem saber qual carro`)
   lines.push(``)
   lines.push(`**DESPESAS** (expenses) vs **DESPESAS PÓS-VENDA** (post_sale_expenses):`)
   lines.push(`- expenses: custos ANTES ou DURANTE o período em estoque (preparação, IPVA, seguro, etc.)`)
