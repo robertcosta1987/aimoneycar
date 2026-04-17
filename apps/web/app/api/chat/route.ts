@@ -29,6 +29,9 @@ export async function POST(req: NextRequest) {
       { data: financings },
       { data: vehicleFines },
       { data: orders },
+      { data: commissions },
+      { data: commissionStandards },
+      { data: employeeSalaries },
     ] = await Promise.all([
       svc.from('dealerships').select('name, city, state').eq('id', D).single(),
 
@@ -51,9 +54,9 @@ export async function POST(req: NextRequest) {
         .eq('dealership_id', D)
         .limit(200),
 
-      // Employees
+      // Employees — include salary and commission fields
       svc.from('employees')
-        .select('id, name, role, is_active')
+        .select('id, external_id, name, role, is_active, base_salary, commission_percent')
         .eq('dealership_id', D),
 
       // Financings
@@ -68,12 +71,31 @@ export async function POST(req: NextRequest) {
         .eq('dealership_id', D)
         .limit(200),
 
-      // Orders / pedidos
+      // Orders / pedidos — include employee (salesperson) link
       svc.from('orders')
-        .select('id, order_date, amount, status, payment_method')
+        .select('id, external_id, employee_external_id, employee_id, order_date, amount, status, payment_method, down_payment')
         .eq('dealership_id', D)
         .order('order_date', { ascending: false })
-        .limit(100),
+        .limit(200),
+
+      // Commissions per sale/vehicle
+      svc.from('commissions')
+        .select('id, vehicle_external_id, vehicle_id, employee_external_id, employee_id, amount, percent, date, paid_date, is_paid')
+        .eq('dealership_id', D)
+        .order('date', { ascending: false })
+        .limit(500),
+
+      // Commission standards (rules per employee)
+      svc.from('commission_standards')
+        .select('id, employee_external_id, employee_id, percent, min_value, max_value, type, is_active')
+        .eq('dealership_id', D),
+
+      // Employee salary/commission payment history
+      svc.from('employee_salaries')
+        .select('id, employee_external_id, employee_id, date, amount, type, description')
+        .eq('dealership_id', D)
+        .order('date', { ascending: false })
+        .limit(300),
     ])
 
     const vehicles = allVehicles ?? []
@@ -114,6 +136,11 @@ export async function POST(req: NextRequest) {
       expByCategory[cat] = (expByCategory[cat] ?? 0) + (e.amount ?? 0)
     })
 
+    // Commission summary per employee
+    const commissionList = commissions ?? []
+    const totalCommissionsPaid = commissionList.filter(c => c.is_paid).reduce((s, c) => s + (c.amount ?? 0), 0)
+    const totalCommissionsPending = commissionList.filter(c => !c.is_paid).reduce((s, c) => s + (c.amount ?? 0), 0)
+
     const context = {
       dealershipId: D,
       dealershipName: dealership?.name ?? 'Revenda',
@@ -131,6 +158,8 @@ export async function POST(req: NextRequest) {
         totalCustomers: customers?.length ?? 0,
         activeEmployees: employees?.filter(e => e.is_active).length ?? 0,
         pendingOrders: orders?.filter(o => o.status === 'open').length ?? 0,
+        totalCommissionsPaid,
+        totalCommissionsPending,
       },
       availableVehicles: availableEnriched,
       soldVehicles: soldEnriched,
@@ -139,6 +168,10 @@ export async function POST(req: NextRequest) {
       fines: vehicleFines ?? [],
       customers: customers ?? [],
       employees: employees ?? [],
+      orders: orders ?? [],
+      commissions: commissionList,
+      commissionStandards: commissionStandards ?? [],
+      employeeSalaries: employeeSalaries ?? [],
     }
 
     const { reply, dashboard } = await chatWithClaude(body.messages, context)

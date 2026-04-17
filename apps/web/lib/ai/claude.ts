@@ -36,6 +36,8 @@ export interface FullDealershipContext {
     totalCustomers: number
     activeEmployees: number
     pendingOrders: number
+    totalCommissionsPaid: number
+    totalCommissionsPending: number
   }
   availableVehicles: any[]
   soldVehicles: any[]
@@ -44,6 +46,10 @@ export interface FullDealershipContext {
   fines: any[]
   customers: any[]
   employees: any[]
+  orders: any[]
+  commissions: any[]
+  commissionStandards: any[]
+  employeeSalaries: any[]
 }
 
 // ─── FIPE Tool definitions ─────────────────────────────────────────────────────
@@ -416,6 +422,7 @@ function buildSystemPrompt(ctx: FullDealershipContext): string {
   lines.push(`- Faturamento total: R$ ${brl(s.totalRevenue)}`)
   lines.push(`- Lucro total: R$ ${brl(s.totalProfit)}`)
   lines.push(`- Despesas totais: R$ ${brl(s.totalExpenses)}`)
+  lines.push(`- Comissões pagas: R$ ${brl(s.totalCommissionsPaid)} | Comissões a pagar: R$ ${brl(s.totalCommissionsPending)}`)
   lines.push(`- Clientes: ${s.totalCustomers} | Funcionários ativos: ${s.activeEmployees} | Pedidos em aberto: ${s.pendingOrders}`)
 
   if (ctx.soldVehicles.length > 0) {
@@ -481,8 +488,102 @@ function buildSystemPrompt(ctx: FullDealershipContext): string {
 
   if (ctx.employees.length > 0) {
     lines.push(`\n## Funcionários`)
+    lines.push(`| Nome | Cargo | Status | Salário Base | Comissão Padrão |`)
+    lines.push(`|------|-------|--------|--------------|-----------------|`)
     ctx.employees.forEach(e => {
-      lines.push(`- ${e.name} | ${e.role ?? 'sem cargo'} | ${e.is_active ? 'ativo' : 'inativo'}`)
+      lines.push(
+        `| ${e.name} | ${e.role ?? '—'} | ${e.is_active ? 'ativo' : 'inativo'}` +
+        ` | ${e.base_salary != null ? `R$ ${brl(e.base_salary)}` : '—'}` +
+        ` | ${e.commission_percent != null ? `${e.commission_percent}%` : '—'} |`
+      )
+    })
+  }
+
+  if (ctx.commissions.length > 0) {
+    // Group commissions by employee
+    const byEmp: Record<string, { name: string; total: number; paid: number; pending: number; count: number }> = {}
+    const empById: Record<string, string> = {}
+    ctx.employees.forEach(e => { empById[e.id] = e.name; if (e.external_id) empById[e.external_id] = e.name })
+    ctx.commissions.forEach(c => {
+      const key = c.employee_id ?? c.employee_external_id ?? 'Desconhecido'
+      const name = empById[key] ?? empById[c.employee_external_id] ?? key
+      if (!byEmp[key]) byEmp[key] = { name, total: 0, paid: 0, pending: 0, count: 0 }
+      byEmp[key].total += c.amount ?? 0
+      byEmp[key].count++
+      if (c.is_paid) byEmp[key].paid += c.amount ?? 0
+      else byEmp[key].pending += c.amount ?? 0
+    })
+    lines.push(`\n## Comissões por Vendedor (${ctx.commissions.length} registros)`)
+    lines.push(`| Vendedor | Qtd Vendas | Total Comissão | Pagas | A Pagar |`)
+    lines.push(`|----------|-----------|----------------|-------|---------|`)
+    Object.values(byEmp).sort((a, b) => b.total - a.total).forEach(e => {
+      lines.push(`| ${e.name} | ${e.count} | R$ ${brl(e.total)} | R$ ${brl(e.paid)} | R$ ${brl(e.pending)} |`)
+    })
+
+    // Individual commissions detail (most recent 50)
+    lines.push(`\n### Detalhamento de Comissões (últimas ${Math.min(50, ctx.commissions.length)})`)
+    lines.push(`| Vendedor | Veículo | Valor | % | Data | Status |`)
+    lines.push(`|----------|---------|-------|---|------|--------|`)
+    ctx.commissions.slice(0, 50).forEach(c => {
+      const name = empById[c.employee_id] ?? empById[c.employee_external_id] ?? '?'
+      lines.push(
+        `| ${name} | ${c.vehicle_external_id ?? '?'} | R$ ${brl(c.amount ?? 0)}` +
+        ` | ${c.percent != null ? `${c.percent}%` : '—'} | ${c.date ?? '—'} | ${c.is_paid ? '✅ Paga' : '⏳ Pendente'} |`
+      )
+    })
+  }
+
+  if (ctx.commissionStandards.length > 0) {
+    lines.push(`\n## Regras de Comissão (Padrões)`)
+    lines.push(`| Funcionário | % Comissão | Valor Mín | Valor Máx | Tipo | Ativo |`)
+    lines.push(`|-------------|-----------|-----------|-----------|------|-------|`)
+    const empById2: Record<string, string> = {}
+    ctx.employees.forEach(e => { empById2[e.id] = e.name; if (e.external_id) empById2[e.external_id] = e.name })
+    ctx.commissionStandards.forEach(cs => {
+      const name = empById2[cs.employee_id] ?? empById2[cs.employee_external_id] ?? '—'
+      lines.push(
+        `| ${name} | ${cs.percent != null ? `${cs.percent}%` : '—'}` +
+        ` | ${cs.min_value != null ? `R$ ${brl(cs.min_value)}` : '—'}` +
+        ` | ${cs.max_value != null ? `R$ ${brl(cs.max_value)}` : '—'}` +
+        ` | ${cs.type ?? '—'} | ${cs.is_active ? 'sim' : 'não'} |`
+      )
+    })
+  }
+
+  if (ctx.employeeSalaries.length > 0) {
+    const salByType: Record<string, number> = {}
+    ctx.employeeSalaries.forEach(s => {
+      const t = s.type ?? 'Outros'
+      salByType[t] = (salByType[t] ?? 0) + (s.amount ?? 0)
+    })
+    lines.push(`\n## Pagamentos a Funcionários (${ctx.employeeSalaries.length} lançamentos)`)
+    lines.push(`Totais por tipo:`)
+    Object.entries(salByType).sort((a, b) => b[1] - a[1]).forEach(([type, total]) => {
+      lines.push(`- ${type}: R$ ${brl(total)}`)
+    })
+    // Per-employee breakdown
+    const empById3: Record<string, string> = {}
+    ctx.employees.forEach(e => { empById3[e.id] = e.name; if (e.external_id) empById3[e.external_id] = e.name })
+    const byEmpSal: Record<string, { name: string; byType: Record<string, number> }> = {}
+    ctx.employeeSalaries.forEach(s => {
+      const key = s.employee_id ?? s.employee_external_id ?? 'Desconhecido'
+      const name = empById3[key] ?? empById3[s.employee_external_id] ?? key
+      if (!byEmpSal[key]) byEmpSal[key] = { name, byType: {} }
+      const t = s.type ?? 'Outros'
+      byEmpSal[key].byType[t] = (byEmpSal[key].byType[t] ?? 0) + (s.amount ?? 0)
+    })
+    lines.push(`\n| Funcionário | Salário | Comissão | Adiantamento | Bônus | Desconto |`)
+    lines.push(`|-------------|---------|----------|--------------|-------|----------|`)
+    Object.values(byEmpSal).forEach(e => {
+      const b = e.byType
+      lines.push(
+        `| ${e.name}` +
+        ` | ${b['SALARIO'] != null ? `R$ ${brl(b['SALARIO'])}` : '—'}` +
+        ` | ${b['COMISSAO'] != null ? `R$ ${brl(b['COMISSAO'])}` : '—'}` +
+        ` | ${b['ADIANTAMENTO'] != null ? `R$ ${brl(b['ADIANTAMENTO'])}` : '—'}` +
+        ` | ${b['BONUS'] != null ? `R$ ${brl(b['BONUS'])}` : '—'}` +
+        ` | ${b['DESCONTO'] != null ? `R$ ${brl(b['DESCONTO'])}` : '—'} |`
+      )
     })
   }
 
