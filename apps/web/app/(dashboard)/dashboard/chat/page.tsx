@@ -1,6 +1,6 @@
 'use client'
 import { useState, useRef, useEffect } from 'react'
-import { Send, Sparkles, Loader2, Car, TrendingUp, Receipt, Clock, BarChart3, Users } from 'lucide-react'
+import { Send, Sparkles, Loader2, Car, TrendingUp, Receipt, Clock, BarChart3, Users, Tag, ShoppingCart } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -22,6 +22,8 @@ const quickActions = [
   { icon: BarChart3, label: 'Resumo geral', query: 'Me dê um resumo executivo completo da revenda com dashboard' },
   { icon: Clock, label: 'Veículos parados', query: 'Quais veículos estão parados há mais tempo e qual a recomendação?' },
   { icon: Users, label: 'Performance vendedores', query: 'Mostre a performance dos meus vendedores em ranking' },
+  { icon: Tag, label: 'Sugestões de Promoção', query: 'Analise o estoque e sugira promoções, cortes de preço e ações de marketing para os veículos que estão parados há mais tempo. Inclua sugestões específicas por veículo com preço atual, tempo em estoque e estratégia recomendada.' },
+  { icon: ShoppingCart, label: 'Sugestão de Compra', query: 'Com base no histórico de vendas, quais marcas e modelos vendem mais rápido (em até 2 semanas) ou têm maior volume de saída? Sugira em quais veículos vale a pena investir nas próximas compras, com justificativa baseada em giro de estoque e lucratividade.' },
 ]
 
 // ── Markdown renderer ─────────────────────────────────────────────────────────
