@@ -454,21 +454,21 @@ export default function RelatoriosPage() {
               <CardContent className="p-4 text-center">
                 <p className="text-3xl font-bold text-success">{healthy}</p>
                 <p className="text-sm text-foreground-muted mt-1">Saudável</p>
-                <p className="text-xs text-foreground-subtle">0–30 dias</p>
+                <p className="text-xs text-foreground-subtle">0–45 dias</p>
               </CardContent>
             </Card>
             <Card className="border-warning/30">
               <CardContent className="p-4 text-center">
                 <p className="text-3xl font-bold text-warning">{warning}</p>
                 <p className="text-sm text-foreground-muted mt-1">Atenção</p>
-                <p className="text-xs text-foreground-subtle">31–60 dias</p>
+                <p className="text-xs text-foreground-subtle">46–90 dias</p>
               </CardContent>
             </Card>
             <Card className="border-danger/30">
               <CardContent className="p-4 text-center">
                 <p className="text-3xl font-bold text-danger">{critical}</p>
                 <p className="text-sm text-foreground-muted mt-1">Crítico</p>
-                <p className="text-xs text-foreground-subtle">+60 dias</p>
+                <p className="text-xs text-foreground-subtle">91+ dias</p>
               </CardContent>
             </Card>
           </div>
@@ -480,7 +480,7 @@ export default function RelatoriosPage() {
                 <div className="space-y-3">
                   {available.slice(0, 8).map(v => {
                     const pct   = Math.min(100, Math.round((v.days_in_stock / 90) * 100))
-                    const color = v.days_in_stock > 60 ? 'text-danger' : v.days_in_stock > 30 ? 'text-warning' : 'text-success'
+                    const color = v.days_in_stock > 90 ? 'text-danger' : v.days_in_stock > 45 ? 'text-warning' : 'text-success'
                     return (
                       <div key={v.id} className="space-y-1">
                         <div className="flex items-center justify-between text-sm">
@@ -566,7 +566,7 @@ export default function RelatoriosPage() {
             </Card>
             <Card>
               <CardContent className="p-4 text-center">
-                <p className={`text-4xl font-bold ${avgDays <= 30 ? 'text-success' : avgDays <= 60 ? 'text-warning' : 'text-danger'}`}>
+                <p className={`text-4xl font-bold ${avgDays <= 45 ? 'text-success' : avgDays <= 90 ? 'text-warning' : 'text-danger'}`}>
                   {avgDays}
                 </p>
                 <p className="text-sm text-foreground-muted mt-1">Dias em Estoque</p>
@@ -598,7 +598,7 @@ export default function RelatoriosPage() {
                 <div className="p-4 rounded-xl bg-danger/5 border border-danger/20">
                   <p className="font-semibold text-sm text-danger">⚠️ {critical} veículo{critical !== 1 ? 's' : ''} em situação crítica</p>
                   <p className="text-sm text-foreground-muted mt-1">
-                    Há mais de 60 dias no estoque. Considere reduzir o preço em 5% para acelerar a venda.
+                    Há mais de 90 dias no estoque. Considere reduzir o preço em 5% para acelerar a venda.
                   </p>
                 </div>
               )}
@@ -606,7 +606,7 @@ export default function RelatoriosPage() {
                 <div className="p-4 rounded-xl bg-warning/5 border border-warning/20">
                   <p className="font-semibold text-sm text-warning">🔔 {warning} veículo{warning !== 1 ? 's' : ''} precisam de atenção</p>
                   <p className="text-sm text-foreground-muted mt-1">
-                    Entre 31–60 dias. Invista em fotos melhores ou polimento para acelerar as vendas.
+                    Entre 46–90 dias. Invista em fotos melhores ou polimento para acelerar as vendas.
                   </p>
                 </div>
               )}

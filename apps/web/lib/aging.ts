@@ -12,6 +12,13 @@ export const DEFAULT_THRESHOLDS: AgingThresholds = {
   critical: 90,
 }
 
+/** Canonical 3-bin aging buckets used across the entire platform. */
+export const AGING_BINS = [
+  { label: 'OK',      level: 'ok'        as const, range: '0–45d',   color: '#22C55E' },
+  { label: 'Atenção', level: 'attention' as const, range: '46–90d',  color: '#EAB308' },
+  { label: 'Crítico', level: 'critical'  as const, range: '91d+',    color: '#EF4444' },
+] as const
+
 const THRESHOLDS_KEY = 'moneycar_aging_thresholds'
 
 /** Persist thresholds to localStorage */

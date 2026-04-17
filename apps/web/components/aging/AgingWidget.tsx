@@ -13,7 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
-import { getAgingStatus } from '@/lib/aging'
+import { getAgingStatus, AGING_BINS } from '@/lib/aging'
 import { formatCurrency } from '@/lib/utils'
 import { useAgingThresholds } from '@/hooks/use-aging-thresholds'
 
@@ -27,11 +27,7 @@ interface AgingWidgetProps {
   vehicles: WidgetVehicle[]
 }
 
-const LEVEL_BUCKETS = [
-  { label: 'OK',      level: 'ok',        color: '#22C55E' },
-  { label: 'Atenção', level: 'attention',  color: '#EAB308' },
-  { label: 'Crítico', level: 'critical',   color: '#EF4444' },
-] as const
+const LEVEL_BUCKETS = AGING_BINS
 
 export function AgingWidget({ vehicles }: AgingWidgetProps) {
   const { thresholds, loaded } = useAgingThresholds()
