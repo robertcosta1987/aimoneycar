@@ -18,18 +18,18 @@ const KPI_COLORS: Record<string, string> = {
 
 const TOOLTIP_STYLE = {
   contentStyle: {
-    background: 'rgb(var(--bg-elevated))',
-    border: '1px solid rgb(var(--border))',
+    background: '#111820',
+    border: '1px solid #1E2A3A',
     borderRadius: 12,
     fontSize: 12,
-    color: 'rgb(var(--fg))',
+    color: '#E2E8F0',
   },
-  labelStyle: { color: 'rgb(var(--fg-muted))' },
-  itemStyle:  { color: 'rgb(var(--fg))' },
+  labelStyle: { color: '#94A3B8' },
+  itemStyle:  { color: '#E2E8F0' },
 }
 
-const AXIS_TICK  = { fontSize: 11, fill: 'rgb(var(--fg-muted))' }
-const GRID_STYLE = { strokeDasharray: '3 3', stroke: 'rgb(var(--border))' }
+const AXIS_TICK  = { fontSize: 11, fill: '#8B9EB3' }
+const GRID_STYLE = { strokeDasharray: '3 3', stroke: '#1E2A3A' }
 
 function renderChart(chart: ChartConfig) {
   const colors = chart.series.map((s, i) => s.color ?? PALETTE[i % PALETTE.length])
