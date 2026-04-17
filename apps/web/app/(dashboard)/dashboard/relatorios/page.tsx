@@ -371,7 +371,8 @@ export default function RelatoriosPage() {
                     <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#8B9EB3' }} />
                     <YAxis tick={{ fontSize: 11, fill: '#8B9EB3' }} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
                     <Tooltip
-                      contentStyle={{ background: '#111820', border: '1px solid #1E2A3A', borderRadius: 12 }}
+                      contentStyle={{ background: '#111820', border: '1px solid #1E2A3A', borderRadius: 12, color: '#E2E8F0' }}
+                      labelStyle={{ color: '#E2E8F0' }}
                       formatter={(v: any) => formatCurrency(v)}
                     />
                     <Bar dataKey="revenue" fill="#00D9FF" name="Receita" radius={[4,4,0,0]} />
@@ -432,7 +433,8 @@ export default function RelatoriosPage() {
                     <XAxis dataKey="range" tick={{ fontSize: 12, fill: '#8B9EB3' }} />
                     <YAxis tick={{ fontSize: 12, fill: '#8B9EB3' }} allowDecimals={false} />
                     <Tooltip
-                      contentStyle={{ background: '#111820', border: '1px solid #1E2A3A', borderRadius: 12 }}
+                      contentStyle={{ background: '#111820', border: '1px solid #1E2A3A', borderRadius: 12, color: '#E2E8F0' }}
+                      labelStyle={{ color: '#E2E8F0' }}
                     />
                     <Bar dataKey="count" name="Veículos" radius={[4,4,0,0]}>
                       {stockBuckets.map((b, i) => (
