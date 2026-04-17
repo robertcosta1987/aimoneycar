@@ -53,7 +53,12 @@ export default function AlertasPage() {
     setGenMessage(null)
     try {
       const res = await fetch('/api/alerts/generate', { method: 'POST' })
-      const json = await res.json()
+      let json: any = {}
+      try {
+        json = await res.json()
+      } catch {
+        throw new Error(`Erro do servidor (HTTP ${res.status}). Verifique os logs do Vercel.`)
+      }
       if (json.error) {
         setGenError(json.error)
       } else if (json.generated > 0) {
