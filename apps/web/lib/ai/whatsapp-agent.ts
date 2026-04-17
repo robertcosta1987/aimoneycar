@@ -37,7 +37,7 @@ async function getSlotsForDate(dealershipId: string, dateISO: string): Promise<{
   const dayStart = `${dateISO}T00:00:00-03:00`
   const dayEnd   = `${dateISO}T23:59:59-03:00`
 
-  const { data: existing } = await supabase
+  const { data: existing } = await getSvc()
     .from('agendamentos')
     .select('data_inicio, data_fim')
     .eq('dealership_id', dealershipId)
@@ -146,7 +146,7 @@ async function executeTool(
 
     switch (name) {
       case 'buscar_veiculos': {
-        let query = supabase
+        let query = getSvc()
           .from('vehicles')
           .select('id, brand, model, version, year_model, color, mileage, sale_price, fuel, transmission')
           .eq('dealership_id', dealershipId)
@@ -249,7 +249,7 @@ async function executeTool(
         ))
         const endUTC = new Date(startUTC.getTime() + 30 * 60 * 1000)
 
-        const { data: inserted, error } = await supabase
+        const { data: inserted, error } = await getSvc()
           .from('agendamentos')
           .insert({
             dealership_id:     dealershipId,
@@ -320,7 +320,7 @@ async function buildContext(
   conversaId:    string,
   excludeMsgId?: string,
 ): Promise<WhatsAppContext> {
-  let historyQuery = supabase
+  let historyQuery = getSvc()
     .from('whatsapp_mensagens')
     .select('direcao, conteudo, criado_em')
     .eq('conversa_id', conversaId)
@@ -337,7 +337,7 @@ async function buildContext(
   ] = await Promise.all([
     historyQuery,
 
-    supabase
+    getSvc()
       .from('vehicles')
       .select('id, brand, model, version, year_model, color, mileage, sale_price, fuel, transmission')
       .eq('dealership_id', dealershipId)
@@ -346,13 +346,13 @@ async function buildContext(
       .order('created_at', { ascending: false })
       .limit(30),
 
-    supabase
+    getSvc()
       .from('whatsapp_conversas')
       .select('nome_contato, telefone, telefone_limpo')
       .eq('id', conversaId)
       .single(),
 
-    supabase
+    getSvc()
       .from('dealerships')
       .select('name, address, phone, whatsapp, city, state')
       .eq('id', dealershipId)
