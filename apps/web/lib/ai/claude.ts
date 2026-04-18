@@ -174,20 +174,23 @@ const QUERY_VEHICLES_TOOL: Anthropic.Tool = {
 
 IMPORTANTE: Para relatórios/agrupamentos, SEMPRE use o parâmetro group_by — isso retorna dados agregados compactos (poucos tokens). Sem group_by, retorna no máximo 30 registros individuais.
 
-group_by aceita: "year_fab_range" (com group_range=5 para intervalos de 5 anos), "brand", "model", "sale_month", "source".`,
+group_by aceita: "year_fab_range" (com group_range=5 para intervalos de 5 anos), "brand", "model", "color", "sale_month", "source".
+
+Escopo os filtros apenas ao que foi pedido: se o usuário pergunta sobre 2026, use sale_date_gte/lte para 2026-01-01/2026-12-31 e status=sold.`,
   input_schema: {
     type: 'object' as const,
     properties: {
       status:        { type: 'string', enum: ['available', 'sold'], description: 'Filtrar por status.' },
       brand:         { type: 'string', description: 'Filtrar por marca (busca parcial)' },
       model:         { type: 'string', description: 'Filtrar por modelo (busca parcial)' },
+      color:         { type: 'string', description: 'Filtrar por cor (busca parcial, ex: "branco", "prata")' },
       year_fab_gte:  { type: 'number', description: 'Ano de fabricação mínimo' },
       year_fab_lte:  { type: 'number', description: 'Ano de fabricação máximo' },
-      sale_date_gte: { type: 'string', description: 'Data de venda mínima (YYYY-MM-DD)' },
-      sale_date_lte: { type: 'string', description: 'Data de venda máxima (YYYY-MM-DD)' },
+      sale_date_gte: { type: 'string', description: 'Data de venda mínima (YYYY-MM-DD). Para 2026: 2026-01-01' },
+      sale_date_lte: { type: 'string', description: 'Data de venda máxima (YYYY-MM-DD). Para 2026: 2026-12-31' },
       days_gte:      { type: 'number', description: 'Dias em estoque mínimo' },
       days_lte:      { type: 'number', description: 'Dias em estoque máximo' },
-      group_by:      { type: 'string', enum: ['year_fab_range', 'brand', 'model', 'sale_month', 'source'], description: 'Agrupar e agregar resultado. Preferir sempre para relatórios.' },
+      group_by:      { type: 'string', enum: ['year_fab_range', 'brand', 'model', 'color', 'sale_month', 'source'], description: 'Agrupar e agregar resultado. Preferir sempre para relatórios.' },
       group_range:   { type: 'number', description: 'Tamanho do intervalo para year_fab_range (ex: 5 para faixas de 5 anos). Padrão: 5.' },
       order_by:      { type: 'string', description: 'Campo para ordenar sem group_by (days_in_stock, sale_date, sale_price). Padrão: days_in_stock' },
       ascending:     { type: 'boolean', description: 'Crescente? Padrão: false' },
@@ -444,12 +447,13 @@ async function executeTool(name: string, input: Record<string, any>, dealershipI
         // Profit is approximated as sale_price - purchase_price (expenses are typically small).
         let query = svc()
           .from('vehicles')
-          .select('brand, model, year_fab, year_model, purchase_price, sale_price, days_in_stock, status, sale_date, source')
+          .select('brand, model, year_fab, year_model, purchase_price, sale_price, days_in_stock, status, sale_date, source, color')
           .eq('dealership_id', dealershipId)
 
         if (input.status)        query = query.eq('status', input.status)
         if (input.brand)         query = query.ilike('brand', `%${input.brand}%`)
         if (input.model)         query = query.ilike('model', `%${input.model}%`)
+        if (input.color)         query = query.ilike('color', `%${input.color}%`)
         if (input.year_fab_gte)  query = query.gte('year_fab', input.year_fab_gte)
         if (input.year_fab_lte)  query = query.lte('year_fab', input.year_fab_lte)
         if (input.sale_date_gte) query = query.gte('sale_date', input.sale_date_gte)
@@ -483,6 +487,8 @@ async function executeTool(name: string, input: Record<string, any>, dealershipI
               key = `${start}–${start + rangeSize - 1}`
             } else if (input.group_by === 'sale_month') {
               key = v.sale_date ? v.sale_date.slice(0, 7) : 'sem data'
+            } else if (input.group_by === 'color') {
+              key = (v.color ?? 'Não informado') as string
             } else {
               key = (v[input.group_by as keyof typeof v] ?? 'Outros') as string
             }
@@ -512,7 +518,7 @@ async function executeTool(name: string, input: Record<string, any>, dealershipI
           result = {
             total: enriched.length,
             vehicles: enriched.map((v: any) => ({
-              brand: v.brand, model: v.model, year_fab: v.year_fab,
+              brand: v.brand, model: v.model, year_fab: v.year_fab, color: v.color,
               purchase_price: v.purchase_price, sale_price: v.sale_price,
               profit: v.profit != null ? Math.round(v.profit) : null,
               margin_pct: v.marginPct != null ? +v.marginPct.toFixed(1) : null,
@@ -607,17 +613,10 @@ function buildSystemPrompt(ctx: FullDealershipContext): string {
   }
 
   if (ctx.financings.length > 0) {
-    lines.push(`\n## Financiamentos (${ctx.financings.length})`)
-    lines.push(`| Veículo | Banco | Valor Total | Entrada | Parcelas | Valor/Parcela | Taxa Mensal | Início | Status |`)
-    lines.push(`|---------|-------|-------------|---------|----------|---------------|-------------|--------|--------|`)
-    ctx.financings.slice(0, 50).forEach(f => {
-      lines.push(
-        `| ${f.vehicle_external_id ?? '?'} | ${f.bank ?? '—'} | R$ ${brl(f.total_amount ?? 0)}` +
-        ` | R$ ${brl(f.down_payment ?? 0)} | ${f.installments ?? '?'}x` +
-        ` | R$ ${brl(f.installment_amount ?? 0)} | ${f.interest_rate != null ? `${f.interest_rate}% a.m.` : '—'}` +
-        ` | ${f.start_date ?? '—'} | ${f.status ?? '—'} |`
-      )
-    })
+    const finTotal = ctx.financings.reduce((s, f) => s + (f.total_amount ?? 0), 0)
+    const finActive = ctx.financings.filter(f => f.status === 'active' || f.status === 'ativo').length
+    lines.push(`\n## Financiamentos: ${ctx.financings.length} total | ${finActive} ativos | Valor total: R$ ${brl(finTotal)}`)
+    lines.push(`(Para detalhes de financiamentos individuais, peça ao usuário para consultar a seção de financiamentos)`)
   }
 
   const unpaidFines = ctx.fines.filter(f => !f.is_paid)
@@ -642,10 +641,9 @@ function buildSystemPrompt(ctx: FullDealershipContext): string {
   }
 
   if (ctx.commissions.length > 0) {
-    // Group commissions by employee
-    const byEmp: Record<string, { name: string; total: number; paid: number; pending: number; count: number }> = {}
     const empById: Record<string, string> = {}
     ctx.employees.forEach(e => { empById[e.id] = e.name; if (e.external_id) empById[e.external_id] = e.name })
+    const byEmp: Record<string, { name: string; total: number; paid: number; pending: number; count: number }> = {}
     ctx.commissions.forEach(c => {
       const key = c.employee_id ?? c.employee_external_id ?? 'Desconhecido'
       const name = empById[key] ?? empById[c.employee_external_id] ?? key
@@ -656,39 +654,20 @@ function buildSystemPrompt(ctx: FullDealershipContext): string {
       else byEmp[key].pending += c.amount ?? 0
     })
     lines.push(`\n## Comissões por Vendedor (${ctx.commissions.length} registros)`)
-    lines.push(`| Vendedor | Qtd Vendas | Total Comissão | Pagas | A Pagar |`)
-    lines.push(`|----------|-----------|----------------|-------|---------|`)
+    lines.push(`| Vendedor | Qtd | Total | Pagas | A Pagar |`)
+    lines.push(`|----------|-----|-------|-------|---------|`)
     Object.values(byEmp).sort((a, b) => b.total - a.total).forEach(e => {
       lines.push(`| ${e.name} | ${e.count} | R$ ${brl(e.total)} | R$ ${brl(e.paid)} | R$ ${brl(e.pending)} |`)
-    })
-
-    // Individual commissions detail (most recent 50)
-    lines.push(`\n### Detalhamento de Comissões (últimas ${Math.min(50, ctx.commissions.length)})`)
-    lines.push(`| Vendedor | Veículo | Valor | % | Data | Status |`)
-    lines.push(`|----------|---------|-------|---|------|--------|`)
-    ctx.commissions.slice(0, 50).forEach(c => {
-      const name = empById[c.employee_id] ?? empById[c.employee_external_id] ?? '?'
-      lines.push(
-        `| ${name} | ${c.vehicle_external_id ?? '?'} | R$ ${brl(c.amount ?? 0)}` +
-        ` | ${c.percent != null ? `${c.percent}%` : '—'} | ${c.date ?? '—'} | ${c.is_paid ? '✅ Paga' : '⏳ Pendente'} |`
-      )
     })
   }
 
   if (ctx.commissionStandards.length > 0) {
-    lines.push(`\n## Regras de Comissão (Padrões)`)
-    lines.push(`| Funcionário | % Comissão | Valor Mín | Valor Máx | Tipo | Ativo |`)
-    lines.push(`|-------------|-----------|-----------|-----------|------|-------|`)
     const empById2: Record<string, string> = {}
     ctx.employees.forEach(e => { empById2[e.id] = e.name; if (e.external_id) empById2[e.external_id] = e.name })
-    ctx.commissionStandards.forEach(cs => {
+    lines.push(`\n## Regras de Comissão: ${ctx.commissionStandards.length} padrões configurados`)
+    ctx.commissionStandards.filter(cs => cs.is_active).forEach(cs => {
       const name = empById2[cs.employee_id] ?? empById2[cs.employee_external_id] ?? '—'
-      lines.push(
-        `| ${name} | ${cs.percent != null ? `${cs.percent}%` : '—'}` +
-        ` | ${cs.min_value != null ? `R$ ${brl(cs.min_value)}` : '—'}` +
-        ` | ${cs.max_value != null ? `R$ ${brl(cs.max_value)}` : '—'}` +
-        ` | ${cs.type ?? '—'} | ${cs.is_active ? 'sim' : 'não'} |`
-      )
+      lines.push(`- ${name}: ${cs.percent != null ? `${cs.percent}%` : '—'} (${cs.type ?? '—'})`)
     })
   }
 
@@ -699,33 +678,8 @@ function buildSystemPrompt(ctx: FullDealershipContext): string {
       salByType[t] = (salByType[t] ?? 0) + (s.amount ?? 0)
     })
     lines.push(`\n## Pagamentos a Funcionários (${ctx.employeeSalaries.length} lançamentos)`)
-    lines.push(`Totais por tipo:`)
     Object.entries(salByType).sort((a, b) => b[1] - a[1]).forEach(([type, total]) => {
       lines.push(`- ${type}: R$ ${brl(total)}`)
-    })
-    // Per-employee breakdown
-    const empById3: Record<string, string> = {}
-    ctx.employees.forEach(e => { empById3[e.id] = e.name; if (e.external_id) empById3[e.external_id] = e.name })
-    const byEmpSal: Record<string, { name: string; byType: Record<string, number> }> = {}
-    ctx.employeeSalaries.forEach(s => {
-      const key = s.employee_id ?? s.employee_external_id ?? 'Desconhecido'
-      const name = empById3[key] ?? empById3[s.employee_external_id] ?? key
-      if (!byEmpSal[key]) byEmpSal[key] = { name, byType: {} }
-      const t = s.type ?? 'Outros'
-      byEmpSal[key].byType[t] = (byEmpSal[key].byType[t] ?? 0) + (s.amount ?? 0)
-    })
-    lines.push(`\n| Funcionário | Salário | Comissão | Adiantamento | Bônus | Desconto |`)
-    lines.push(`|-------------|---------|----------|--------------|-------|----------|`)
-    Object.values(byEmpSal).forEach(e => {
-      const b = e.byType
-      lines.push(
-        `| ${e.name}` +
-        ` | ${b['SALARIO'] != null ? `R$ ${brl(b['SALARIO'])}` : '—'}` +
-        ` | ${b['COMISSAO'] != null ? `R$ ${brl(b['COMISSAO'])}` : '—'}` +
-        ` | ${b['ADIANTAMENTO'] != null ? `R$ ${brl(b['ADIANTAMENTO'])}` : '—'}` +
-        ` | ${b['BONUS'] != null ? `R$ ${brl(b['BONUS'])}` : '—'}` +
-        ` | ${b['DESCONTO'] != null ? `R$ ${brl(b['DESCONTO'])}` : '—'} |`
-      )
     })
   }
 
@@ -738,72 +692,23 @@ function buildSystemPrompt(ctx: FullDealershipContext): string {
     })
   }
 
-  // ── Orders with salesperson linkage ───────────────────────────────────────
+  // ── Orders summary ─────────────────────────────────────────────────────────
   if (ctx.orders.length > 0) {
-    const empById: Record<string, string> = {}
-    ctx.employees.forEach(e => { empById[e.id] = e.name; if (e.external_id) empById[e.external_id] = e.name })
-    const byEmpOrders: Record<string, { name: string; count: number; total: number }> = {}
-    ctx.orders.forEach(o => {
-      const key = o.employee_id ?? o.employee_external_id ?? 'Sem vendedor'
-      const name = empById[key] ?? empById[o.employee_external_id] ?? key
-      if (!byEmpOrders[key]) byEmpOrders[key] = { name, count: 0, total: 0 }
-      byEmpOrders[key].count++
-      byEmpOrders[key].total += o.amount ?? 0
-    })
-    lines.push(`\n## Pedidos por Vendedor (${ctx.orders.length} pedidos)`)
-    lines.push(`| Vendedor | Qtd Pedidos | Valor Total |`)
-    lines.push(`|----------|-------------|-------------|`)
-    Object.values(byEmpOrders).sort((a, b) => b.total - a.total).forEach(e => {
-      lines.push(`| ${e.name} | ${e.count} | R$ ${brl(e.total)} |`)
-    })
+    const openOrders = ctx.orders.filter((o: any) => o.status === 'open')
+    const totalOrderValue = ctx.orders.reduce((s: number, o: any) => s + (o.amount ?? 0), 0)
+    lines.push(`\n## Pedidos: ${ctx.orders.length} total | ${openOrders.length} em aberto | Valor total: R$ ${brl(totalOrderValue)}`)
   }
 
-  // ── Sale data with customer and payment method ────────────────────────────
+  // ── Sale data summary ──────────────────────────────────────────────────────
   if (ctx.saleData.length > 0) {
-    const custById: Record<string, string> = {}
-    ctx.customers.forEach(c => { custById[c.id] = c.name; if (c.external_id) custById[c.external_id] = c.name })
-    const empById: Record<string, string> = {}
-    ctx.employees.forEach(e => { empById[e.id] = e.name; if (e.external_id) empById[e.external_id] = e.name })
     const payMethodCount: Record<string, number> = {}
     ctx.saleData.forEach(s => {
       const pm = s.payment_method ?? 'Não informado'
       payMethodCount[pm] = (payMethodCount[pm] ?? 0) + 1
     })
-    const saleDataWithEmployee = ctx.saleData.filter(s => s.employee_external_id)
-    lines.push(`\n## Dados de Venda (${ctx.saleData.length} registros)`)
-    lines.push(`- Registros com vendedor identificado diretamente: ${saleDataWithEmployee.length}`)
-    lines.push(`Formas de pagamento:`)
+    lines.push(`\n## Dados de Venda (${ctx.saleData.length} registros) — formas de pagamento:`)
     Object.entries(payMethodCount).sort((a, b) => b[1] - a[1]).forEach(([pm, n]) => {
       lines.push(`- ${pm}: ${n} vendas`)
-    })
-    // If sale_data has employee fields, show ranking from it
-    if (saleDataWithEmployee.length > 0) {
-      const byEmpSale: Record<string, { name: string; count: number; total: number }> = {}
-      saleDataWithEmployee.forEach(s => {
-        const key = s.employee_id ?? s.employee_external_id
-        const name = empById[key] ?? empById[s.employee_external_id] ?? s.employee_external_id
-        if (!byEmpSale[key]) byEmpSale[key] = { name, count: 0, total: 0 }
-        byEmpSale[key].count++
-        byEmpSale[key].total += s.sale_price ?? 0
-      })
-      lines.push(`\n### Ranking de Vendedores (via sale_data.employee_external_id)`)
-      lines.push(`| Vendedor | Qtd Vendas | Valor Total |`)
-      lines.push(`|----------|-----------|-------------|`)
-      Object.values(byEmpSale).sort((a, b) => b.total - a.total).forEach(e => {
-        lines.push(`| ${e.name} | ${e.count} | R$ ${brl(e.total)} |`)
-      })
-    }
-    // Recent sales detail (last 30)
-    lines.push(`\n### Vendas Recentes (últimas ${Math.min(30, ctx.saleData.length)})`)
-    lines.push(`| Veículo (extID) | Cliente | Vendedor | Valor | Forma Pgto | Data |`)
-    lines.push(`|-----------------|---------|----------|-------|-----------|------|`)
-    ctx.saleData.slice(0, 30).forEach(s => {
-      const custName = custById[s.customer_id] ?? custById[s.customer_external_id] ?? s.customer_external_id ?? '—'
-      const empName = s.employee_id ? (empById[s.employee_id] ?? s.employee_external_id ?? '—') : (s.employee_external_id ? (empById[s.employee_external_id] ?? s.employee_external_id) : '—')
-      lines.push(
-        `| ${s.vehicle_external_id ?? '?'} | ${custName} | ${empName}` +
-        ` | R$ ${brl(s.sale_price ?? 0)} | ${s.payment_method ?? '—'} | ${s.sale_date ?? '—'} |`
-      )
     })
   }
 
