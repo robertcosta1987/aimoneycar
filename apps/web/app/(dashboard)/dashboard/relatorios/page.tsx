@@ -237,7 +237,7 @@ export default function RelatoriosPage() {
       if (!map[key]) map[key] = { brand: v.brand, model: v.model, count: 0 }
       map[key].count++
     })
-    return Object.values(map).sort((a, b) => b.count - a.count).slice(0, 10)
+    return Object.values(map).filter(g => g.count >= 2).sort((a, b) => b.count - a.count).slice(0, 10)
   })()
 
   // How many full 45-day cycles could have been done with this capital?
@@ -628,7 +628,7 @@ export default function RelatoriosPage() {
                   <TrendingUp className="w-4 h-4 text-success flex-shrink-0" />
                   <p className="text-xs font-semibold text-success uppercase tracking-wide">Sugestões de Giro Rápido que evitam Capital Parado</p>
                 </div>
-                <p className="text-xs text-foreground-subtle mb-3">Top 10 modelos mais vendidos no último ano.</p>
+                <p className="text-xs text-foreground-subtle mb-3">Top 10 modelos mais vendidos no último ano — mínimo 2 vendas.</p>
                 <div className="space-y-0">
                   {topModels.map((m, i) => (
                     <div key={`${m.brand}-${m.model}`} className="flex items-center justify-between py-2 border-b border-border/60 last:border-0">
