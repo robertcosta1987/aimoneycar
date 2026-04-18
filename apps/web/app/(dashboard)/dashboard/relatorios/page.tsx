@@ -159,7 +159,7 @@ export default function RelatoriosPage() {
           .eq('status', 'sold')
           .not('brand', 'is', null)
           .not('model', 'is', null)
-          .gte('sale_date', new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+          .gte('sale_date', new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
           .limit(1000),
       ])
       const allSoldData = allSoldResult.data ?? []
@@ -228,13 +228,13 @@ export default function RelatoriosPage() {
     ? fastMovers.reduce((s, v) => s + v.profitPct, 0) / fastMovers.length / 100
     : 0.12 // fallback 12% if no data
 
-  // Top 10 models sold the most in the past year
+  // Top 10 models sold the most in the past 6 months, grouped by model name only
   const topModels = (() => {
-    const map: Record<string, { brand: string; model: string; count: number }> = {}
+    const map: Record<string, { model: string; count: number }> = {}
     salesLast90.forEach((v: any) => {
-      if (!v.brand || !v.model) return
-      const key = `${v.brand}|${v.model}`
-      if (!map[key]) map[key] = { brand: v.brand, model: v.model, count: 0 }
+      if (!v.model) return
+      const key = v.model.trim()
+      if (!map[key]) map[key] = { model: key, count: 0 }
       map[key].count++
     })
     return Object.values(map).filter(g => g.count >= 2).sort((a, b) => b.count - a.count).slice(0, 10)
@@ -628,13 +628,13 @@ export default function RelatoriosPage() {
                   <TrendingUp className="w-4 h-4 text-success flex-shrink-0" />
                   <p className="text-xs font-semibold text-success uppercase tracking-wide">Sugestões de Giro Rápido que evitam Capital Parado</p>
                 </div>
-                <p className="text-xs text-foreground-subtle mb-3">Top 10 modelos mais vendidos no último ano — mínimo 2 vendas.</p>
+                <p className="text-xs text-foreground-subtle mb-3">Top 10 modelos mais vendidos nos últimos 6 meses — mínimo 2 vendas.</p>
                 <div className="space-y-0">
                   {topModels.map((m, i) => (
-                    <div key={`${m.brand}-${m.model}`} className="flex items-center justify-between py-2 border-b border-border/60 last:border-0">
+                    <div key={m.model} className="flex items-center justify-between py-2 border-b border-border/60 last:border-0">
                       <div className="flex items-center gap-2 min-w-0">
                         <span className="text-[10px] font-bold text-foreground-muted w-5 flex-shrink-0 text-right">#{i + 1}</span>
-                        <span className="text-sm font-medium text-foreground">{m.brand} {m.model}</span>
+                        <span className="text-sm font-medium text-foreground">{m.model}</span>
                       </div>
                       <Badge variant="outline" className="text-xs text-success border-success/30">
                         {m.count} venda{m.count !== 1 ? 's' : ''}
