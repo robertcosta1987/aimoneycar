@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
-import { BarChart3, TrendingUp, DollarSign, Car, Receipt, Calendar, CalendarClock, ChevronLeft, Sparkles, Bell, RefreshCw } from 'lucide-react'
+import { BarChart3, TrendingUp, DollarSign, Car, Receipt, Calendar, CalendarClock, ChevronLeft, Sparkles, Bell, RefreshCw, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { fetchAll } from '@/lib/supabase/fetch-all'
@@ -51,6 +51,7 @@ export default function RelatoriosPage() {
   const [period, setPeriod]               = useState('30')
   const [selectedMonth, setSelectedMonth] = useState<string>('')
   const [availableMonths, setAvailableMonths] = useState<AvailableMonth[]>([])
+  const [fastMoverSort, setFastMoverSort] = useState<'avgDays' | 'avgMargin' | 'count'>('avgDays')
   const [sales, setSales]       = useState<any[]>([])
   const [vehicles, setVehicles] = useState<any[]>([])
   const [expenses, setExpenses] = useState<any[]>([])
@@ -216,7 +217,7 @@ export default function RelatoriosPage() {
     ? fastMovers.reduce((s, v) => s + v.profitPct, 0) / fastMovers.length / 100
     : 0.12 // fallback 12% if no data
 
-  // Top 20 fast-mover models grouped by brand+model
+  // Top 10 fast-mover models grouped by brand+model
   const fastMoverModels = (() => {
     const map: Record<string, { brand: string; model: string; count: number; totalDays: number; totalProfit: number; totalRevenue: number }> = {}
     fastMovers.forEach(v => {
@@ -233,8 +234,9 @@ export default function RelatoriosPage() {
         avgDays: Math.round(g.totalDays / g.count),
         avgMargin: g.totalRevenue > 0 ? (g.totalProfit / g.totalRevenue) * 100 : 0,
       }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 20)
+      // Default: best combo of fast days + high margin (avgDays asc, then avgMargin desc)
+      .sort((a, b) => a.avgDays - b.avgDays || b.avgMargin - a.avgMargin)
+      .slice(0, 10)
   })()
 
   // How many full 45-day cycles could have been done with this capital?
@@ -618,27 +620,64 @@ export default function RelatoriosPage() {
               {fastMoverModels.length > 0 && (
                 <Card className="border-success/30 bg-success/5">
                   <CardContent className="p-4">
-                    <div className="flex items-center gap-2 mb-1">
-                      <TrendingUp className="w-4 h-4 text-success flex-shrink-0" />
-                      <p className="text-xs font-semibold text-success uppercase tracking-wide">Sugestões de Giro Rápido que evitam Capital Parado</p>
+                    <div className="flex items-center justify-between mb-1 gap-3 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <TrendingUp className="w-4 h-4 text-success flex-shrink-0" />
+                        <p className="text-xs font-semibold text-success uppercase tracking-wide">Sugestões de Giro Rápido que evitam Capital Parado</p>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {([
+                          { key: 'avgDays',   label: 'Dias',    icon: fastMoverSort === 'avgDays'   ? ArrowUp : ArrowUpDown },
+                          { key: 'avgMargin', label: 'Margem',  icon: fastMoverSort === 'avgMargin' ? ArrowDown : ArrowUpDown },
+                          { key: 'count',     label: 'Vendas',  icon: fastMoverSort === 'count'     ? ArrowDown : ArrowUpDown },
+                        ] as const).map(({ key, label, icon: Icon }) => (
+                          <button
+                            key={key}
+                            onClick={() => setFastMoverSort(key)}
+                            className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium transition-colors ${
+                              fastMoverSort === key
+                                ? 'bg-success/20 text-success border border-success/30'
+                                : 'bg-background-elevated text-foreground-muted border border-border hover:border-success/30 hover:text-success'
+                            }`}
+                          >
+                            <Icon className="w-3 h-3" />
+                            {label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                    <p className="text-xs text-foreground-subtle mb-3">Modelos que nunca ficaram mais de 45 dias em estoque — ordenados por volume de vendas no período.</p>
-                    <div className="space-y-2">
-                      {fastMoverModels.map((m, i) => (
-                        <div key={`${m.brand}-${m.model}`} className="flex items-center justify-between text-sm py-1.5 border-b border-border last:border-0">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="text-xs font-bold text-foreground-muted w-5 flex-shrink-0">#{i + 1}</span>
-                            <div className="min-w-0">
-                              <span className="font-medium text-foreground">{m.brand} {m.model}</span>
-                              <span className="text-foreground-subtle ml-2 text-xs">{m.count} venda{m.count !== 1 ? 's' : ''}</span>
+                    <p className="text-xs text-foreground-subtle mb-3">Top 10 modelos vendidos em até 45 dias — nunca parados em estoque.</p>
+                    <div className="space-y-0">
+                      {[...fastMoverModels]
+                        .sort((a, b) =>
+                          fastMoverSort === 'avgDays'   ? a.avgDays - b.avgDays :
+                          fastMoverSort === 'avgMargin' ? b.avgMargin - a.avgMargin :
+                          b.count - a.count
+                        )
+                        .map((m, i) => (
+                          <div key={`${m.brand}-${m.model}`} className="flex items-center justify-between py-2 border-b border-border/60 last:border-0">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="text-[10px] font-bold text-foreground-muted w-5 flex-shrink-0 text-right">#{i + 1}</span>
+                              <div className="min-w-0">
+                                <span className="text-sm font-medium text-foreground">{m.brand} {m.model}</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-4 flex-shrink-0 ml-3">
+                              <div className="text-right">
+                                <p className="text-[10px] text-foreground-muted leading-none mb-0.5">Dias médio</p>
+                                <p className={`text-sm font-bold ${fastMoverSort === 'avgDays' ? 'text-success' : 'text-foreground'}`}>{m.avgDays}d</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-[10px] text-foreground-muted leading-none mb-0.5">Margem</p>
+                                <p className={`text-sm font-bold ${fastMoverSort === 'avgMargin' ? 'text-success' : 'text-foreground'}`}>{m.avgMargin.toFixed(1)}%</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-[10px] text-foreground-muted leading-none mb-0.5">Vendas</p>
+                                <p className={`text-sm font-bold ${fastMoverSort === 'count' ? 'text-success' : 'text-foreground'}`}>{m.count}</p>
+                              </div>
                             </div>
                           </div>
-                          <div className="text-right flex-shrink-0 ml-3">
-                            <span className="font-bold text-success text-xs">{m.avgDays}d médio</span>
-                            <span className="text-foreground-muted text-xs ml-3">{m.avgMargin.toFixed(1)}% margem</span>
-                          </div>
-                        </div>
-                      ))}
+                        ))}
                     </div>
                   </CardContent>
                 </Card>
