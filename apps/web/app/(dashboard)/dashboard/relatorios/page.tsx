@@ -144,7 +144,9 @@ export default function RelatoriosPage() {
         .gte('date', dateStart)
       if (dateEnd) expQ = expQ.lte('date', dateEnd)
 
-      const [salesData, vehiclesData, expensesData, allSoldData] = await Promise.all([
+      const twoYearsAgo = new Date(Date.now() - 730 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+
+      const [salesData, vehiclesData, expensesData, allSoldResult] = await Promise.all([
         fetchAll(salesQ),
         fetchAll(supabase
           .from('vehicles')
@@ -153,14 +155,18 @@ export default function RelatoriosPage() {
           .neq('status', 'sold')
           .order('days_in_stock', { ascending: false })),
         fetchAll(expQ),
-        fetchAll(supabase
+        supabase
           .from('vehicles')
           .select('brand, model, description, purchase_price, sale_price, days_in_stock')
           .eq('dealership_id', did)
           .eq('status', 'sold')
           .not('days_in_stock', 'is', null)
-          .gt('days_in_stock', 0)),
+          .gt('days_in_stock', 0)
+          .gte('sale_date', twoYearsAgo)
+          .order('sale_date', { ascending: false })
+          .limit(1000),
       ])
+      const allSoldData = allSoldResult.data ?? []
 
       setSales(salesData)
       setVehicles(vehiclesData)
