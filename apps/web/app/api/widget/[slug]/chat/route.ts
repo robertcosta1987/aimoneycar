@@ -14,6 +14,27 @@ export async function OPTIONS() {
 }
 
 function getAI() { return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! }) }
+
+async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> {
+  let lastErr: any
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn()
+    } catch (err: any) {
+      lastErr = err
+      const status = err?.status ?? err?.statusCode
+      if (status !== 429 && status !== 529) throw err
+      if (attempt === maxRetries) break
+      const retryAfter = err?.headers?.['retry-after']
+      const waitMs = retryAfter
+        ? Math.min(parseInt(retryAfter, 10) * 1000, 60_000)
+        : Math.min(1000 * 2 ** attempt, 30_000)
+      console.warn(`[Claude/widget] rate-limited (${status}), retrying in ${waitMs}ms (attempt ${attempt + 1}/${maxRetries})`)
+      await new Promise(r => setTimeout(r, waitMs))
+    }
+  }
+  throw lastErr
+}
 function getSvc() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -193,13 +214,13 @@ export async function POST(
       content: m.content,
     }))
 
-    let response = await getAI().messages.create({
+    let response = await callWithRetry(() => getAI().messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 1024,
       system: systemPrompt,
       tools,
       messages: apiMessages,
-    })
+    }))
 
     // Process one round of tool calls
     if (response.stop_reason === 'tool_use') {
@@ -219,13 +240,13 @@ export async function POST(
         content: toolResults.filter(Boolean) as Anthropic.ToolResultBlockParam[],
       })
 
-      response = await getAI().messages.create({
+      response = await callWithRetry(() => getAI().messages.create({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 1024,
         system: systemPrompt,
         tools,
         messages: apiMessages,
-      })
+      }))
     }
 
     const textBlock = response.content.find(b => b.type === 'text')

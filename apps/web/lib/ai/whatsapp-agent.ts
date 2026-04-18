@@ -11,6 +11,27 @@ import { createClient } from '@supabase/supabase-js'
 import type { AIResponse, AIVehicle } from '@/types/whatsapp'
 
 function getAI() { return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! }) }
+
+async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> {
+  let lastErr: any
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn()
+    } catch (err: any) {
+      lastErr = err
+      const status = err?.status ?? err?.statusCode
+      if (status !== 429 && status !== 529) throw err
+      if (attempt === maxRetries) break
+      const retryAfter = err?.headers?.['retry-after']
+      const waitMs = retryAfter
+        ? Math.min(parseInt(retryAfter, 10) * 1000, 60_000)
+        : Math.min(1000 * 2 ** attempt, 30_000)
+      console.warn(`[Claude/whatsapp] rate-limited (${status}), retrying in ${waitMs}ms (attempt ${attempt + 1}/${maxRetries})`)
+      await new Promise(r => setTimeout(r, waitMs))
+    }
+  }
+  throw lastErr
+}
 function getSvc() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -528,13 +549,13 @@ export async function generateAIResponse(params: GenerateResponseParams): Promis
     while (iterations < MAX_ITERATIONS) {
       iterations++
 
-      const response = await getAI().messages.create({
+      const response = await callWithRetry(() => getAI().messages.create({
         model,
         max_tokens: 1024,
         system:     systemPrompt,
         tools:      TOOLS,
         messages:   apiMessages,
-      })
+      }))
 
       if (response.stop_reason === 'end_turn') {
         const textBlock = response.content.find(c => c.type === 'text')

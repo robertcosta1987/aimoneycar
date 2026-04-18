@@ -245,16 +245,29 @@ export async function POST(req: NextRequest) {
     // Detailed error breakdown for easier debugging
     const isAnthropicError = err?.status !== undefined || err?.error !== undefined
     if (isAnthropicError) {
+      const retryAfter   = err.headers?.['retry-after']
+      const resetTokens  = err.headers?.['anthropic-ratelimit-tokens-reset']
+      const resetRequests = err.headers?.['anthropic-ratelimit-requests-reset']
+      const limitType    = err.error?.message?.toLowerCase().includes('request') ? 'RPM' : 'TPM'
       console.error('[Chat] Anthropic API error:', {
         status: err.status,
         type: err.error?.type,
         message: err.error?.message ?? err.message,
+        retryAfter,
+        resetTokens,
+        resetRequests,
+        limitType,
       })
       // Surface billing/auth errors clearly to the client (non-sensitive)
       const msg = err.error?.message ?? err.message ?? 'Anthropic API error'
       if (err.status === 401) return NextResponse.json({ error: `Anthropic: invalid API key` }, { status: 502 })
       if (err.status === 403 || msg.includes('credit balance')) return NextResponse.json({ error: `Anthropic: créditos insuficientes — adicione créditos em console.anthropic.com` }, { status: 502 })
-      if (err.status === 429) return NextResponse.json({ error: `Anthropic: rate limit atingido` }, { status: 502 })
+      if (err.status === 429) {
+        const waitSec = retryAfter ? parseInt(retryAfter, 10) : null
+        const waitMsg = waitSec ? ` Tente novamente em ${waitSec}s.` : ''
+        const typeMsg = limitType === 'RPM' ? ' (limite de requisições por minuto)' : ' (limite de tokens por minuto)'
+        return NextResponse.json({ error: `Anthropic: rate limit atingido${typeMsg}.${waitMsg}` }, { status: 502 })
+      }
       return NextResponse.json({ error: `Anthropic: ${msg}` }, { status: 502 })
     }
 

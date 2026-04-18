@@ -6,6 +6,27 @@ export const dynamic = 'force-dynamic'
 
 function getAI() { return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! }) }
 
+async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> {
+  let lastErr: any
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn()
+    } catch (err: any) {
+      lastErr = err
+      const status = err?.status ?? err?.statusCode
+      if (status !== 429 && status !== 529) throw err
+      if (attempt === maxRetries) break
+      const retryAfter = err?.headers?.['retry-after']
+      const waitMs = retryAfter
+        ? Math.min(parseInt(retryAfter, 10) * 1000, 60_000)
+        : Math.min(1000 * 2 ** attempt, 30_000)
+      console.warn(`[Claude/demo] rate-limited (${status}), retrying in ${waitMs}ms (attempt ${attempt + 1}/${maxRetries})`)
+      await new Promise(r => setTimeout(r, waitMs))
+    }
+  }
+  throw lastErr
+}
+
 function buildDemoContext(): string {
   const stats = getDashboardStats()
   const available = demoVehicles.filter(v => v.status === 'available')
@@ -62,12 +83,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No messages' }, { status: 400 })
     }
 
-    const response = await getAI().messages.create({
+    const response = await callWithRetry(() => getAI().messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 1024,
       system: buildDemoContext(),
       messages,
-    })
+    }))
 
     const block = response.content[0]
     if (block.type !== 'text') throw new Error('Unexpected response type')

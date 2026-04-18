@@ -19,6 +19,28 @@ function getAI() {
   })
 }
 
+// Retries a fn up to maxRetries times on 429/529, honouring the retry-after header.
+async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> {
+  let lastErr: any
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn()
+    } catch (err: any) {
+      lastErr = err
+      const status = err?.status ?? err?.statusCode
+      if (status !== 429 && status !== 529) throw err        // not retriable
+      if (attempt === maxRetries) break                       // exhausted
+      const retryAfter = err?.headers?.['retry-after']
+      const waitMs = retryAfter
+        ? Math.min(parseInt(retryAfter, 10) * 1000, 60_000)  // respect server hint, cap at 60s
+        : Math.min(1000 * 2 ** attempt, 30_000)              // exponential: 1s, 2s, 4s …
+      console.warn(`[Claude] rate-limited (${status}), retrying in ${waitMs}ms (attempt ${attempt + 1}/${maxRetries})`)
+      await new Promise(r => setTimeout(r, waitMs))
+    }
+  }
+  throw lastErr
+}
+
 const brl = (n: number) =>
   n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
@@ -832,13 +854,13 @@ export async function chatWithClaude(
 
   // Agentic loop: keep calling Claude until it stops using tools
   while (true) {
-    const response = await getAI().messages.create({
+    const response = await callWithRetry(() => getAI().messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 4096,
       system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
       tools: ALL_TOOLS,
       messages: apiMessages,
-    } as any)
+    } as any))
 
     // If Claude is done (no tool calls), return the text + any captured dashboard
     if (response.stop_reason === 'end_turn') {

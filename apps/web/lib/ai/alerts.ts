@@ -3,6 +3,27 @@ import type { Vehicle, Expense, AIAlert } from '@/types'
 
 function getAI() { return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! }) }
 
+async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T> {
+  let lastErr: any
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn()
+    } catch (err: any) {
+      lastErr = err
+      const status = err?.status ?? err?.statusCode
+      if (status !== 429 && status !== 529) throw err
+      if (attempt === maxRetries) break
+      const retryAfter = err?.headers?.['retry-after']
+      const waitMs = retryAfter
+        ? Math.min(parseInt(retryAfter, 10) * 1000, 60_000)
+        : Math.min(1000 * 2 ** attempt, 30_000)
+      console.warn(`[Claude/alerts] rate-limited (${status}), retrying in ${waitMs}ms (attempt ${attempt + 1}/${maxRetries})`)
+      await new Promise(r => setTimeout(r, waitMs))
+    }
+  }
+  throw lastErr
+}
+
 export interface AlertCandidate {
   vehicle?: Vehicle
   totalExpenses?: number
@@ -75,11 +96,11 @@ ${candidates.map((c, i) => `${i + 1}. ${c.reason}`).join('\n')}
 Responda APENAS com um array JSON de exatamente ${candidates.length} objetos:
 [{"type":"critical"|"warning"|"info"|"success","title":"título curto","message":"1-2 frases acionáveis","action":"texto botão ou null"}]`
 
-  const response = await getAI().messages.create({
+  const response = await callWithRetry(() => getAI().messages.create({
     model: 'claude-haiku-4-5-20251001',
     max_tokens: 2048,
     messages: [{ role: 'user', content: prompt }],
-  })
+  }))
 
   const text = response.content[0].type === 'text' ? response.content[0].text : ''
   const jsonMatch = text.match(/\[[\s\S]*\]/)
