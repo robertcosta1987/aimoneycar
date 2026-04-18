@@ -153,7 +153,7 @@ export default function VeiculosPage() {
           <SelectContent>
             <SelectItem value="all">Todos</SelectItem>
             <SelectItem value="available">Disponível</SelectItem>
-            <SelectItem value="reserved">Reservado</SelectItem>
+            <SelectItem value="returned">Devolvido</SelectItem>
             <SelectItem value="sold">Vendido</SelectItem>
           </SelectContent>
         </Select>
