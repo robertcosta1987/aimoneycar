@@ -231,7 +231,8 @@ export default function RelatoriosPage() {
     const map: Record<string, { brand: string; model: string; count: number; totalDays: number; totalProfit: number; totalRevenue: number }> = {}
     salesLast90.forEach((v: any) => {
       if (!v.brand || !v.model) return
-      if ((v.days_in_stock ?? 0) <= 0) return
+      const days = Number(v.days_in_stock)
+      if (!isFinite(days) || days <= 0) return
       const desc = (v.description ?? '').toUpperCase()
       const brand = (v.brand ?? '').toUpperCase()
       const model = (v.model ?? '').toUpperCase()
@@ -239,7 +240,7 @@ export default function RelatoriosPage() {
       const key = `${v.brand}|${v.model}`
       if (!map[key]) map[key] = { brand: v.brand, model: v.model, count: 0, totalDays: 0, totalProfit: 0, totalRevenue: 0 }
       map[key].count++
-      map[key].totalDays += v.days_in_stock ?? 0
+      map[key].totalDays += days
       map[key].totalRevenue += v.sale_price ?? 0
       map[key].totalProfit += v.sale_price != null ? (v.sale_price - (v.purchase_price ?? 0)) : 0
     })
@@ -250,6 +251,7 @@ export default function RelatoriosPage() {
         avgDays: Math.round(g.totalDays / g.count),
         avgMargin: g.totalRevenue > 0 ? (g.totalProfit / g.totalRevenue) * 100 : 0,
       }))
+      .filter(g => g.avgDays > 0)
       .sort((a, b) => a.avgDays - b.avgDays || b.avgMargin - a.avgMargin)
       .slice(0, 10)
   })()
