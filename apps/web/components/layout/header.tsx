@@ -20,17 +20,17 @@ export function Header({ dealershipName = 'Minha Revenda', userName = 'Usuário'
   useEffect(() => setMounted(true), [])
 
   return (
-    <header className="h-32 border-b border-border bg-background-paper px-4 md:px-6 flex items-center justify-between gap-3">
+    <header className="h-12 border-b border-border bg-background-paper px-4 md:px-6 flex items-center justify-between gap-3">
       {/* Mobile: app name */}
       <div className="flex items-center gap-2 md:hidden">
-        <span className="font-black text-[34px] text-primary tracking-tight">Moneycar <span className="text-foreground">IA</span></span>
+        <span className="font-black text-sm text-primary tracking-tight">Moneycar <span className="text-foreground">IA</span></span>
       </div>
 
       {/* Slogan — centered */}
       <div className="flex-1 flex justify-center">
-        <p className="text-[28px] font-bold text-foreground-muted italic text-center hidden sm:block">
+        <p className="text-xs font-medium text-foreground-muted italic text-center hidden sm:block">
           Seus dados viram decisões.{' '}
-          <span className="text-primary font-medium not-italic">Sua revenda vira máquina.</span>
+          <span className="text-primary not-italic">Sua revenda vira máquina.</span>
         </p>
       </div>
 

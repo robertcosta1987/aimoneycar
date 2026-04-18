@@ -532,59 +532,59 @@ export default function RelatoriosPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
                 {/* Card 1 — Capital travado */}
                 <Card className="border-danger/30 bg-danger/5">
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <TrendingDown className="w-4 h-4 text-danger flex-shrink-0" />
-                      <p className="text-xs font-semibold text-danger uppercase tracking-wide">Capital em Risco</p>
+                  <CardContent className="p-3">
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <TrendingDown className="w-3.5 h-3.5 text-danger flex-shrink-0" />
+                      <p className="text-[10px] font-semibold text-danger uppercase tracking-wide leading-none">Capital em Risco</p>
                     </div>
-                    <p className="text-2xl font-black text-danger">{formatCurrency(capitalImobilizado)}</p>
-                    <p className="text-xs text-foreground-muted mt-1.5 leading-snug">
-                      Investido em {criticalVehicles.length} veículo{criticalVehicles.length !== 1 ? 's' : ''} parado{criticalVehicles.length !== 1 ? 's' : ''} há mais de 91 dias, sem retorno.
+                    <p className="text-xl font-black text-danger leading-none">{formatCurrency(capitalImobilizado)}</p>
+                    <p className="text-[10px] text-foreground-muted mt-1.5 leading-snug">
+                      {criticalVehicles.length} veículo{criticalVehicles.length !== 1 ? 's' : ''} parado{criticalVehicles.length !== 1 ? 's' : ''} há +91 dias.
                     </p>
                   </CardContent>
                 </Card>
 
-                {/* Card 2 — Lucro que poderia ter sido gerado */}
+                {/* Card 2 — Lucro perdido */}
                 <Card className="border-warning/30 bg-warning/5">
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Banknote className="w-4 h-4 text-warning flex-shrink-0" />
-                      <p className="text-xs font-semibold text-warning uppercase tracking-wide">Lucro Perdido — Giro Rápido</p>
+                  <CardContent className="p-3">
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <Banknote className="w-3.5 h-3.5 text-warning flex-shrink-0" />
+                      <p className="text-[10px] font-semibold text-warning uppercase tracking-wide leading-none">Lucro Perdido — Giro Rápido</p>
                     </div>
-                    <p className="text-2xl font-black text-warning">{formatCurrency(opportunityProfit)}</p>
-                    <p className="text-xs text-foreground-muted mt-1.5 leading-snug">
-                      {cyclesLost} ciclo{cyclesLost !== 1 ? 's' : ''} de 45 dias × margem média de {((fastMovers.length ? avgFastMargin : 0.12) * 100).toFixed(1)}% dos veículos de giro rápido.
+                    <p className="text-xl font-black text-warning leading-none">{formatCurrency(opportunityProfit)}</p>
+                    <p className="text-[10px] text-foreground-muted mt-1.5 leading-snug">
+                      {cyclesLost} ciclo{cyclesLost !== 1 ? 's' : ''} × {((fastMovers.length ? avgFastMargin : 0.12) * 100).toFixed(1)}% margem média.
                     </p>
                   </CardContent>
                 </Card>
 
                 {/* Card 3 — Renda SELIC 90d */}
                 <Card className="border-primary/30 bg-primary/5">
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <PiggyBank className="w-4 h-4 text-primary flex-shrink-0" />
-                      <p className="text-xs font-semibold text-primary uppercase tracking-wide">Renda SELIC Perdida (90d)</p>
+                  <CardContent className="p-3">
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <PiggyBank className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                      <p className="text-[10px] font-semibold text-primary uppercase tracking-wide leading-none">SELIC Perdida (90d)</p>
                     </div>
-                    <p className="text-2xl font-black text-primary">{formatCurrency(selicIncome)}</p>
-                    <p className="text-xs text-foreground-muted mt-1.5 leading-snug">
-                      Se aplicado à taxa SELIC de 15% a.a. por 90 dias.
+                    <p className="text-xl font-black text-primary leading-none">{formatCurrency(selicIncome)}</p>
+                    <p className="text-[10px] text-foreground-muted mt-1.5 leading-snug">
+                      SELIC 15% a.a. base fixa de 90 dias.
                     </p>
                   </CardContent>
                 </Card>
 
-                {/* Card 4 — Renda SELIC pelo tempo real parado */}
-                <Card className="border-primary/20 bg-primary/3">
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <PiggyBank className="w-4 h-4 text-primary flex-shrink-0" />
-                      <p className="text-xs font-semibold text-primary uppercase tracking-wide">Renda SELIC — Tempo Real Parado</p>
+                {/* Card 4 — Renda SELIC tempo real */}
+                <Card className="border-primary/20 bg-primary/5">
+                  <CardContent className="p-3">
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <PiggyBank className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                      <p className="text-[10px] font-semibold text-primary uppercase tracking-wide leading-none">SELIC — Tempo Real ({avgDaysCritical}d)</p>
                     </div>
-                    <p className="text-2xl font-black text-primary">{formatCurrency(selicIncomeActual)}</p>
-                    <p className="text-xs text-foreground-muted mt-1.5 leading-snug">
-                      Se aplicado à SELIC de 15% a.a. pelo tempo médio real de {avgDaysCritical} dias parado.
+                    <p className="text-xl font-black text-primary leading-none">{formatCurrency(selicIncomeActual)}</p>
+                    <p className="text-[10px] text-foreground-muted mt-1.5 leading-snug">
+                      SELIC 15% a.a. pelo tempo médio real parado.
                     </p>
                   </CardContent>
                 </Card>
