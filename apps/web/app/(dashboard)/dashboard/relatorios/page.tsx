@@ -683,7 +683,7 @@ export default function RelatoriosPage() {
                         <div className="flex items-center gap-4 flex-shrink-0 ml-3">
                           <div className="text-right">
                             <p className="text-[10px] text-foreground-muted leading-none mb-0.5">Dias médio</p>
-                            <p className={`text-sm font-bold ${fastMoverSort === 'avgDays' ? 'text-success' : 'text-foreground'}`}>{m.avgDays > 0 ? `${m.avgDays}d` : '—'}</p>
+                            <p className={`text-sm font-bold ${fastMoverSort === 'avgDays' ? 'text-success' : 'text-foreground'}`}>{Math.max(1, m.avgDays)}d</p>
                           </div>
                           <div className="text-right">
                             <p className="text-[10px] text-foreground-muted leading-none mb-0.5">Margem</p>
