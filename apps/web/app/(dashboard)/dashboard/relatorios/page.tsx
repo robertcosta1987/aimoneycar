@@ -52,10 +52,11 @@ export default function RelatoriosPage() {
   const [selectedMonth, setSelectedMonth] = useState<string>('')
   const [availableMonths, setAvailableMonths] = useState<AvailableMonth[]>([])
   const [fastMoverSort, setFastMoverSort] = useState<'avgDays' | 'avgMargin' | 'count'>('avgDays')
-  const [sales, setSales]       = useState<any[]>([])
-  const [vehicles, setVehicles] = useState<any[]>([])
-  const [expenses, setExpenses] = useState<any[]>([])
-  const [loading, setLoading]   = useState(true)
+  const [sales, setSales]           = useState<any[]>([])
+  const [vehicles, setVehicles]     = useState<any[]>([])
+  const [expenses, setExpenses]     = useState<any[]>([])
+  const [salesLast90, setSalesLast90] = useState<any[]>([])
+  const [loading, setLoading]       = useState(true)
   const supabase = createClient()
 
   // ── load available months once ──────────────────────────────────────────────
@@ -143,7 +144,9 @@ export default function RelatoriosPage() {
         .gte('date', dateStart)
       if (dateEnd) expQ = expQ.lte('date', dateEnd)
 
-      const [salesData, vehiclesData, expensesData] = await Promise.all([
+      const date90 = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+
+      const [salesData, vehiclesData, expensesData, sales90Data] = await Promise.all([
         fetchAll(salesQ),
         fetchAll(supabase
           .from('vehicles')
@@ -152,11 +155,19 @@ export default function RelatoriosPage() {
           .neq('status', 'sold')
           .order('days_in_stock', { ascending: false })),
         fetchAll(expQ),
+        fetchAll(supabase
+          .from('vehicles')
+          .select('brand, model, purchase_price, sale_price, days_in_stock, sale_date')
+          .eq('dealership_id', did)
+          .eq('status', 'sold')
+          .lte('days_in_stock', 45)
+          .gte('sale_date', date90)),
       ])
 
       setSales(salesData)
       setVehicles(vehiclesData)
       setExpenses(expensesData)
+      setSalesLast90(sales90Data)
       setLoading(false)
     }
     if (mode === 'rolling' || (mode === 'month' && selectedMonth)) load()
@@ -217,24 +228,24 @@ export default function RelatoriosPage() {
     ? fastMovers.reduce((s, v) => s + v.profitPct, 0) / fastMovers.length / 100
     : 0.12 // fallback 12% if no data
 
-  // Top 10 fast-mover models grouped by brand+model
+  // Top 10 fast-mover models — always from a fixed 90-day window, min 3 sales to filter false positives
   const fastMoverModels = (() => {
     const map: Record<string, { brand: string; model: string; count: number; totalDays: number; totalProfit: number; totalRevenue: number }> = {}
-    fastMovers.forEach(v => {
+    salesLast90.forEach((v: any) => {
       const key = `${v.brand}|${v.model}`
       if (!map[key]) map[key] = { brand: v.brand, model: v.model, count: 0, totalDays: 0, totalProfit: 0, totalRevenue: 0 }
       map[key].count++
       map[key].totalDays += v.days_in_stock ?? 0
-      map[key].totalProfit += v.profit ?? 0
       map[key].totalRevenue += v.sale_price ?? 0
+      map[key].totalProfit += v.sale_price != null ? (v.sale_price - (v.purchase_price ?? 0)) : 0
     })
     return Object.values(map)
+      .filter(g => g.count >= 3)
       .map(g => ({
         ...g,
         avgDays: Math.round(g.totalDays / g.count),
         avgMargin: g.totalRevenue > 0 ? (g.totalProfit / g.totalRevenue) * 100 : 0,
       }))
-      // Default: best combo of fast days + high margin (avgDays asc, then avgMargin desc)
       .sort((a, b) => a.avgDays - b.avgDays || b.avgMargin - a.avgMargin)
       .slice(0, 10)
   })()
@@ -646,7 +657,7 @@ export default function RelatoriosPage() {
                         ))}
                       </div>
                     </div>
-                    <p className="text-xs text-foreground-subtle mb-3">Top 10 modelos vendidos em até 45 dias — nunca parados em estoque.</p>
+                    <p className="text-xs text-foreground-subtle mb-3">Top 10 modelos vendidos em até 45 dias nos últimos 90 dias, com mínimo de 3 vendas no período.</p>
                     <div className="space-y-0">
                       {[...fastMoverModels]
                         .sort((a, b) =>
