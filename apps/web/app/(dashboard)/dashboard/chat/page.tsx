@@ -195,10 +195,10 @@ export default function ChatPage() {
           dashboard: data.dashboard,
         },
       ])
-    } catch {
+    } catch (err: any) {
       setMessages(prev => [
         ...prev,
-        { id: (Date.now() + 1).toString(), role: 'assistant', content: '❌ Erro de conexão. Tente novamente.' },
+        { id: (Date.now() + 1).toString(), role: 'assistant', content: `❌ Erro de conexão. Tente novamente. (${err?.message ?? 'network error'})` },
       ])
     } finally {
       setLoading(false)

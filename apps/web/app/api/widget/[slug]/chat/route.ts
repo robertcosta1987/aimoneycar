@@ -27,8 +27,8 @@ async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T
       if (attempt === maxRetries) break
       const retryAfter = err?.headers?.['retry-after']
       const waitMs = retryAfter
-        ? Math.min(parseInt(retryAfter, 10) * 1000, 60_000)
-        : Math.min(1000 * 2 ** attempt, 30_000)
+        ? Math.min(parseInt(retryAfter, 10) * 1000, 8_000)
+        : Math.min(1000 * 2 ** attempt, 8_000)
       console.warn(`[Claude/widget] rate-limited (${status}), retrying in ${waitMs}ms (attempt ${attempt + 1}/${maxRetries})`)
       await new Promise(r => setTimeout(r, waitMs))
     }

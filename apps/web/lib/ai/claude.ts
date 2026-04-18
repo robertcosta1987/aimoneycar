@@ -32,8 +32,8 @@ async function callWithRetry<T>(fn: () => Promise<T>, maxRetries = 3): Promise<T
       if (attempt === maxRetries) break                       // exhausted
       const retryAfter = err?.headers?.['retry-after']
       const waitMs = retryAfter
-        ? Math.min(parseInt(retryAfter, 10) * 1000, 60_000)  // respect server hint, cap at 60s
-        : Math.min(1000 * 2 ** attempt, 30_000)              // exponential: 1s, 2s, 4s …
+        ? Math.min(parseInt(retryAfter, 10) * 1000, 8_000)  // respect server hint, cap at 60s
+        : Math.min(1000 * 2 ** attempt, 8_000)              // exponential: 1s, 2s, 4s …
       console.warn(`[Claude] rate-limited (${status}), retrying in ${waitMs}ms (attempt ${attempt + 1}/${maxRetries})`)
       await new Promise(r => setTimeout(r, waitMs))
     }
