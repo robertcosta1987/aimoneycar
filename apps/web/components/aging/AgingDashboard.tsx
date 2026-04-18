@@ -234,7 +234,7 @@ export function AgingDashboard({ vehicles }: AgingDashboardProps) {
                           <td className="px-4 py-3 hidden lg:table-cell">
                             {suggestions.length > 0 ? (
                               <Badge variant="outline" className="text-xs">
-                                {suggestions.length} ação{suggestions.length !== 1 ? 'ões' : ''}
+                                {suggestions.length} {suggestions.length !== 1 ? 'ações' : 'ação'}
                               </Badge>
                             ) : (
                               <span className="text-xs text-foreground-subtle">—</span>
