@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
 
   const results: Array<{ dealership: string; alerts: number; whatsapp: boolean }> = []
 
-  for (const [idx, dealership] of (dealerships as Dealership[]).entries()) {
+  for (const [idx, dealership] of Array.from((dealerships as Dealership[]).entries())) {
     // Stagger calls by 15s per dealership to avoid burning the TPM budget all at once
     if (idx > 0) await new Promise(r => setTimeout(r, 15_000))
     try {
