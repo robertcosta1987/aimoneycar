@@ -220,8 +220,10 @@ export default function RelatoriosPage() {
   const cyclesLost = avgDaysCritical > 0 ? Math.floor(avgDaysCritical / 45) : 0
   const opportunityProfit = capitalImobilizado * avgFastMargin * Math.max(cyclesLost, 1)
 
-  // CDI income if capital had been in savings (100% CDI) for avgDaysCritical days
+  // SELIC income for fixed 90-day basis
   const selicIncome = capitalImobilizado * SELIC_ANNUAL * (90 / 365)
+  // SELIC income for the actual average days the capital is stuck
+  const selicIncomeActual = capitalImobilizado * SELIC_ANNUAL * (avgDaysCritical / 365)
 
   // ── Despesas ─────────────────────────────────────────────────────────────────
   const expTotal      = expenses.reduce((s, e) => s + e.amount, 0)
@@ -538,16 +540,30 @@ export default function RelatoriosPage() {
                   </CardContent>
                 </Card>
 
-                {/* Card 3 — Renda SELIC */}
+                {/* Card 3 — Renda SELIC 90d */}
                 <Card className="border-primary/30 bg-primary/5">
                   <CardContent className="p-4">
                     <div className="flex items-center gap-2 mb-2">
                       <PiggyBank className="w-4 h-4 text-primary flex-shrink-0" />
-                      <p className="text-xs font-semibold text-primary uppercase tracking-wide">Renda SELIC Perdida</p>
+                      <p className="text-xs font-semibold text-primary uppercase tracking-wide">Renda SELIC Perdida (90d)</p>
                     </div>
                     <p className="text-2xl font-black text-primary">{formatCurrency(selicIncome)}</p>
                     <p className="text-xs text-foreground-muted mt-1.5 leading-snug">
                       Se aplicado à taxa SELIC de 15% a.a. por 90 dias.
+                    </p>
+                  </CardContent>
+                </Card>
+
+                {/* Card 4 — Renda SELIC pelo tempo real parado */}
+                <Card className="border-primary/20 bg-primary/3">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <PiggyBank className="w-4 h-4 text-primary flex-shrink-0" />
+                      <p className="text-xs font-semibold text-primary uppercase tracking-wide">Renda SELIC — Tempo Real Parado</p>
+                    </div>
+                    <p className="text-2xl font-black text-primary">{formatCurrency(selicIncomeActual)}</p>
+                    <p className="text-xs text-foreground-muted mt-1.5 leading-snug">
+                      Se aplicado à SELIC de 15% a.a. pelo tempo médio real de {avgDaysCritical} dias parado.
                     </p>
                   </CardContent>
                 </Card>
