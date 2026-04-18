@@ -240,7 +240,7 @@ export default function RelatoriosPage() {
       map[key].totalProfit += v.sale_price != null ? (v.sale_price - (v.purchase_price ?? 0)) : 0
     })
     return Object.values(map)
-      .filter(g => g.count >= 3)
+      .filter(g => g.count >= 2)
       .map(g => ({
         ...g,
         avgDays: Math.round(g.totalDays / g.count),
@@ -630,7 +630,7 @@ export default function RelatoriosPage() {
             </div>
           )}
 
-          {/* Fast-mover suggestions — always visible, independent of criticalVehicles */}
+          {/* Fast-mover suggestions */}
           {fastMoverModels.length > 0 && (
             <Card className="border-success/30 bg-success/5">
               <CardContent className="p-4">
@@ -660,7 +660,7 @@ export default function RelatoriosPage() {
                     ))}
                   </div>
                 </div>
-                <p className="text-xs text-foreground-subtle mb-3">Top 10 modelos vendidos em até 45 dias nos últimos 90 dias, com mínimo de 3 vendas no período.</p>
+                <p className="text-xs text-foreground-subtle mb-3">Top 10 modelos vendidos em até 45 dias nos últimos 90 dias, com mínimo de 2 vendas no período.</p>
                 <div className="space-y-0">
                   {[...fastMoverModels]
                     .sort((a, b) =>
