@@ -440,9 +440,11 @@ async function executeTool(name: string, input: Record<string, any>, dealershipI
 
       // ── Vehicle query tool ───────────────────────────────────────────────
       case 'query_vehicles': {
+        // No expenses join — avoids N+1 subqueries that make large fetches very slow.
+        // Profit is approximated as sale_price - purchase_price (expenses are typically small).
         let query = svc()
           .from('vehicles')
-          .select('brand, model, year_fab, year_model, purchase_price, sale_price, days_in_stock, status, sale_date, source, expenses:expenses(amount)')
+          .select('brand, model, year_fab, year_model, purchase_price, sale_price, days_in_stock, status, sale_date, source')
           .eq('dealership_id', dealershipId)
 
         if (input.status)        query = query.eq('status', input.status)
@@ -455,18 +457,17 @@ async function executeTool(name: string, input: Record<string, any>, dealershipI
         if (input.days_gte)      query = query.gte('days_in_stock', input.days_gte)
         if (input.days_lte)      query = query.lte('days_in_stock', input.days_lte)
 
-        // For aggregation fetch all (up to 2000); for raw records cap at 30
-        const fetchLimit = input.group_by ? 2000 : Math.min(input.limit ?? 30, 100)
+        // Aggregation: up to 500 rows (no join = fast); raw records: cap at 30
+        const fetchLimit = input.group_by ? 500 : Math.min(input.limit ?? 30, 100)
         const { data, error } = await query
           .order(input.order_by ?? 'days_in_stock', { ascending: input.ascending ?? false })
           .limit(fetchLimit)
         if (error) { result = { error: error.message }; break }
 
         const enriched = (data ?? []).map((v: any) => {
-          const totalExp = (v.expenses ?? []).reduce((s: number, e: any) => s + (e.amount ?? 0), 0)
-          const profit = v.sale_price != null ? v.sale_price - v.purchase_price - totalExp : null
+          const profit = v.sale_price != null ? v.sale_price - v.purchase_price : null
           const marginPct = v.sale_price && v.sale_price > 0 ? (profit ?? 0) / v.sale_price * 100 : null
-          return { ...v, expenses: undefined, totalExp, profit, marginPct }
+          return { ...v, profit, marginPct }
         })
 
         if (input.group_by) {
