@@ -19,10 +19,13 @@ export async function POST(req: NextRequest) {
 
     const D = profile.dealership_id
 
-    // Fetch all data the AI needs in parallel
+    // Fetch context for the AI. Vehicles are fetched minimally — Claude uses
+    // the query_vehicles tool for any detailed vehicle analysis.
+    const sixMonthsAgo = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
     const [
       { data: dealership },
-      { data: allVehicles },
+      { data: availVehicles },    // top 20 worst-aged, for summary display
+      { data: recentSold },       // top 20 most-recent sold, for summary stats
       { data: expenses },
       { data: customers },
       { data: employees },
@@ -36,30 +39,25 @@ export async function POST(req: NextRequest) {
     ] = await Promise.all([
       svc.from('dealerships').select('name, city, state').eq('id', D).single(),
 
-      // Vehicles: all available + sold within last 180 days (capped at 200) to control token volume
-      (async () => {
-        const sixMonthsAgo = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
-        const [avail, sold] = await Promise.all([
-          svc.from('vehicles')
-            .select('id, external_id, brand, model, version, year_fab, year_model, plate, color, mileage, fuel, purchase_price, sale_price, fipe_price, purchase_date, sale_date, days_in_stock, status, source, notes, supplier_name, expenses:expenses(id, category, amount, date, description)')
-            .eq('dealership_id', D).eq('status', 'available')
-            .order('days_in_stock', { ascending: false })
-            .limit(150),
-          svc.from('vehicles')
-            .select('id, external_id, brand, model, version, year_fab, year_model, plate, color, mileage, fuel, purchase_price, sale_price, fipe_price, purchase_date, sale_date, days_in_stock, status, source, notes, supplier_name, expenses:expenses(id, category, amount, date, description)')
-            .eq('dealership_id', D).eq('status', 'sold')
-            .gte('sale_date', sixMonthsAgo)
-            .order('sale_date', { ascending: false })
-            .limit(200),
-        ])
-        return { data: [...(avail.data ?? []), ...(sold.data ?? [])], error: avail.error ?? sold.error }
-      })(),
+      // Available: top 20 by days_in_stock (no nested expenses needed for summary)
+      svc.from('vehicles')
+        .select('id, brand, model, version, year_fab, year_model, plate, purchase_price, sale_price, days_in_stock, status')
+        .eq('dealership_id', D).eq('status', 'available')
+        .order('days_in_stock', { ascending: false })
+        .limit(20),
 
-      // All expenses with vehicle info
+      // Sold (last 180d): top 20 most recent for summary stats + profit overview
+      svc.from('vehicles')
+        .select('id, brand, model, version, year_fab, year_model, plate, purchase_price, sale_price, days_in_stock, status, sale_date, expenses:expenses(amount)')
+        .eq('dealership_id', D).eq('status', 'sold')
+        .gte('sale_date', sixMonthsAgo)
+        .order('sale_date', { ascending: false })
+        .limit(20),
+
+      // Expenses by category (aggregate — only amounts needed)
       svc.from('expenses')
-        .select('id, vehicle_id, category, amount, date, description')
+        .select('vehicle_id, category, amount')
         .eq('dealership_id', D)
-        .order('date', { ascending: false })
         .limit(200),
 
       // Customers
@@ -119,71 +117,56 @@ export async function POST(req: NextRequest) {
         .limit(100),
     ])
 
-    const vehicles = allVehicles ?? []
-    const expenseList = expenses ?? []
-
     // ── Derived analytics ────────────────────────────────────────────────────
-
-    const available = vehicles.filter(v => v.status === 'available')
-    const sold = vehicles.filter(v => v.status === 'sold')
-
-    // Enrich each vehicle with total expenses and profit
-    const enrich = (v: any) => {
-      const exps: any[] = v.expenses ?? []
-      const totalExp = exps.reduce((s: number, e: any) => s + (e.amount ?? 0), 0)
+    const available = availVehicles ?? []
+    const sold = (recentSold ?? []).map((v: any) => {
+      const totalExp = (v.expenses ?? []).reduce((s: number, e: any) => s + (e.amount ?? 0), 0)
       const profit = v.sale_price ? v.sale_price - v.purchase_price - totalExp : null
       const profitPct = v.sale_price && v.sale_price > 0 ? (profit! / v.sale_price) * 100 : null
-      return { ...v, totalExp, profit, profitPct }
-    }
+      return { ...v, expenses: undefined, totalExp, profit, profitPct }
+    })
 
-    const availableEnriched = available.map(enrich)
-    const soldEnriched = sold.map(enrich).sort((a, b) => (b.days_in_stock ?? 0) - (a.days_in_stock ?? 0))
-
-    // Summary stats
-    const totalRevenue = soldEnriched.reduce((s, v) => s + (v.sale_price ?? 0), 0)
-    const totalProfit = soldEnriched.reduce((s, v) => s + (v.profit ?? 0), 0)
-    const totalExpenses = expenseList.reduce((s, e) => s + (e.amount ?? 0), 0)
+    const expenseList = expenses ?? []
+    const totalRevenue = sold.reduce((s: number, v: any) => s + (v.sale_price ?? 0), 0)
+    const totalProfit  = sold.reduce((s: number, v: any) => s + (v.profit ?? 0), 0)
+    const totalExpenses = expenseList.reduce((s: number, e: any) => s + (e.amount ?? 0), 0)
     const avgDaysAvailable = available.length
-      ? Math.round(available.reduce((s, v) => s + (v.days_in_stock ?? 0), 0) / available.length)
-      : 0
+      ? Math.round(available.reduce((s: number, v: any) => s + (v.days_in_stock ?? 0), 0) / available.length) : 0
     const avgDaysSold = sold.length
-      ? Math.round(sold.reduce((s, v) => s + (v.days_in_stock ?? 0), 0) / sold.length)
-      : 0
+      ? Math.round(sold.reduce((s: number, v: any) => s + (v.days_in_stock ?? 0), 0) / sold.length) : 0
 
-    // Expense breakdown by category
     const expByCategory: Record<string, number> = {}
-    expenseList.forEach(e => {
+    expenseList.forEach((e: any) => {
       const cat = e.category ?? 'Outros'
       expByCategory[cat] = (expByCategory[cat] ?? 0) + (e.amount ?? 0)
     })
 
-    // Commission summary per employee
     const commissionList = commissions ?? []
-    const totalCommissionsPaid = commissionList.filter(c => c.is_paid).reduce((s, c) => s + (c.amount ?? 0), 0)
-    const totalCommissionsPending = commissionList.filter(c => !c.is_paid).reduce((s, c) => s + (c.amount ?? 0), 0)
+    const totalCommissionsPaid    = commissionList.filter((c: any) => c.is_paid).reduce((s: number, c: any) => s + (c.amount ?? 0), 0)
+    const totalCommissionsPending = commissionList.filter((c: any) => !c.is_paid).reduce((s: number, c: any) => s + (c.amount ?? 0), 0)
 
     const context = {
       dealershipId: D,
       dealershipName: dealership?.name ?? 'Revenda',
       dealershipCity: dealership?.city,
       summary: {
-        totalVehicles: vehicles.length,
+        totalVehicles: available.length + sold.length,
         availableCount: available.length,
         soldCount: sold.length,
-        criticalCount: available.filter(v => (v.days_in_stock ?? 0) > 60).length,
+        criticalCount: available.filter((v: any) => (v.days_in_stock ?? 0) > 90).length,
         avgDaysAvailable,
         avgDaysSold,
         totalRevenue,
         totalProfit,
         totalExpenses,
         totalCustomers: customers?.length ?? 0,
-        activeEmployees: employees?.filter(e => e.is_active).length ?? 0,
-        pendingOrders: orders?.filter(o => o.status === 'open').length ?? 0,
+        activeEmployees: employees?.filter((e: any) => e.is_active).length ?? 0,
+        pendingOrders: orders?.filter((o: any) => o.status === 'open').length ?? 0,
         totalCommissionsPaid,
         totalCommissionsPending,
       },
-      availableVehicles: availableEnriched,
-      soldVehicles: soldEnriched,
+      availableVehicles: available,
+      soldVehicles: sold,
       expensesByCategory: expByCategory,
       financings: financings ?? [],
       fines: vehicleFines ?? [],

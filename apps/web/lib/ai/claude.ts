@@ -166,6 +166,31 @@ const FIPE_TOOLS: Anthropic.Tool[] = [
   },
 ]
 
+// ─── Vehicle query tool ────────────────────────────────────────────────────────
+
+const QUERY_VEHICLES_TOOL: Anthropic.Tool = {
+  name: 'query_vehicles',
+  description: `Busca veículos do banco de dados com filtros. Use esta ferramenta sempre que precisar de dados detalhados de veículos para responder perguntas — vendas por período, agrupamentos por marca/ano/faixa, ranking de margem, estoque parado, etc. Não tente responder com dados do sistema — sempre use esta ferramenta para dados precisos e completos.`,
+  input_schema: {
+    type: 'object' as const,
+    properties: {
+      status:        { type: 'string', enum: ['available', 'sold'], description: 'Filtrar por status. Omita para ambos.' },
+      brand:         { type: 'string', description: 'Filtrar por marca (busca parcial)' },
+      model:         { type: 'string', description: 'Filtrar por modelo (busca parcial)' },
+      year_fab_gte:  { type: 'number', description: 'Ano de fabricação mínimo' },
+      year_fab_lte:  { type: 'number', description: 'Ano de fabricação máximo' },
+      sale_date_gte: { type: 'string', description: 'Data de venda mínima (YYYY-MM-DD)' },
+      sale_date_lte: { type: 'string', description: 'Data de venda máxima (YYYY-MM-DD)' },
+      days_gte:      { type: 'number', description: 'Dias em estoque mínimo' },
+      days_lte:      { type: 'number', description: 'Dias em estoque máximo' },
+      order_by:      { type: 'string', description: 'Campo para ordenar (days_in_stock, sale_date, sale_price, purchase_price). Padrão: days_in_stock' },
+      ascending:     { type: 'boolean', description: 'Crescente? Padrão: false' },
+      limit:         { type: 'number', description: 'Máximo de registros (padrão 200, máx 500)' },
+    },
+    required: [],
+  },
+}
+
 // ─── Dashboard render tool ─────────────────────────────────────────────────────
 
 const DASHBOARD_TOOL: Anthropic.Tool = {
@@ -407,6 +432,37 @@ async function executeTool(name: string, input: Record<string, any>, dealershipI
         break
       }
 
+      // ── Vehicle query tool ───────────────────────────────────────────────
+      case 'query_vehicles': {
+        let query = svc()
+          .from('vehicles')
+          .select('id, brand, model, version, year_fab, year_model, plate, purchase_price, sale_price, days_in_stock, status, sale_date, purchase_date, source, supplier_name, expenses:expenses(amount)')
+          .eq('dealership_id', dealershipId)
+
+        if (input.status)       query = query.eq('status', input.status)
+        if (input.brand)        query = query.ilike('brand', `%${input.brand}%`)
+        if (input.model)        query = query.ilike('model', `%${input.model}%`)
+        if (input.year_fab_gte) query = query.gte('year_fab', input.year_fab_gte)
+        if (input.year_fab_lte) query = query.lte('year_fab', input.year_fab_lte)
+        if (input.sale_date_gte) query = query.gte('sale_date', input.sale_date_gte)
+        if (input.sale_date_lte) query = query.lte('sale_date', input.sale_date_lte)
+        if (input.days_gte)     query = query.gte('days_in_stock', input.days_gte)
+        if (input.days_lte)     query = query.lte('days_in_stock', input.days_lte)
+
+        const limit = Math.min(input.limit ?? 200, 500)
+        const { data, error } = await query.order(input.order_by ?? 'days_in_stock', { ascending: input.ascending ?? false }).limit(limit)
+        if (error) { result = { error: error.message }; break }
+
+        const vehicles = (data ?? []).map((v: any) => {
+          const totalExp = (v.expenses ?? []).reduce((s: number, e: any) => s + (e.amount ?? 0), 0)
+          const profit = v.sale_price ? v.sale_price - v.purchase_price - totalExp : null
+          const marginPct = v.sale_price && v.sale_price > 0 ? ((profit ?? 0) / v.sale_price) * 100 : null
+          return { ...v, expenses: undefined, totalExpenses: totalExp, profit, marginPct: marginPct != null ? +marginPct.toFixed(1) : null }
+        })
+        result = { total: vehicles.length, vehicles }
+        break
+      }
+
       default:
         result = { error: `Ferramenta desconhecida: ${name}` }
     }
@@ -436,6 +492,7 @@ function buildSystemPrompt(ctx: FullDealershipContext): string {
   lines.push(``)
   lines.push(`Você também tem acesso via ferramentas (tools) a:`)
   lines.push(`- **render_dashboard** — renderiza dashboard visual com KPIs e gráficos no chat (use SEMPRE para dados quantitativos)`)
+  lines.push(`- **query_vehicles** — busca veículos no banco com filtros (status, marca, modelo, ano, data de venda, etc). Use SEMPRE que precisar de dados detalhados de veículos — relatórios, agrupamentos, rankings, vendas por período, etc.`)
   lines.push(`- **Tabela FIPE em tempo real** — use sempre que precisar do valor de mercado de um veículo`)
   lines.push(`- **Agenda e agendamentos** — consulte horários disponíveis, liste agendamentos, crie e atualize visitas/test drives`)
 
@@ -458,33 +515,25 @@ function buildSystemPrompt(ctx: FullDealershipContext): string {
   lines.push(`- Comissões pagas: R$ ${brl(s.totalCommissionsPaid)} | Comissões a pagar: R$ ${brl(s.totalCommissionsPending)}`)
   lines.push(`- Clientes: ${s.totalCustomers} | Funcionários ativos: ${s.activeEmployees} | Pedidos em aberto: ${s.pendingOrders}`)
 
-  if (ctx.soldVehicles.length > 0) {
-    lines.push(`\n## Veículos Vendidos (${ctx.soldVehicles.length}) — por tempo até venda`)
-    lines.push(`| # | Veículo | Placa | Ano | Compra | Venda | Despesas | Lucro | Margem | Dias |`)
-    lines.push(`|---|---------|-------|-----|--------|-------|----------|-------|--------|------|`)
-    ctx.soldVehicles.forEach((v, i) => {
-      const label = `${v.brand} ${v.model}${v.version ? ' ' + v.version : ''}`
-      lines.push(
-        `| ${i + 1} | ${label} | ${v.plate ?? '—'} | ${v.year_model ?? v.year_fab} ` +
-        `| R$ ${brl(v.purchase_price)} | R$ ${brl(v.sale_price ?? 0)} ` +
-        `| R$ ${brl(v.totalExp)} | R$ ${brl(v.profit ?? 0)} ` +
-        `| ${v.profitPct != null ? pct(v.profitPct) : '—'} | ${v.days_in_stock ?? '—'}d |`
-      )
+  // Show only top-10 worst-aged available vehicles as a quick reference.
+  // For full vehicle data (reports, rankings, groupings) use the query_vehicles tool.
+  if (ctx.availableVehicles.length > 0) {
+    const critical = ctx.availableVehicles.filter(v => (v.days_in_stock ?? 0) > 90).length
+    const attention = ctx.availableVehicles.filter(v => (v.days_in_stock ?? 0) > 45 && (v.days_in_stock ?? 0) <= 90).length
+    lines.push(`\n## Estoque Atual (${ctx.availableVehicles.length} veículos) — use query_vehicles para dados completos`)
+    lines.push(`Situação: 🔴 ${critical} críticos (>90d) | 🟡 ${attention} em atenção (46-90d) | 🟢 ${ctx.availableVehicles.length - critical - attention} OK`)
+    lines.push(`Top 10 mais parados:`)
+    ctx.availableVehicles.slice(0, 10).forEach(v => {
+      const status = (v.days_in_stock ?? 0) > 90 ? '🔴' : (v.days_in_stock ?? 0) > 45 ? '🟡' : '🟢'
+      lines.push(`${status} ${v.brand} ${v.model} ${v.year_model ?? v.year_fab} | ${v.plate ?? '—'} | ${v.days_in_stock ?? '—'}d | R$ ${brl(v.sale_price ?? v.purchase_price)}`)
     })
   }
 
-  if (ctx.availableVehicles.length > 0) {
-    lines.push(`\n## Veículos em Estoque (${ctx.availableVehicles.length}) — por dias parado`)
-    lines.push(`| # | Veículo | Placa | Ano | Compra | Venda | Despesas | Dias | Status |`)
-    lines.push(`|---|---------|-------|-----|--------|-------|----------|------|--------|`)
-    ctx.availableVehicles.forEach((v, i) => {
-      const label = `${v.brand} ${v.model}${v.version ? ' ' + v.version : ''}`
-      const status = (v.days_in_stock ?? 0) > 90 ? '🔴 CRÍTICO' : (v.days_in_stock ?? 0) > 45 ? '🟡 ATENÇÃO' : '🟢 OK'
-      lines.push(
-        `| ${i + 1} | ${label} | ${v.plate ?? '—'} | ${v.year_model ?? v.year_fab} ` +
-        `| R$ ${brl(v.purchase_price)} | R$ ${brl(v.sale_price ?? 0)} ` +
-        `| R$ ${brl(v.totalExp)} | ${v.days_in_stock ?? '—'}d | ${status} |`
-      )
+  if (ctx.soldVehicles.length > 0) {
+    lines.push(`\n## Vendidos Recentes (${ctx.soldVehicles.length} nos últimos 180 dias) — use query_vehicles para relatórios completos`)
+    lines.push(`Top 5 mais recentes:`)
+    ctx.soldVehicles.slice(0, 5).forEach(v => {
+      lines.push(`${v.brand} ${v.model} ${v.year_model ?? v.year_fab} | vendido ${v.sale_date ?? '—'} | lucro R$ ${brl(v.profit ?? 0)} (${v.profitPct != null ? pct(v.profitPct) : '—'})`)
     })
   }
 
@@ -850,7 +899,7 @@ export async function chatWithClaude(
     content: m.content,
   }))
 
-  const ALL_TOOLS = [DASHBOARD_TOOL, ...FIPE_TOOLS, ...CALENDAR_TOOLS]
+  const ALL_TOOLS = [DASHBOARD_TOOL, QUERY_VEHICLES_TOOL, ...FIPE_TOOLS, ...CALENDAR_TOOLS]
 
   let capturedDashboard: DashboardConfig | undefined
 
