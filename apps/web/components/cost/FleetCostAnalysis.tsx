@@ -473,7 +473,7 @@ export function FleetCostAnalysis({ vehicles, onEditCosts }: FleetCostAnalysisPr
               <SelectContent>
                 <SelectItem value="all">Todos Status</SelectItem>
                 <SelectItem value="available">Disponível</SelectItem>
-                <SelectItem value="reserved">Reservado</SelectItem>
+                <SelectItem value="returned">Devolvido</SelectItem>
                 <SelectItem value="sold">Vendido</SelectItem>
               </SelectContent>
             </Select>
@@ -648,7 +648,7 @@ function KpiCard({
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; variant: 'success' | 'warning' | 'secondary' | 'default' }> = {
     available: { label: 'Disponível', variant: 'success' },
-    reserved: { label: 'Reservado', variant: 'warning' },
+    returned: { label: 'Devolvido', variant: 'warning' },
     sold: { label: 'Vendido', variant: 'secondary' },
     consigned: { label: 'Consignado', variant: 'default' },
   }

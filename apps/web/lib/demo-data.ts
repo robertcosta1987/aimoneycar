@@ -18,7 +18,7 @@ export interface Vehicle {
   salePrice: number;
   soldPrice?: number;
   soldDate?: string;
-  status: 'available' | 'reserved' | 'sold';
+  status: 'available' | 'returned' | 'sold';
   daysInStock: number;
   expenses: VehicleExpense[];
   totalExpenses: number;
@@ -39,7 +39,7 @@ export interface VehicleExpense {
 export interface DashboardStats {
   totalVehicles: number;
   availableVehicles: number;
-  reservedVehicles: number;
+  returnedVehicles: number;
   soldThisMonth: number;
   totalInventoryValue: number;
   averageMargin: number;
@@ -140,7 +140,7 @@ export const vehicles: Vehicle[] = [
     purchasePrice: 55000,
     purchaseDate: '2026-02-20',
     salePrice: 64900,
-    status: 'reserved',
+    status: 'returned',
     daysInStock: 35,
     expenses: [
       { id: 'e9', category: 'Despachante', description: 'Transferência', value: 450, date: '2026-02-21', vendor: 'Brisamar Despachante' },
@@ -330,7 +330,7 @@ export const vehicles: Vehicle[] = [
     purchasePrice: 165000,
     purchaseDate: '2026-03-01',
     salePrice: 189900,
-    status: 'reserved',
+    status: 'returned',
     daysInStock: 25,
     expenses: [
       { id: 'e29', category: 'Despachante', description: 'Transferência', value: 650, date: '2026-03-02', vendor: 'Brisamar Despachante' },
@@ -405,7 +405,7 @@ export const vehicles: Vehicle[] = [
 // Calculate dashboard stats
 export function getDashboardStats(): DashboardStats {
   const availableVehicles = vehicles.filter((v) => v.status === 'available');
-  const reservedVehicles = vehicles.filter((v) => v.status === 'reserved');
+  const returnedVehicles = vehicles.filter((v) => v.status === 'reserved');
   const soldVehicles = vehicles.filter((v) => v.status === 'sold');
 
   // Calculate totals
@@ -430,7 +430,7 @@ export function getDashboardStats(): DashboardStats {
   return {
     totalVehicles: vehicles.length,
     availableVehicles: availableVehicles.length,
-    reservedVehicles: reservedVehicles.length,
+    returnedVehicles: returnedVehicles.length,
     soldThisMonth: soldVehicles.length,
     totalInventoryValue,
     averageMargin,

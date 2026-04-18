@@ -111,7 +111,7 @@ export interface Vehicle {
   sale_price: number | null
   fipe_price: number | null
   min_price: number | null
-  status: 'available' | 'reserved' | 'sold' | 'consigned'
+  status: 'available' | 'returned' | 'sold' | 'consigned'
   purchase_date: string
   sale_date: string | null
   days_in_stock: number
@@ -237,4 +237,4 @@ export interface ExpenseSummary {
 
 export type AlertType = 'critical' | 'warning' | 'info' | 'success'
 
-export type VehicleStatus = 'available' | 'reserved' | 'sold' | 'consigned'
+export type VehicleStatus = 'available' | 'returned' | 'sold' | 'consigned'

@@ -136,7 +136,7 @@ export function calculateDataQualityScore(vehicle: VehicleForCost): DataQualityS
   }
 
   if (
-    (vehicle.status === 'available' || vehicle.status === 'reserved') &&
+    (vehicle.status === 'available' || vehicle.status === 'returned') &&
     (!vehicle.sale_price || vehicle.sale_price === 0)
   ) {
     const deduction = 20

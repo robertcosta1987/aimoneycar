@@ -91,7 +91,7 @@ export default function CustosPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="available">Disponível</SelectItem>
-            <SelectItem value="reserved">Reservado</SelectItem>
+            <SelectItem value="returned">Devolvido</SelectItem>
             <SelectItem value="sold">Vendido</SelectItem>
             <SelectItem value="all">Todos</SelectItem>
           </SelectContent>

@@ -204,8 +204,8 @@ describe('calculateProfitPerDay', () => {
     expect(calculateProfitPerDay(v)).toBeNull()
   })
 
-  it('returns null for reserved vehicle', () => {
-    const v = makeVehicle({ status: 'reserved' })
+  it('returns null for returned vehicle', () => {
+    const v = makeVehicle({ status: 'returned' })
     expect(calculateProfitPerDay(v)).toBeNull()
   })
 

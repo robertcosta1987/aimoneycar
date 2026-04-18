@@ -41,7 +41,7 @@
 | `created_at` | Data de Cadastro | "quando foi cadastrado no sistema?" |
 | `updated_at` | Última Atualização | "quando foi a última alteração?" |
 
-**Valores do campo `status`:** `available` (disponível), `reserved` (reservado), `sold` (vendido), `consigned` (consignado)
+**Valores do campo `status`:** `available` (disponível), `returned` (devolvido), `sold` (vendido), `consigned` (consignado)
 **Valores do campo `source`:** `COMPRA`, `TROCA`, `CONSIGNAÇÃO`
 **Valores do campo `fuel`:** `FLEX`, `GASOLINA`, `DIESEL`, `ELÉTRICO`, `HÍBRIDO`
 **Valores do campo `transmission`:** `MANUAL`, `AUTOMÁTICO`, `CVT`
