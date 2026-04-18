@@ -221,7 +221,7 @@ export default function RelatoriosPage() {
   const opportunityProfit = capitalImobilizado * avgFastMargin * Math.max(cyclesLost, 1)
 
   // CDI income if capital had been in savings (100% CDI) for avgDaysCritical days
-  const selicIncome = capitalImobilizado * SELIC_ANNUAL * (avgDaysCritical / 365)
+  const selicIncome = capitalImobilizado * SELIC_ANNUAL * (90 / 365)
 
   // ── Despesas ─────────────────────────────────────────────────────────────────
   const expTotal      = expenses.reduce((s, e) => s + e.amount, 0)
@@ -547,7 +547,7 @@ export default function RelatoriosPage() {
                     </div>
                     <p className="text-2xl font-black text-primary">{formatCurrency(selicIncome)}</p>
                     <p className="text-xs text-foreground-muted mt-1.5 leading-snug">
-                      Se aplicado à taxa SELIC de 15% a.a. por {avgDaysCritical} dias.
+                      Se aplicado à taxa SELIC de 15% a.a. por 90 dias.
                     </p>
                   </CardContent>
                 </Card>
