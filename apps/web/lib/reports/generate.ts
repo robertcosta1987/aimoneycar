@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { SupabaseClient } from '@supabase/supabase-js'
 import { ReportType, ReportPayload } from '@/types/reports'
+import { getCache, setCache } from '@/lib/ai/cache'
 
 function getAI() { return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! }) }
 
@@ -214,24 +215,33 @@ export async function generateReport(
     }
   }
 
-  // AI Insights
+  // AI Insights — cache per (dealership, report type, period) for 5 hours
+  const insightsCacheKey = `ai-insights:${tipo}:${periodo_dias}`
   try {
-    const msg = await callWithRetry(() => getAI().messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 400,
-      messages: [{
-        role: 'user',
-        content: `Você é um analista de negócios para revendas de veículos brasileiras.
+    const cachedInsights = await getCache<string[]>(supabase, dealership_id, insightsCacheKey)
+    if (cachedInsights) {
+      insights = cachedInsights
+    } else {
+      const msg = await callWithRetry(() => getAI().messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 400,
+        messages: [{
+          role: 'user',
+          content: `Você é um analista de negócios para revendas de veículos brasileiras.
 Analise os dados abaixo do relatório "${tipo}" e gere exatamente 3 insights acionáveis em português (pt-BR).
 Cada insight deve ser uma frase direta com recomendação. Responda SOMENTE com um JSON array de 3 strings.
 
 Dados: ${JSON.stringify(rawData)}`,
-      }],
-    }))
+        }],
+      }))
 
-    const text = (msg.content[0] as { text: string }).text.trim()
-    const match = text.match(/\[[\s\S]*\]/)
-    if (match) insights = JSON.parse(match[0])
+      const text = (msg.content[0] as { text: string }).text.trim()
+      const match = text.match(/\[[\s\S]*\]/)
+      if (match) {
+        insights = JSON.parse(match[0])
+        await setCache(supabase, dealership_id, insightsCacheKey, insights, 5)
+      }
+    }
   } catch {
     insights = ['Importe mais dados para gerar insights personalizados.']
   }

@@ -7,8 +7,12 @@
 import { NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import Anthropic from '@anthropic-ai/sdk'
+import { getCache, setCache } from '@/lib/ai/cache'
 
 export const dynamic = 'force-dynamic'
+
+const CACHE_KEY = 'top-models'
+const CACHE_TTL_HOURS = 24
 
 export async function GET() {
   try {
@@ -20,6 +24,12 @@ export async function GET() {
     const { data: profile } = await svc
       .from('users').select('dealership_id').eq('id', user.id).single()
     if (!profile?.dealership_id) return NextResponse.json({ error: 'No dealership' }, { status: 400 })
+
+    // ── Cache check ──────────────────────────────────────────────────────────
+    const cached = await getCache<{ models: { model: string; count: number }[] }>(
+      svc, profile.dealership_id, CACHE_KEY,
+    )
+    if (cached) return NextResponse.json(cached)
 
     const oneYearAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
@@ -72,8 +82,12 @@ ${lines}`,
     if (!match) return NextResponse.json({ models: [] })
 
     const models = JSON.parse(match[0]) as { model: string; count: number }[]
+    const payload = { models: models.slice(0, 10) }
 
-    return NextResponse.json({ models: models.slice(0, 10) })
+    // ── Store in cache ───────────────────────────────────────────────────────
+    await setCache(svc, profile.dealership_id, CACHE_KEY, payload, CACHE_TTL_HOURS)
+
+    return NextResponse.json(payload)
   } catch (err: any) {
     console.error('[top-models]', err)
     return NextResponse.json({ error: err?.message ?? 'Erro desconhecido' }, { status: 500 })
