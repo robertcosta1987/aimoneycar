@@ -170,11 +170,15 @@ const FIPE_TOOLS: Anthropic.Tool[] = [
 
 const QUERY_VEHICLES_TOOL: Anthropic.Tool = {
   name: 'query_vehicles',
-  description: `Busca veículos do banco de dados com filtros. Use esta ferramenta sempre que precisar de dados detalhados de veículos para responder perguntas — vendas por período, agrupamentos por marca/ano/faixa, ranking de margem, estoque parado, etc. Não tente responder com dados do sistema — sempre use esta ferramenta para dados precisos e completos.`,
+  description: `Busca e agrega dados de veículos do banco. Use SEMPRE para relatórios, rankings ou qualquer dado de veículos.
+
+IMPORTANTE: Para relatórios/agrupamentos, SEMPRE use o parâmetro group_by — isso retorna dados agregados compactos (poucos tokens). Sem group_by, retorna no máximo 30 registros individuais.
+
+group_by aceita: "year_fab_range" (com group_range=5 para intervalos de 5 anos), "brand", "model", "sale_month", "source".`,
   input_schema: {
     type: 'object' as const,
     properties: {
-      status:        { type: 'string', enum: ['available', 'sold'], description: 'Filtrar por status. Omita para ambos.' },
+      status:        { type: 'string', enum: ['available', 'sold'], description: 'Filtrar por status.' },
       brand:         { type: 'string', description: 'Filtrar por marca (busca parcial)' },
       model:         { type: 'string', description: 'Filtrar por modelo (busca parcial)' },
       year_fab_gte:  { type: 'number', description: 'Ano de fabricação mínimo' },
@@ -183,9 +187,11 @@ const QUERY_VEHICLES_TOOL: Anthropic.Tool = {
       sale_date_lte: { type: 'string', description: 'Data de venda máxima (YYYY-MM-DD)' },
       days_gte:      { type: 'number', description: 'Dias em estoque mínimo' },
       days_lte:      { type: 'number', description: 'Dias em estoque máximo' },
-      order_by:      { type: 'string', description: 'Campo para ordenar (days_in_stock, sale_date, sale_price, purchase_price). Padrão: days_in_stock' },
+      group_by:      { type: 'string', enum: ['year_fab_range', 'brand', 'model', 'sale_month', 'source'], description: 'Agrupar e agregar resultado. Preferir sempre para relatórios.' },
+      group_range:   { type: 'number', description: 'Tamanho do intervalo para year_fab_range (ex: 5 para faixas de 5 anos). Padrão: 5.' },
+      order_by:      { type: 'string', description: 'Campo para ordenar sem group_by (days_in_stock, sale_date, sale_price). Padrão: days_in_stock' },
       ascending:     { type: 'boolean', description: 'Crescente? Padrão: false' },
-      limit:         { type: 'number', description: 'Máximo de registros (padrão 200, máx 500)' },
+      limit:         { type: 'number', description: 'Máximo de registros individuais sem group_by (padrão 30, máx 100)' },
     },
     required: [],
   },
@@ -436,30 +442,83 @@ async function executeTool(name: string, input: Record<string, any>, dealershipI
       case 'query_vehicles': {
         let query = svc()
           .from('vehicles')
-          .select('id, brand, model, version, year_fab, year_model, plate, purchase_price, sale_price, days_in_stock, status, sale_date, purchase_date, source, supplier_name, expenses:expenses(amount)')
+          .select('brand, model, year_fab, year_model, purchase_price, sale_price, days_in_stock, status, sale_date, source, expenses:expenses(amount)')
           .eq('dealership_id', dealershipId)
 
-        if (input.status)       query = query.eq('status', input.status)
-        if (input.brand)        query = query.ilike('brand', `%${input.brand}%`)
-        if (input.model)        query = query.ilike('model', `%${input.model}%`)
-        if (input.year_fab_gte) query = query.gte('year_fab', input.year_fab_gte)
-        if (input.year_fab_lte) query = query.lte('year_fab', input.year_fab_lte)
+        if (input.status)        query = query.eq('status', input.status)
+        if (input.brand)         query = query.ilike('brand', `%${input.brand}%`)
+        if (input.model)         query = query.ilike('model', `%${input.model}%`)
+        if (input.year_fab_gte)  query = query.gte('year_fab', input.year_fab_gte)
+        if (input.year_fab_lte)  query = query.lte('year_fab', input.year_fab_lte)
         if (input.sale_date_gte) query = query.gte('sale_date', input.sale_date_gte)
         if (input.sale_date_lte) query = query.lte('sale_date', input.sale_date_lte)
-        if (input.days_gte)     query = query.gte('days_in_stock', input.days_gte)
-        if (input.days_lte)     query = query.lte('days_in_stock', input.days_lte)
+        if (input.days_gte)      query = query.gte('days_in_stock', input.days_gte)
+        if (input.days_lte)      query = query.lte('days_in_stock', input.days_lte)
 
-        const limit = Math.min(input.limit ?? 200, 500)
-        const { data, error } = await query.order(input.order_by ?? 'days_in_stock', { ascending: input.ascending ?? false }).limit(limit)
+        // For aggregation fetch all (up to 2000); for raw records cap at 30
+        const fetchLimit = input.group_by ? 2000 : Math.min(input.limit ?? 30, 100)
+        const { data, error } = await query
+          .order(input.order_by ?? 'days_in_stock', { ascending: input.ascending ?? false })
+          .limit(fetchLimit)
         if (error) { result = { error: error.message }; break }
 
-        const vehicles = (data ?? []).map((v: any) => {
+        const enriched = (data ?? []).map((v: any) => {
           const totalExp = (v.expenses ?? []).reduce((s: number, e: any) => s + (e.amount ?? 0), 0)
-          const profit = v.sale_price ? v.sale_price - v.purchase_price - totalExp : null
-          const marginPct = v.sale_price && v.sale_price > 0 ? ((profit ?? 0) / v.sale_price) * 100 : null
-          return { ...v, expenses: undefined, totalExpenses: totalExp, profit, marginPct: marginPct != null ? +marginPct.toFixed(1) : null }
+          const profit = v.sale_price != null ? v.sale_price - v.purchase_price - totalExp : null
+          const marginPct = v.sale_price && v.sale_price > 0 ? (profit ?? 0) / v.sale_price * 100 : null
+          return { ...v, expenses: undefined, totalExp, profit, marginPct }
         })
-        result = { total: vehicles.length, vehicles }
+
+        if (input.group_by) {
+          // Server-side aggregation — returns compact summary, not raw rows
+          const groups: Record<string, { count: number; revenue: number; profit: number; totalDays: number }> = {}
+          const rangeSize = input.group_range ?? 5
+
+          enriched.forEach((v: any) => {
+            let key: string
+            if (input.group_by === 'year_fab_range') {
+              const yr = v.year_fab ?? 0
+              const start = Math.floor(yr / rangeSize) * rangeSize
+              key = `${start}–${start + rangeSize - 1}`
+            } else if (input.group_by === 'sale_month') {
+              key = v.sale_date ? v.sale_date.slice(0, 7) : 'sem data'
+            } else {
+              key = (v[input.group_by as keyof typeof v] ?? 'Outros') as string
+            }
+            if (!groups[key]) groups[key] = { count: 0, revenue: 0, profit: 0, totalDays: 0 }
+            groups[key].count++
+            groups[key].revenue += v.sale_price ?? 0
+            groups[key].profit  += v.profit ?? 0
+            groups[key].totalDays += v.days_in_stock ?? 0
+          })
+
+          result = {
+            total: enriched.length,
+            group_by: input.group_by,
+            groups: Object.entries(groups)
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([key, g]) => ({
+                group: key,
+                count: g.count,
+                revenue: Math.round(g.revenue),
+                profit: Math.round(g.profit),
+                avg_margin_pct: g.revenue > 0 ? +((g.profit / g.revenue) * 100).toFixed(1) : 0,
+                avg_days: g.count > 0 ? Math.round(g.totalDays / g.count) : 0,
+              })),
+          }
+        } else {
+          // Raw records — already limited to 30-100
+          result = {
+            total: enriched.length,
+            vehicles: enriched.map((v: any) => ({
+              brand: v.brand, model: v.model, year_fab: v.year_fab,
+              purchase_price: v.purchase_price, sale_price: v.sale_price,
+              profit: v.profit != null ? Math.round(v.profit) : null,
+              margin_pct: v.marginPct != null ? +v.marginPct.toFixed(1) : null,
+              days_in_stock: v.days_in_stock, sale_date: v.sale_date, status: v.status,
+            })),
+          }
+        }
         break
       }
 
