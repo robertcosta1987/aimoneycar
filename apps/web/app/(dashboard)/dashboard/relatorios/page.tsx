@@ -231,8 +231,8 @@ export default function RelatoriosPage() {
     const map: Record<string, { brand: string; model: string; count: number; totalDays: number; totalProfit: number; totalRevenue: number }> = {}
     salesLast90.forEach((v: any) => {
       if (!v.brand || !v.model) return
-      const days = Number(v.days_in_stock)
-      if (!isFinite(days) || days <= 0) return
+      const days = Math.floor(Number(v.days_in_stock))
+      if (!Number.isFinite(days) || days <= 0) return
       const desc = (v.description ?? '').toUpperCase()
       const brand = (v.brand ?? '').toUpperCase()
       const model = (v.model ?? '').toUpperCase()
@@ -240,15 +240,15 @@ export default function RelatoriosPage() {
       const key = `${v.brand}|${v.model}`
       if (!map[key]) map[key] = { brand: v.brand, model: v.model, count: 0, totalDays: 0, totalProfit: 0, totalRevenue: 0 }
       map[key].count++
-      map[key].totalDays += days
+      map[key].totalDays += days  // days is guaranteed > 0 here
       map[key].totalRevenue += v.sale_price ?? 0
       map[key].totalProfit += v.sale_price != null ? (v.sale_price - (v.purchase_price ?? 0)) : 0
     })
     return Object.values(map)
-      .filter(g => g.count >= 2)
+      .filter(g => g.count >= 2 && g.totalDays > 0)
       .map(g => ({
         ...g,
-        avgDays: Math.round(g.totalDays / g.count),
+        avgDays: Math.max(1, Math.round(g.totalDays / g.count)),
         avgMargin: g.totalRevenue > 0 ? (g.totalProfit / g.totalRevenue) * 100 : 0,
       }))
       .filter(g => g.avgDays > 0)
@@ -683,7 +683,7 @@ export default function RelatoriosPage() {
                         <div className="flex items-center gap-4 flex-shrink-0 ml-3">
                           <div className="text-right">
                             <p className="text-[10px] text-foreground-muted leading-none mb-0.5">Dias médio</p>
-                            <p className={`text-sm font-bold ${fastMoverSort === 'avgDays' ? 'text-success' : 'text-foreground'}`}>{m.avgDays}d</p>
+                            <p className={`text-sm font-bold ${fastMoverSort === 'avgDays' ? 'text-success' : 'text-foreground'}`}>{m.avgDays > 0 ? `${m.avgDays}d` : '—'}</p>
                           </div>
                           <div className="text-right">
                             <p className="text-[10px] text-foreground-muted leading-none mb-0.5">Margem</p>
