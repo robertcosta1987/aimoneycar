@@ -3,7 +3,7 @@ import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { chatWithClaude } from '@/lib/ai/claude'
 import type { ChatMessage } from '@/types'
 export const dynamic = 'force-dynamic'
-export const maxDuration = 60
+export const maxDuration = 120
 
 export async function POST(req: NextRequest) {
   try {
@@ -33,11 +33,6 @@ export async function POST(req: NextRequest) {
       { data: commissionStandards },
       { data: employeeSalaries },
       { data: saleData },
-      { data: purchaseData },
-      { data: vendors },
-      { data: vehicleTrades },
-      { data: vehiclePendencies },
-      { data: postSaleExpenses },
     ] = await Promise.all([
       svc.from('dealerships').select('name, city, state').eq('id', D).single(),
 
@@ -113,48 +108,14 @@ export async function POST(req: NextRequest) {
         .select('id, employee_external_id, employee_id, date, amount, type, description')
         .eq('dealership_id', D)
         .order('date', { ascending: false })
-        .limit(300),
+        .limit(100),
 
-      // Sale data — detailed sale records per vehicle (includes salesperson if tbDadosVenda had vVendedorID)
+      // Sale data — detailed sale records per vehicle
       svc.from('sale_data')
         .select('id, vehicle_external_id, vehicle_id, sale_date, mileage, sale_price, customer_external_id, customer_id, employee_external_id, employee_id, payment_method, notes')
         .eq('dealership_id', D)
         .order('sale_date', { ascending: false })
-        .limit(300),
-
-      // Purchase data — detailed purchase records per vehicle
-      svc.from('purchase_data')
-        .select('id, vehicle_external_id, vehicle_id, purchase_date, mileage, purchase_price, supplier_external_id, supplier_id, supplier_name, payment_method, notes')
-        .eq('dealership_id', D)
-        .order('purchase_date', { ascending: false })
-        .limit(300),
-
-      // Vendors — service providers and suppliers
-      svc.from('vendors')
-        .select('id, external_id, name, category, phone, city, state')
-        .eq('dealership_id', D)
-        .limit(200),
-
-      // Vehicle trades — trade-in deals
-      svc.from('vehicle_trades')
-        .select('id, external_id, incoming_vehicle_external_id, incoming_vehicle_id, outgoing_vehicle_external_id, outgoing_vehicle_id, customer_external_id, customer_id, trade_date, trade_in_value, difference_amount, notes')
-        .eq('dealership_id', D)
-        .order('trade_date', { ascending: false })
-        .limit(200),
-
-      // Vehicle pendencies — pending work items per vehicle
-      svc.from('vehicle_pendencies')
-        .select('id, external_id, vehicle_external_id, vehicle_id, description, status, date, amount, resolved_date')
-        .eq('dealership_id', D)
-        .order('date', { ascending: false })
-        .limit(300),
-
-      // Post-sale expenses — costs after a vehicle is sold
-      svc.from('post_sale_expenses')
-        .select('id, external_id, vehicle_external_id, vehicle_id, description, amount, date')
-        .eq('dealership_id', D)
-        .order('date', { ascending: false })
-        .limit(200),
+        .limit(100),
     ])
 
     const vehicles = allVehicles ?? []
@@ -232,11 +193,11 @@ export async function POST(req: NextRequest) {
       commissionStandards: commissionStandards ?? [],
       employeeSalaries: employeeSalaries ?? [],
       saleData: saleData ?? [],
-      purchaseData: purchaseData ?? [],
-      vendors: vendors ?? [],
-      vehicleTrades: vehicleTrades ?? [],
-      vehiclePendencies: vehiclePendencies ?? [],
-      postSaleExpenses: postSaleExpenses ?? [],
+      purchaseData: [],
+      vendors: [],
+      vehicleTrades: [],
+      vehiclePendencies: [],
+      postSaleExpenses: [],
     }
 
     const { reply, dashboard } = await chatWithClaude(body.messages, context)
