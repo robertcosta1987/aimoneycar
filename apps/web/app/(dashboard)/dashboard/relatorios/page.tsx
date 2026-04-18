@@ -202,7 +202,7 @@ export default function RelatoriosPage() {
     : 0
 
   // ── Custo de Capital Imobilizado ─────────────────────────────────────────────
-  const CDI_ANNUAL = 0.1065 // ~100% CDI (Selic ~10.65% a.a.) — atualizar conforme mercado
+  const SELIC_ANNUAL = 0.15 // Selic 15% a.a.
 
   const criticalVehicles = available.filter(v => v.days_in_stock > 90)
   const capitalImobilizado = criticalVehicles.reduce((s, v) => s + (v.purchase_price ?? 0), 0)
@@ -221,7 +221,7 @@ export default function RelatoriosPage() {
   const opportunityProfit = capitalImobilizado * avgFastMargin * Math.max(cyclesLost, 1)
 
   // CDI income if capital had been in savings (100% CDI) for avgDaysCritical days
-  const cdiIncome = capitalImobilizado * CDI_ANNUAL * (avgDaysCritical / 365)
+  const selicIncome = capitalImobilizado * SELIC_ANNUAL * (avgDaysCritical / 365)
 
   // ── Despesas ─────────────────────────────────────────────────────────────────
   const expTotal      = expenses.reduce((s, e) => s + e.amount, 0)
@@ -499,12 +499,14 @@ export default function RelatoriosPage() {
           {/* ── Custo de Capital Imobilizado ── */}
           {criticalVehicles.length > 0 && (
             <div className="space-y-3">
-              <div className="flex items-center gap-2 pt-2">
-                <AlertOctagon className="w-5 h-5 text-danger" />
-                <h3 className="font-bold text-base text-foreground">Custo de Capital Imobilizado</h3>
-                <span className="text-xs text-foreground-subtle ml-1">
-                  {criticalVehicles.length} veículo{criticalVehicles.length !== 1 ? 's' : ''} há mais de 90 dias · média {avgDaysCritical}d parado
-                </span>
+              <div className="flex items-start gap-2 pt-2">
+                <AlertOctagon className="w-5 h-5 text-danger mt-0.5 flex-shrink-0" />
+                <div>
+                  <h3 className="font-bold text-base text-foreground">Custo de Capital Imobilizado</h3>
+                  <p className="text-xs text-foreground-subtle mt-0.5">
+                    Cálculos feitos baseados na SELIC de 15% · {criticalVehicles.length} veículo{criticalVehicles.length !== 1 ? 's' : ''} há mais de 91 dias · média {avgDaysCritical}d parado
+                  </p>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -536,16 +538,16 @@ export default function RelatoriosPage() {
                   </CardContent>
                 </Card>
 
-                {/* Card 3 — Renda CDI */}
+                {/* Card 3 — Renda SELIC */}
                 <Card className="border-primary/30 bg-primary/5">
                   <CardContent className="p-4">
                     <div className="flex items-center gap-2 mb-2">
                       <PiggyBank className="w-4 h-4 text-primary flex-shrink-0" />
-                      <p className="text-xs font-semibold text-primary uppercase tracking-wide">Renda CDI Perdida</p>
+                      <p className="text-xs font-semibold text-primary uppercase tracking-wide">Renda SELIC Perdida</p>
                     </div>
-                    <p className="text-2xl font-black text-primary">{formatCurrency(cdiIncome)}</p>
+                    <p className="text-2xl font-black text-primary">{formatCurrency(selicIncome)}</p>
                     <p className="text-xs text-foreground-muted mt-1.5 leading-snug">
-                      Se aplicado em CDB 100% CDI ({(CDI_ANNUAL * 100).toFixed(2)}% a.a.) por {avgDaysCritical} dias.
+                      Se aplicado à taxa SELIC de 15% a.a. por {avgDaysCritical} dias.
                     </p>
                   </CardContent>
                 </Card>
