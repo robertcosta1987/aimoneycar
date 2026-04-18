@@ -228,10 +228,16 @@ export default function RelatoriosPage() {
     ? fastMovers.reduce((s, v) => s + v.profitPct, 0) / fastMovers.length / 100
     : 0.12 // fallback 12% if no data
 
-  // Top 10 fast-mover models — always from a fixed 90-day window, min 3 sales to filter false positives
+  // Top 10 fast-mover models — fixed 90-day window, prefer models sold ≥2 times but fall back to all
   const fastMoverModels = (() => {
+    // Use salesLast90 (DB-filtered: sold + days_in_stock ≤ 45 + sale_date ≥ 90d ago)
+    // Fall back to salesEnriched fast movers if the dedicated fetch returned nothing
+    const source = salesLast90.length > 0
+      ? salesLast90
+      : salesEnriched.filter((v: any) => (v.days_in_stock ?? 0) <= 45 && v.sale_price > 0)
+
     const map: Record<string, { brand: string; model: string; count: number; totalDays: number; totalProfit: number; totalRevenue: number }> = {}
-    salesLast90.forEach((v: any) => {
+    source.forEach((v: any) => {
       const key = `${v.brand}|${v.model}`
       if (!map[key]) map[key] = { brand: v.brand, model: v.model, count: 0, totalDays: 0, totalProfit: 0, totalRevenue: 0 }
       map[key].count++
@@ -239,15 +245,18 @@ export default function RelatoriosPage() {
       map[key].totalRevenue += v.sale_price ?? 0
       map[key].totalProfit += v.sale_price != null ? (v.sale_price - (v.purchase_price ?? 0)) : 0
     })
-    return Object.values(map)
-      .filter(g => g.count >= 2)
-      .map(g => ({
-        ...g,
-        avgDays: Math.round(g.totalDays / g.count),
-        avgMargin: g.totalRevenue > 0 ? (g.totalProfit / g.totalRevenue) * 100 : 0,
-      }))
-      .sort((a, b) => a.avgDays - b.avgDays || b.avgMargin - a.avgMargin)
-      .slice(0, 10)
+
+    const all = Object.values(map).map(g => ({
+      ...g,
+      avgDays: Math.round(g.totalDays / g.count),
+      avgMargin: g.totalRevenue > 0 ? (g.totalProfit / g.totalRevenue) * 100 : 0,
+    }))
+
+    // Prefer models sold ≥2 times; if fewer than 10 qualify, fill with single-sale models
+    const preferred = all.filter(g => g.count >= 2).sort((a, b) => a.avgDays - b.avgDays || b.avgMargin - a.avgMargin)
+    if (preferred.length >= 10) return preferred.slice(0, 10)
+    const rest = all.filter(g => g.count < 2).sort((a, b) => a.avgDays - b.avgDays || b.avgMargin - a.avgMargin)
+    return [...preferred, ...rest].slice(0, 10)
   })()
 
   // How many full 45-day cycles could have been done with this capital?
@@ -660,7 +669,7 @@ export default function RelatoriosPage() {
                     ))}
                   </div>
                 </div>
-                <p className="text-xs text-foreground-subtle mb-3">Top 10 modelos vendidos em até 45 dias nos últimos 90 dias, com mínimo de 2 vendas no período.</p>
+                <p className="text-xs text-foreground-subtle mb-3">Top 10 modelos vendidos em até 45 dias nos últimos 90 dias — prioriza modelos com 2+ vendas no período.</p>
                 <div className="space-y-0">
                   {[...fastMoverModels]
                     .sort((a, b) =>
