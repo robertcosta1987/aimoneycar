@@ -155,10 +155,11 @@ export default function RelatoriosPage() {
         fetchAll(expQ),
         fetchAll(supabase
           .from('vehicles')
-          .select('brand, model, purchase_price, sale_price, days_in_stock')
+          .select('brand, model, description, purchase_price, sale_price, days_in_stock')
           .eq('dealership_id', did)
           .eq('status', 'sold')
-          .not('days_in_stock', 'is', null)),
+          .not('days_in_stock', 'is', null)
+          .gt('days_in_stock', 0)),
       ])
 
       setSales(salesData)
@@ -230,6 +231,11 @@ export default function RelatoriosPage() {
     const map: Record<string, { brand: string; model: string; count: number; totalDays: number; totalProfit: number; totalRevenue: number }> = {}
     salesLast90.forEach((v: any) => {
       if (!v.brand || !v.model) return
+      if ((v.days_in_stock ?? 0) <= 0) return
+      const desc = (v.description ?? '').toUpperCase()
+      const brand = (v.brand ?? '').toUpperCase()
+      const model = (v.model ?? '').toUpperCase()
+      if (desc.includes('REPASSE') || brand.includes('REPASSE') || model.includes('REPASSE')) return
       const key = `${v.brand}|${v.model}`
       if (!map[key]) map[key] = { brand: v.brand, model: v.model, count: 0, totalDays: 0, totalProfit: 0, totalRevenue: 0 }
       map[key].count++
