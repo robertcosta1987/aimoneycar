@@ -41,11 +41,23 @@ export async function POST(req: NextRequest) {
     ] = await Promise.all([
       svc.from('dealerships').select('name, city, state').eq('id', D).single(),
 
-      // ALL vehicles — available and sold — with their expenses nested
-      svc.from('vehicles')
-        .select('id, external_id, brand, model, version, year_fab, year_model, plate, color, mileage, fuel, purchase_price, sale_price, fipe_price, purchase_date, sale_date, days_in_stock, status, source, notes, supplier_name, expenses:expenses(id, category, amount, date, description)')
-        .eq('dealership_id', D)
-        .order('days_in_stock', { ascending: false }),
+      // Vehicles: all available + sold within last 180 days (capped at 200) to control token volume
+      (async () => {
+        const sixMonthsAgo = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+        const [avail, sold] = await Promise.all([
+          svc.from('vehicles')
+            .select('id, external_id, brand, model, version, year_fab, year_model, plate, color, mileage, fuel, purchase_price, sale_price, fipe_price, purchase_date, sale_date, days_in_stock, status, source, notes, supplier_name, expenses:expenses(id, category, amount, date, description)')
+            .eq('dealership_id', D).eq('status', 'available')
+            .order('days_in_stock', { ascending: false }),
+          svc.from('vehicles')
+            .select('id, external_id, brand, model, version, year_fab, year_model, plate, color, mileage, fuel, purchase_price, sale_price, fipe_price, purchase_date, sale_date, days_in_stock, status, source, notes, supplier_name, expenses:expenses(id, category, amount, date, description)')
+            .eq('dealership_id', D).eq('status', 'sold')
+            .gte('sale_date', sixMonthsAgo)
+            .order('sale_date', { ascending: false })
+            .limit(200),
+        ])
+        return { data: [...(avail.data ?? []), ...(sold.data ?? [])], error: avail.error ?? sold.error }
+      })(),
 
       // All expenses with vehicle info
       svc.from('expenses')

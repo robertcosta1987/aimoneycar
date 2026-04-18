@@ -840,8 +840,10 @@ export async function chatWithClaude(
   context: FullDealershipContext
 ): Promise<{ reply: string; dashboard?: DashboardConfig }> {
   const systemPrompt = buildSystemPrompt(context)
+  // Keep only the last 10 messages (5 exchanges) to cap token usage on long conversations
+  const recentMessages = messages.slice(-10)
   // Anthropic requires conversations to start with a user message — strip any leading assistant turns
-  const trimmed = [...messages]
+  const trimmed = [...recentMessages]
   while (trimmed.length > 0 && trimmed[0].role === 'assistant') trimmed.shift()
   const apiMessages: Anthropic.MessageParam[] = trimmed.map(m => ({
     role: m.role,
