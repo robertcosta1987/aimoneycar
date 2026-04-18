@@ -24,7 +24,9 @@ export async function GET(req: NextRequest) {
 
   const results: Array<{ dealership: string; alerts: number; whatsapp: boolean }> = []
 
-  for (const dealership of (dealerships as Dealership[])) {
+  for (const [idx, dealership] of (dealerships as Dealership[]).entries()) {
+    // Stagger calls by 15s per dealership to avoid burning the TPM budget all at once
+    if (idx > 0) await new Promise(r => setTimeout(r, 15_000))
     try {
       const [vehicles, expenses] = await Promise.all([
         fetchAll<Vehicle>(supabase.from('vehicles').select('*').eq('dealership_id', dealership.id).eq('status', 'available')),

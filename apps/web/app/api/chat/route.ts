@@ -43,7 +43,8 @@ export async function POST(req: NextRequest) {
           svc.from('vehicles')
             .select('id, external_id, brand, model, version, year_fab, year_model, plate, color, mileage, fuel, purchase_price, sale_price, fipe_price, purchase_date, sale_date, days_in_stock, status, source, notes, supplier_name, expenses:expenses(id, category, amount, date, description)')
             .eq('dealership_id', D).eq('status', 'available')
-            .order('days_in_stock', { ascending: false }),
+            .order('days_in_stock', { ascending: false })
+            .limit(150),
           svc.from('vehicles')
             .select('id, external_id, brand, model, version, year_fab, year_model, plate, color, mileage, fuel, purchase_price, sale_price, fipe_price, purchase_date, sale_date, days_in_stock, status, source, notes, supplier_name, expenses:expenses(id, category, amount, date, description)')
             .eq('dealership_id', D).eq('status', 'sold')
@@ -59,7 +60,7 @@ export async function POST(req: NextRequest) {
         .select('id, vehicle_id, category, amount, date, description')
         .eq('dealership_id', D)
         .order('date', { ascending: false })
-        .limit(500),
+        .limit(200),
 
       // Customers
       svc.from('customers')
