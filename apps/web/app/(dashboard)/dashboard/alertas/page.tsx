@@ -40,9 +40,13 @@ export default function AlertasPage() {
     setAlerts(loaded)
     setLoading(false)
 
-    // Auto-generate on first load if table is empty
-    if (loaded.length === 0 && !autoTriggered.current) {
+    // Auto-generate at most once per day when no alerts exist
+    const lastAutoKey = 'alerts_auto_generated_date'
+    const today = new Date().toISOString().slice(0, 10)
+    const lastRun = localStorage.getItem(lastAutoKey)
+    if (loaded.length === 0 && lastRun !== today && !autoTriggered.current) {
       autoTriggered.current = true
+      localStorage.setItem(lastAutoKey, today)
       await generateAlerts()
     }
   }
