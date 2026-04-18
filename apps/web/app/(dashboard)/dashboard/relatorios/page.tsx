@@ -144,8 +144,6 @@ export default function RelatoriosPage() {
         .gte('date', dateStart)
       if (dateEnd) expQ = expQ.lte('date', dateEnd)
 
-      const twoYearsAgo = new Date(Date.now() - 730 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-
       const [salesData, vehiclesData, expensesData, allSoldResult] = await Promise.all([
         fetchAll(salesQ),
         fetchAll(supabase
@@ -162,7 +160,6 @@ export default function RelatoriosPage() {
           .eq('status', 'sold')
           .not('days_in_stock', 'is', null)
           .gt('days_in_stock', 0)
-          .gte('sale_date', twoYearsAgo)
           .order('sale_date', { ascending: false })
           .limit(1000),
       ])
