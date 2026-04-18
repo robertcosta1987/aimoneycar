@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Progress } from '@/components/ui/progress'
 import { formatCurrency, formatPercent } from '@/lib/utils'
 import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { AlertOctagon, Banknote, TrendingDown, PiggyBank } from 'lucide-react'
 
 type Mode = 'rolling' | 'month'
 interface AvailableMonth { value: string; label: string; salesCount: number }
@@ -199,6 +200,28 @@ export default function RelatoriosPage() {
   const avgDays  = available.length
     ? Math.round(available.reduce((s, v) => s + v.days_in_stock, 0) / available.length)
     : 0
+
+  // ── Custo de Capital Imobilizado ─────────────────────────────────────────────
+  const CDI_ANNUAL = 0.1065 // ~100% CDI (Selic ~10.65% a.a.) — atualizar conforme mercado
+
+  const criticalVehicles = available.filter(v => v.days_in_stock > 90)
+  const capitalImobilizado = criticalVehicles.reduce((s, v) => s + (v.purchase_price ?? 0), 0)
+  const avgDaysCritical = criticalVehicles.length
+    ? Math.round(criticalVehicles.reduce((s, v) => s + v.days_in_stock, 0) / criticalVehicles.length)
+    : 0
+
+  // Fast movers: sold in ≤ 45 days — average profit margin
+  const fastMovers = salesEnriched.filter(v => v.days_in_stock <= 45 && v.sale_price > 0)
+  const avgFastMargin = fastMovers.length
+    ? fastMovers.reduce((s, v) => s + v.profitPct, 0) / fastMovers.length / 100
+    : 0.12 // fallback 12% if no data
+
+  // How many full 45-day cycles could have been done with this capital?
+  const cyclesLost = avgDaysCritical > 0 ? Math.floor(avgDaysCritical / 45) : 0
+  const opportunityProfit = capitalImobilizado * avgFastMargin * Math.max(cyclesLost, 1)
+
+  // CDI income if capital had been in savings (100% CDI) for avgDaysCritical days
+  const cdiIncome = capitalImobilizado * CDI_ANNUAL * (avgDaysCritical / 365)
 
   // ── Despesas ─────────────────────────────────────────────────────────────────
   const expTotal      = expenses.reduce((s, e) => s + e.amount, 0)
@@ -472,6 +495,87 @@ export default function RelatoriosPage() {
               </CardContent>
             </Card>
           </div>
+
+          {/* ── Custo de Capital Imobilizado ── */}
+          {criticalVehicles.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 pt-2">
+                <AlertOctagon className="w-5 h-5 text-danger" />
+                <h3 className="font-bold text-base text-foreground">Custo de Capital Imobilizado</h3>
+                <span className="text-xs text-foreground-subtle ml-1">
+                  {criticalVehicles.length} veículo{criticalVehicles.length !== 1 ? 's' : ''} há mais de 90 dias · média {avgDaysCritical}d parado
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* Card 1 — Capital travado */}
+                <Card className="border-danger/30 bg-danger/5">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <TrendingDown className="w-4 h-4 text-danger flex-shrink-0" />
+                      <p className="text-xs font-semibold text-danger uppercase tracking-wide">Capital em Risco</p>
+                    </div>
+                    <p className="text-2xl font-black text-danger">{formatCurrency(capitalImobilizado)}</p>
+                    <p className="text-xs text-foreground-muted mt-1.5 leading-snug">
+                      Investido em {criticalVehicles.length} veículo{criticalVehicles.length !== 1 ? 's' : ''} parado{criticalVehicles.length !== 1 ? 's' : ''} há mais de 91 dias, sem retorno.
+                    </p>
+                  </CardContent>
+                </Card>
+
+                {/* Card 2 — Lucro que poderia ter sido gerado */}
+                <Card className="border-warning/30 bg-warning/5">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Banknote className="w-4 h-4 text-warning flex-shrink-0" />
+                      <p className="text-xs font-semibold text-warning uppercase tracking-wide">Lucro Perdido — Giro Rápido</p>
+                    </div>
+                    <p className="text-2xl font-black text-warning">{formatCurrency(opportunityProfit)}</p>
+                    <p className="text-xs text-foreground-muted mt-1.5 leading-snug">
+                      {cyclesLost} ciclo{cyclesLost !== 1 ? 's' : ''} de 45 dias × margem média de {((fastMovers.length ? avgFastMargin : 0.12) * 100).toFixed(1)}% dos veículos de giro rápido.
+                    </p>
+                  </CardContent>
+                </Card>
+
+                {/* Card 3 — Renda CDI */}
+                <Card className="border-primary/30 bg-primary/5">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <PiggyBank className="w-4 h-4 text-primary flex-shrink-0" />
+                      <p className="text-xs font-semibold text-primary uppercase tracking-wide">Renda CDI Perdida</p>
+                    </div>
+                    <p className="text-2xl font-black text-primary">{formatCurrency(cdiIncome)}</p>
+                    <p className="text-xs text-foreground-muted mt-1.5 leading-snug">
+                      Se aplicado em CDB 100% CDI ({(CDI_ANNUAL * 100).toFixed(2)}% a.a.) por {avgDaysCritical} dias.
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Vehicle list */}
+              <Card className="border-danger/20">
+                <CardContent className="p-4">
+                  <p className="text-xs font-semibold text-foreground-muted uppercase tracking-wide mb-3">Veículos Críticos — Detalhamento</p>
+                  <div className="space-y-2">
+                    {criticalVehicles.slice(0, 8).map(v => (
+                      <div key={v.id} className="flex items-center justify-between text-sm py-1.5 border-b border-border last:border-0">
+                        <div>
+                          <span className="font-medium text-foreground">{v.brand} {v.model}</span>
+                          <span className="text-foreground-subtle ml-2 text-xs">{v.plate || '—'} · {v.year_model ?? v.year_fab}</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="font-bold text-danger">{v.days_in_stock}d</span>
+                          <span className="text-foreground-muted text-xs ml-3">{formatCurrency(v.purchase_price)}</span>
+                        </div>
+                      </div>
+                    ))}
+                    {criticalVehicles.length > 8 && (
+                      <p className="text-xs text-foreground-subtle text-center pt-1">+{criticalVehicles.length - 8} veículos adicionais</p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
 
           {available.length > 0 && (
             <Card>
