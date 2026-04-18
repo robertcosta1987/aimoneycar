@@ -627,73 +627,72 @@ export default function RelatoriosPage() {
                 </CardContent>
               </Card>
 
-              {/* Fast-mover suggestions */}
-              {fastMoverModels.length > 0 && (
-                <Card className="border-success/30 bg-success/5">
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between mb-1 gap-3 flex-wrap">
-                      <div className="flex items-center gap-2">
-                        <TrendingUp className="w-4 h-4 text-success flex-shrink-0" />
-                        <p className="text-xs font-semibold text-success uppercase tracking-wide">Sugestões de Giro Rápido que evitam Capital Parado</p>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        {([
-                          { key: 'avgDays',   label: 'Dias',    icon: fastMoverSort === 'avgDays'   ? ArrowUp : ArrowUpDown },
-                          { key: 'avgMargin', label: 'Margem',  icon: fastMoverSort === 'avgMargin' ? ArrowDown : ArrowUpDown },
-                          { key: 'count',     label: 'Vendas',  icon: fastMoverSort === 'count'     ? ArrowDown : ArrowUpDown },
-                        ] as const).map(({ key, label, icon: Icon }) => (
-                          <button
-                            key={key}
-                            onClick={() => setFastMoverSort(key)}
-                            className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium transition-colors ${
-                              fastMoverSort === key
-                                ? 'bg-success/20 text-success border border-success/30'
-                                : 'bg-background-elevated text-foreground-muted border border-border hover:border-success/30 hover:text-success'
-                            }`}
-                          >
-                            <Icon className="w-3 h-3" />
-                            {label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <p className="text-xs text-foreground-subtle mb-3">Top 10 modelos vendidos em até 45 dias nos últimos 90 dias, com mínimo de 3 vendas no período.</p>
-                    <div className="space-y-0">
-                      {[...fastMoverModels]
-                        .sort((a, b) =>
-                          fastMoverSort === 'avgDays'   ? a.avgDays - b.avgDays :
-                          fastMoverSort === 'avgMargin' ? b.avgMargin - a.avgMargin :
-                          b.count - a.count
-                        )
-                        .map((m, i) => (
-                          <div key={`${m.brand}-${m.model}`} className="flex items-center justify-between py-2 border-b border-border/60 last:border-0">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className="text-[10px] font-bold text-foreground-muted w-5 flex-shrink-0 text-right">#{i + 1}</span>
-                              <div className="min-w-0">
-                                <span className="text-sm font-medium text-foreground">{m.brand} {m.model}</span>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-4 flex-shrink-0 ml-3">
-                              <div className="text-right">
-                                <p className="text-[10px] text-foreground-muted leading-none mb-0.5">Dias médio</p>
-                                <p className={`text-sm font-bold ${fastMoverSort === 'avgDays' ? 'text-success' : 'text-foreground'}`}>{m.avgDays}d</p>
-                              </div>
-                              <div className="text-right">
-                                <p className="text-[10px] text-foreground-muted leading-none mb-0.5">Margem</p>
-                                <p className={`text-sm font-bold ${fastMoverSort === 'avgMargin' ? 'text-success' : 'text-foreground'}`}>{m.avgMargin.toFixed(1)}%</p>
-                              </div>
-                              <div className="text-right">
-                                <p className="text-[10px] text-foreground-muted leading-none mb-0.5">Vendas</p>
-                                <p className={`text-sm font-bold ${fastMoverSort === 'count' ? 'text-success' : 'text-foreground'}`}>{m.count}</p>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
             </div>
+          )}
+
+          {/* Fast-mover suggestions — always visible, independent of criticalVehicles */}
+          {fastMoverModels.length > 0 && (
+            <Card className="border-success/30 bg-success/5">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between mb-1 gap-3 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <TrendingUp className="w-4 h-4 text-success flex-shrink-0" />
+                    <p className="text-xs font-semibold text-success uppercase tracking-wide">Sugestões de Giro Rápido que evitam Capital Parado</p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {([
+                      { key: 'avgDays',   label: 'Dias',   icon: fastMoverSort === 'avgDays'   ? ArrowUp : ArrowUpDown },
+                      { key: 'avgMargin', label: 'Margem', icon: fastMoverSort === 'avgMargin' ? ArrowDown : ArrowUpDown },
+                      { key: 'count',     label: 'Vendas', icon: fastMoverSort === 'count'     ? ArrowDown : ArrowUpDown },
+                    ] as const).map(({ key, label, icon: Icon }) => (
+                      <button
+                        key={key}
+                        onClick={() => setFastMoverSort(key)}
+                        className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium transition-colors ${
+                          fastMoverSort === key
+                            ? 'bg-success/20 text-success border border-success/30'
+                            : 'bg-background-elevated text-foreground-muted border border-border hover:border-success/30 hover:text-success'
+                        }`}
+                      >
+                        <Icon className="w-3 h-3" />
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <p className="text-xs text-foreground-subtle mb-3">Top 10 modelos vendidos em até 45 dias nos últimos 90 dias, com mínimo de 3 vendas no período.</p>
+                <div className="space-y-0">
+                  {[...fastMoverModels]
+                    .sort((a, b) =>
+                      fastMoverSort === 'avgDays'   ? a.avgDays - b.avgDays :
+                      fastMoverSort === 'avgMargin' ? b.avgMargin - a.avgMargin :
+                      b.count - a.count
+                    )
+                    .map((m, i) => (
+                      <div key={`${m.brand}-${m.model}`} className="flex items-center justify-between py-2 border-b border-border/60 last:border-0">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-[10px] font-bold text-foreground-muted w-5 flex-shrink-0 text-right">#{i + 1}</span>
+                          <span className="text-sm font-medium text-foreground">{m.brand} {m.model}</span>
+                        </div>
+                        <div className="flex items-center gap-4 flex-shrink-0 ml-3">
+                          <div className="text-right">
+                            <p className="text-[10px] text-foreground-muted leading-none mb-0.5">Dias médio</p>
+                            <p className={`text-sm font-bold ${fastMoverSort === 'avgDays' ? 'text-success' : 'text-foreground'}`}>{m.avgDays}d</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-[10px] text-foreground-muted leading-none mb-0.5">Margem</p>
+                            <p className={`text-sm font-bold ${fastMoverSort === 'avgMargin' ? 'text-success' : 'text-foreground'}`}>{m.avgMargin.toFixed(1)}%</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-[10px] text-foreground-muted leading-none mb-0.5">Vendas</p>
+                            <p className={`text-sm font-bold ${fastMoverSort === 'count' ? 'text-success' : 'text-foreground'}`}>{m.count}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </CardContent>
+            </Card>
           )}
 
           {available.length > 0 && (
