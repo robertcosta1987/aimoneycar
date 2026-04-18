@@ -54,8 +54,9 @@ export default function RelatoriosPage() {
   const [sales, setSales]           = useState<any[]>([])
   const [vehicles, setVehicles]     = useState<any[]>([])
   const [expenses, setExpenses]     = useState<any[]>([])
-  const [salesLast90, setSalesLast90] = useState<any[]>([])
   const [loading, setLoading]       = useState(true)
+  const [topModelsAI, setTopModelsAI]         = useState<{ model: string; count: number }[]>([])
+  const [topModelsLoading, setTopModelsLoading] = useState(true)
   const supabase = createClient()
 
   // ── load available months once ──────────────────────────────────────────────
@@ -106,6 +107,15 @@ export default function RelatoriosPage() {
     loadMonths()
   }, [])
 
+  // ── AI top models (once on mount) ───────────────────────────────────────────
+  useEffect(() => {
+    fetch('/api/reports/top-models')
+      .then(r => r.json())
+      .then(json => { if (json.models) setTopModelsAI(json.models) })
+      .catch(() => {})
+      .finally(() => setTopModelsLoading(false))
+  }, [])
+
   // ── load report data ─────────────────────────────────────────────────────────
   useEffect(() => {
     const load = async () => {
@@ -143,7 +153,7 @@ export default function RelatoriosPage() {
         .gte('date', dateStart)
       if (dateEnd) expQ = expQ.lte('date', dateEnd)
 
-      const [salesData, vehiclesData, expensesData, allSoldResult] = await Promise.all([
+      const [salesData, vehiclesData, expensesData] = await Promise.all([
         fetchAll(salesQ),
         fetchAll(supabase
           .from('vehicles')
@@ -152,22 +162,11 @@ export default function RelatoriosPage() {
           .neq('status', 'sold')
           .order('days_in_stock', { ascending: false })),
         fetchAll(expQ),
-        supabase
-          .from('vehicles')
-          .select('brand, model')
-          .eq('dealership_id', did)
-          .eq('status', 'sold')
-          .not('brand', 'is', null)
-          .not('model', 'is', null)
-          .gte('sale_date', new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
-          .limit(1000),
       ])
-      const allSoldData = allSoldResult.data ?? []
 
       setSales(salesData)
       setVehicles(vehiclesData)
       setExpenses(expensesData)
-      setSalesLast90(allSoldData)
       setLoading(false)
     }
     if (mode === 'rolling' || (mode === 'month' && selectedMonth)) load()
@@ -228,17 +227,6 @@ export default function RelatoriosPage() {
     ? fastMovers.reduce((s, v) => s + v.profitPct, 0) / fastMovers.length / 100
     : 0.12 // fallback 12% if no data
 
-  // Top 10 models sold the most in the past 6 months, grouped by model name only
-  const topModels = (() => {
-    const map: Record<string, { model: string; count: number }> = {}
-    salesLast90.forEach((v: any) => {
-      if (!v.model) return
-      const key = v.model.trim()
-      if (!map[key]) map[key] = { model: key, count: 0 }
-      map[key].count++
-    })
-    return Object.values(map).filter(g => g.count >= 2).sort((a, b) => b.count - a.count).slice(0, 10)
-  })()
 
   // How many full 45-day cycles could have been done with this capital?
   const cyclesLost = avgDaysCritical > 0 ? Math.floor(avgDaysCritical / 45) : 0
@@ -620,17 +608,21 @@ export default function RelatoriosPage() {
             </div>
           )}
 
-          {/* Top models tile */}
-          {topModels.length > 0 && (
-            <Card className="border-success/30 bg-success/5">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2 mb-1">
-                  <TrendingUp className="w-4 h-4 text-success flex-shrink-0" />
-                  <p className="text-xs font-semibold text-success uppercase tracking-wide">Sugestões de Giro Rápido que evitam Capital Parado</p>
-                </div>
-                <p className="text-xs text-foreground-subtle mb-3">Top 10 modelos mais vendidos nos últimos 6 meses — mínimo 2 vendas.</p>
+          {/* AI top models tile */}
+          <Card className="border-success/30 bg-success/5">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-1">
+                <TrendingUp className="w-4 h-4 text-success flex-shrink-0" />
+                <p className="text-xs font-semibold text-success uppercase tracking-wide">Sugestões de Giro Rápido que evitam Capital Parado</p>
+              </div>
+              <p className="text-xs text-foreground-subtle mb-3">Top 10 modelos mais vendidos no último ano, agrupados por IA.</p>
+              {topModelsLoading ? (
+                <p className="text-xs text-foreground-muted py-4 text-center">Analisando histórico de vendas...</p>
+              ) : topModelsAI.length === 0 ? (
+                <p className="text-xs text-foreground-muted py-4 text-center">Nenhum modelo com vendas suficientes no período.</p>
+              ) : (
                 <div className="space-y-0">
-                  {topModels.map((m, i) => (
+                  {topModelsAI.map((m, i) => (
                     <div key={m.model} className="flex items-center justify-between py-2 border-b border-border/60 last:border-0">
                       <div className="flex items-center gap-2 min-w-0">
                         <span className="text-[10px] font-bold text-foreground-muted w-5 flex-shrink-0 text-right">#{i + 1}</span>
@@ -642,9 +634,9 @@ export default function RelatoriosPage() {
                     </div>
                   ))}
                 </div>
-              </CardContent>
-            </Card>
-          )}
+              )}
+            </CardContent>
+          </Card>
 
           {available.length > 0 && (
             <Card>
