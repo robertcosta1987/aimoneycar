@@ -185,7 +185,16 @@ export default function ChatPage() {
           messages: [...messages, userMsg].map(m => ({ role: m.role, content: m.content })),
         }),
       })
-      const data = await res.json()
+
+      // Parse response — if server returns HTML (crash/timeout), show the status
+      let data: any
+      const text = await res.text()
+      try {
+        data = JSON.parse(text)
+      } catch {
+        throw new Error(`HTTP ${res.status} — resposta inválida do servidor: ${text.slice(0, 120)}`)
+      }
+
       setMessages(prev => [
         ...prev,
         {
@@ -196,9 +205,10 @@ export default function ChatPage() {
         },
       ])
     } catch (err: any) {
+      console.error('[Chat] send error:', err)
       setMessages(prev => [
         ...prev,
-        { id: (Date.now() + 1).toString(), role: 'assistant', content: `❌ Erro de conexão. Tente novamente. (${err?.message ?? 'network error'})` },
+        { id: (Date.now() + 1).toString(), role: 'assistant', content: `❌ ${err?.message ?? 'Erro de conexão. Tente novamente.'}` },
       ])
     } finally {
       setLoading(false)
