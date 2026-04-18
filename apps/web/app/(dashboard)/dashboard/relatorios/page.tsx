@@ -216,6 +216,27 @@ export default function RelatoriosPage() {
     ? fastMovers.reduce((s, v) => s + v.profitPct, 0) / fastMovers.length / 100
     : 0.12 // fallback 12% if no data
 
+  // Top 20 fast-mover models grouped by brand+model
+  const fastMoverModels = (() => {
+    const map: Record<string, { brand: string; model: string; count: number; totalDays: number; totalProfit: number; totalRevenue: number }> = {}
+    fastMovers.forEach(v => {
+      const key = `${v.brand}|${v.model}`
+      if (!map[key]) map[key] = { brand: v.brand, model: v.model, count: 0, totalDays: 0, totalProfit: 0, totalRevenue: 0 }
+      map[key].count++
+      map[key].totalDays += v.days_in_stock ?? 0
+      map[key].totalProfit += v.profit ?? 0
+      map[key].totalRevenue += v.sale_price ?? 0
+    })
+    return Object.values(map)
+      .map(g => ({
+        ...g,
+        avgDays: Math.round(g.totalDays / g.count),
+        avgMargin: g.totalRevenue > 0 ? (g.totalProfit / g.totalRevenue) * 100 : 0,
+      }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 20)
+  })()
+
   // How many full 45-day cycles could have been done with this capital?
   const cyclesLost = avgDaysCritical > 0 ? Math.floor(avgDaysCritical / 45) : 0
   const opportunityProfit = capitalImobilizado * avgFastMargin * Math.max(cyclesLost, 1)
@@ -592,6 +613,36 @@ export default function RelatoriosPage() {
                   </div>
                 </CardContent>
               </Card>
+
+              {/* Fast-mover suggestions */}
+              {fastMoverModels.length > 0 && (
+                <Card className="border-success/30 bg-success/5">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-2 mb-1">
+                      <TrendingUp className="w-4 h-4 text-success flex-shrink-0" />
+                      <p className="text-xs font-semibold text-success uppercase tracking-wide">Sugestões de Giro Rápido que evitam Capital Parado</p>
+                    </div>
+                    <p className="text-xs text-foreground-subtle mb-3">Modelos que nunca ficaram mais de 45 dias em estoque — ordenados por volume de vendas no período.</p>
+                    <div className="space-y-2">
+                      {fastMoverModels.map((m, i) => (
+                        <div key={`${m.brand}-${m.model}`} className="flex items-center justify-between text-sm py-1.5 border-b border-border last:border-0">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-xs font-bold text-foreground-muted w-5 flex-shrink-0">#{i + 1}</span>
+                            <div className="min-w-0">
+                              <span className="font-medium text-foreground">{m.brand} {m.model}</span>
+                              <span className="text-foreground-subtle ml-2 text-xs">{m.count} venda{m.count !== 1 ? 's' : ''}</span>
+                            </div>
+                          </div>
+                          <div className="text-right flex-shrink-0 ml-3">
+                            <span className="font-bold text-success text-xs">{m.avgDays}d médio</span>
+                            <span className="text-foreground-muted text-xs ml-3">{m.avgMargin.toFixed(1)}% margem</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </div>
           )}
 
