@@ -15,11 +15,15 @@ import { getCache, setCache } from '@/lib/ai/cache'
 
 export const dynamic = 'force-dynamic'
 
-const CACHE_KEY = 'top-models-v10'
+const CACHE_KEY = 'top-models-v11'
 const CACHE_TTL_HOURS = 36
 
 function clean(raw: string): string {
-  return raw.replace(/\/\//g, '').replace(/\s+/g, ' ').trim()
+  return raw
+    .replace(/\/\/[^/]*\/\//g, '')   // remove //anything// including content
+    .replace(/#\S*/g, '')             // remove #tag and everything attached to it
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 function isRepasse(s: string): boolean {
