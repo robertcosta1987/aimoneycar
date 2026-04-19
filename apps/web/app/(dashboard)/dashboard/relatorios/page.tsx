@@ -111,8 +111,11 @@ export default function RelatoriosPage() {
   useEffect(() => {
     fetch('/api/reports/top-models')
       .then(r => r.json())
-      .then(json => { if (json.models) setTopModelsAI(json.models) })
-      .catch(() => {})
+      .then(json => {
+        console.log('[top-models]', json)
+        if (json.models) setTopModelsAI(json.models)
+      })
+      .catch(err => console.error('[top-models] fetch error:', err))
       .finally(() => setTopModelsLoading(false))
   }, [])
 
