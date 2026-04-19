@@ -62,7 +62,6 @@ interface FleetCostAnalysisProps {
 
 export function FleetCostAnalysis({ vehicles }: FleetCostAnalysisProps) {
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<string>('all')
   const [marginFilter, setMarginFilter] = useState<string>('all')
   const [qualityFilter, setQualityFilter] = useState<string>('all')
   const [sortKey, setSortKey] = useState<SortKey>('gross_margin')
@@ -167,10 +166,6 @@ export function FleetCostAnalysis({ vehicles }: FleetCostAnalysisProps) {
       )
     }
 
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(r => r.vehicle.status === statusFilter)
-    }
-
     if (marginFilter !== 'all') {
       filtered = filtered.filter(r => {
         const d = getMarginDisplay(r.summary)
@@ -200,7 +195,7 @@ export function FleetCostAnalysis({ vehicles }: FleetCostAnalysisProps) {
         default: return 0
       }
     })
-  }, [rows, search, statusFilter, marginFilter, qualityFilter, sortKey, sortDir])
+  }, [rows, search, marginFilter, qualityFilter, sortKey, sortDir])
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -465,17 +460,6 @@ export function FleetCostAnalysis({ vehicles }: FleetCostAnalysisProps) {
                 className="pl-9 text-xs h-8"
               />
             </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-full sm:w-36 h-8 text-xs">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos Status</SelectItem>
-                <SelectItem value="available">Disponível</SelectItem>
-                <SelectItem value="returned">Devolvido</SelectItem>
-                <SelectItem value="sold">Vendido</SelectItem>
-              </SelectContent>
-            </Select>
             <Select value={marginFilter} onValueChange={setMarginFilter}>
               <SelectTrigger className="w-full sm:w-36 h-8 text-xs">
                 <SelectValue placeholder="Margem" />
