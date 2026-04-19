@@ -26,9 +26,9 @@ import {
 import { cn } from '@/lib/utils'
 
 const TOOLTIP_STYLE = {
-  contentStyle: { background: '#111820', border: '1px solid #1E2A3A', borderRadius: 10, fontSize: 12, color: '#E2E8F0' },
-  labelStyle:   { color: '#94A3B8' },
-  itemStyle:    { color: '#E2E8F0' },
+  contentStyle: { background: '#2563EB', border: 'none', borderRadius: 10, fontSize: 12, color: '#FFFFFF', fontWeight: 700 },
+  labelStyle:   { color: '#FFFFFF', fontWeight: 700 },
+  itemStyle:    { color: '#FFFFFF', fontWeight: 700 },
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

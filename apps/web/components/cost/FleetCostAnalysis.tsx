@@ -309,7 +309,7 @@ export function FleetCostAnalysis({ vehicles, onEditCosts }: FleetCostAnalysisPr
                       ))}
                     </Pie>
                     <Tooltip
-                      contentStyle={{ background: '#111820', border: '1px solid #1E2A3A', borderRadius: 8, fontSize: 10, color: '#E2E8F0' }}
+                      contentStyle={{ background: '#2563EB', border: 'none', borderRadius: 8, fontSize: 10, color: '#FFFFFF', fontWeight: 700 }}
                       formatter={(v: number) => [formatCurrency(v), '']}
                     />
                   </PieChart>
@@ -346,7 +346,7 @@ export function FleetCostAnalysis({ vehicles, onEditCosts }: FleetCostAnalysisPr
                 <XAxis dataKey="label" tick={{ fontSize: 9, fill: '#8B9EB3' }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 9, fill: '#8B9EB3' }} axisLine={false} tickLine={false} allowDecimals={false} />
                 <Tooltip
-                  contentStyle={{ background: '#111820', border: '1px solid #1E2A3A', borderRadius: 8, fontSize: 11, color: '#E2E8F0' }}
+                  contentStyle={{ background: '#2563EB', border: 'none', borderRadius: 8, fontSize: 11, color: '#FFFFFF', fontWeight: 700 }}
                   formatter={(v: number) => [`${v} veículo${v !== 1 ? 's' : ''}`, '']}
                 />
                 <Bar dataKey="count" radius={[3, 3, 0, 0]}>
@@ -383,7 +383,7 @@ export function FleetCostAnalysis({ vehicles, onEditCosts }: FleetCostAnalysisPr
                     tickFormatter={v => `${(v as number / 1000).toFixed(0)}k`}
                   />
                   <Tooltip
-                    contentStyle={{ background: '#111820', border: '1px solid #1E2A3A', borderRadius: 8, fontSize: 10, color: '#E2E8F0' }}
+                    contentStyle={{ background: '#2563EB', border: 'none', borderRadius: 8, fontSize: 10, color: '#FFFFFF', fontWeight: 700 }}
                     formatter={(v: number, name: string) => [
                       formatCurrency(v),
                       name === 'trueCost' ? 'Custo Real' : 'Preço Venda',
@@ -431,7 +431,7 @@ export function FleetCostAnalysis({ vehicles, onEditCosts }: FleetCostAnalysisPr
                     tickLine={false}
                   />
                   <Tooltip
-                    contentStyle={{ background: '#111820', border: '1px solid #1E2A3A', borderRadius: 8, fontSize: 10, color: '#E2E8F0' }}
+                    contentStyle={{ background: '#2563EB', border: 'none', borderRadius: 8, fontSize: 10, color: '#FFFFFF', fontWeight: 700 }}
                     formatter={(v: number) => [formatCurrency(v), 'Despesas']}
                   />
                   <Bar dataKey="expenses" fill="#FFB800" radius={[0, 3, 3, 0]} />

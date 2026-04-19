@@ -128,8 +128,8 @@ export function MarginTrendChart({ vehicles }: MarginTrendChartProps) {
             />
             <Tooltip
               contentStyle={{
-                background: '#111820',
-                border: '1px solid #1E2A3A',
+                background: '#2563EB',
+                border: 'none',
                 borderRadius: 8,
                 fontSize: 11,
               }}

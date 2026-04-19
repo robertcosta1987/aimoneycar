@@ -76,7 +76,7 @@ export function ReportInventoryHealth({ data }: Props) {
                       <Cell key={i} fill={b.color} />
                     ))}
                   </Pie>
-                  <Tooltip contentStyle={{ background: '#111820', border: '1px solid #1E2A3A', borderRadius: 10, color: '#E2E8F0' }} labelStyle={{ color: '#E2E8F0' }} />
+                  <Tooltip contentStyle={{ background: '#2563EB', border: 'none', borderRadius: 10, color: '#FFFFFF', fontWeight: 700 }} labelStyle={{ color: '#FFFFFF', fontWeight: 700 }} />
                   <Legend iconType="circle" iconSize={8} formatter={(v) => <span className="text-xs text-foreground-muted">{v}</span>} />
                 </PieChart>
               </ResponsiveContainer>

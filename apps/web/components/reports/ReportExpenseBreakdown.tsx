@@ -54,8 +54,8 @@ export function ReportExpenseBreakdown({ data }: Props) {
                   <XAxis type="number" tick={{ fontSize: 10, fill: '#8B9EB3' }} tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
                   <YAxis type="category" dataKey="category" tick={{ fontSize: 10, fill: '#8B9EB3' }} width={80} />
                   <Tooltip
-                    contentStyle={{ background: '#111820', border: '1px solid #1E2A3A', borderRadius: 10, color: '#E2E8F0' }}
-                    labelStyle={{ color: '#E2E8F0' }}
+                    contentStyle={{ background: '#2563EB', border: 'none', borderRadius: 10, color: '#FFFFFF', fontWeight: 700 }}
+                    labelStyle={{ color: '#FFFFFF', fontWeight: 700 }}
                     formatter={(v: number) => formatCurrency(v)}
                   />
                   <Bar dataKey="total" name="Total" radius={[0,4,4,0]}>

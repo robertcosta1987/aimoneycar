@@ -98,9 +98,9 @@ export function AgingWidget({ vehicles }: AgingWidgetProps) {
                 allowDecimals={false}
               />
               <Tooltip
-                contentStyle={{ background: '#111820', border: '1px solid #1E2A3A', borderRadius: 8, fontSize: 11, color: '#E2E8F0' }}
+                contentStyle={{ background: '#2563EB', border: 'none', borderRadius: 8, fontSize: 11, color: '#FFFFFF', fontWeight: 700 }}
                 formatter={(value: any) => [`${value} veículo${value !== 1 ? 's' : ''}`, '']}
-                labelStyle={{ color: '#E2E8F0' }}
+                labelStyle={{ color: '#FFFFFF', fontWeight: 700 }}
               />
               <Bar dataKey="count" radius={[3, 3, 0, 0]}>
                 {chartData.map((entry, i) => (
