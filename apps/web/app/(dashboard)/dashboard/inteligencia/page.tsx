@@ -135,7 +135,7 @@ function CompareChart({ labelA, labelB, a, b }: { labelA: string; labelB: string
 
 // ─── Benchmark ────────────────────────────────────────────────────────────────
 
-type BenchmarkMode = 'mes-fechado' | 'mtd' | 'anual'
+type BenchmarkMode = 'mes-fechado' | 'mtd' | 'ytd' | 'anual'
 
 function BenchmarkTab() {
   const supabase = createClient()
@@ -202,6 +202,16 @@ function BenchmarkTab() {
   const statsMTD_A   = calcPeriodStats(filter(lyMTDStart, lyMTDEnd))
   const statsMTD_B   = calcPeriodStats(filter(mtdStart, mtdEnd))
 
+  // ── YTD: Jan 1 to today this year vs Jan 1 to same day last year ─────────
+  const ytdStart    = `${y}-01-01`
+  const ytdEnd      = isoDate(now)
+  const lyYTDStart  = `${y - 1}-01-01`
+  const lyYTDEnd    = isoDate(new Date(y - 1, m, d))
+  const ytdLabel    = `${y} até ${now.toLocaleString('pt-BR', { day: 'numeric', month: 'long' })}`
+  const lyYTDLabel  = `${y - 1} até ${new Date(y - 1, m, d).toLocaleString('pt-BR', { day: 'numeric', month: 'long' })}`
+  const statsYTD_A  = calcPeriodStats(filter(lyYTDStart, lyYTDEnd))
+  const statsYTD_B  = calcPeriodStats(filter(ytdStart, ytdEnd))
+
   // ── Anual: full year A vs full year B ─────────────────────────────────────
   const yA = parseInt(yearA)
   const yB = parseInt(yearB)
@@ -220,6 +230,7 @@ function BenchmarkTab() {
           {([
             { value: 'mes-fechado', label: 'Mês Fechado' },
             { value: 'mtd',         label: 'MTD' },
+            { value: 'ytd',         label: 'YTD' },
             { value: 'anual',       label: 'Anual' },
           ] as { value: BenchmarkMode; label: string }[]).map(opt => (
             <button
@@ -257,6 +268,18 @@ function BenchmarkTab() {
           </div>
           <CompareTable labelA={lyMTDLabel} labelB={mtdLabel} a={statsMTD_A} b={statsMTD_B} />
           <CompareChart labelA={lyMTDLabel} labelB={mtdLabel} a={statsMTD_A} b={statsMTD_B} />
+        </>
+      )}
+
+      {/* ── YTD ───────────────────────────────────────────────────────────── */}
+      {mode === 'ytd' && (
+        <>
+          <div className="flex items-center gap-2 text-xs text-foreground-muted">
+            <Calendar className="w-3.5 h-3.5" />
+            <span>Janeiro até hoje vs mesmo período do ano passado</span>
+          </div>
+          <CompareTable labelA={lyYTDLabel} labelB={ytdLabel} a={statsYTD_A} b={statsYTD_B} />
+          <CompareChart labelA={lyYTDLabel} labelB={ytdLabel} a={statsYTD_A} b={statsYTD_B} />
         </>
       )}
 
