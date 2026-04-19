@@ -867,9 +867,14 @@ export async function chatWithClaude(
   const ALL_TOOLS = [DASHBOARD_TOOL, QUERY_VEHICLES_TOOL, ...FIPE_TOOLS, ...CALENDAR_TOOLS]
 
   let capturedDashboard: DashboardConfig | undefined
+  let iterations = 0
+  const MAX_ITERATIONS = 8
 
   // Agentic loop: keep calling Claude until it stops using tools
   while (true) {
+    if (++iterations > MAX_ITERATIONS) {
+      throw new Error(`Agentic loop exceeded ${MAX_ITERATIONS} iterations — possible tool loop detected`)
+    }
     const response = await callWithRetry(() => getAI().messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 4096,
