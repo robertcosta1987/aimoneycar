@@ -533,7 +533,7 @@ export async function generateAIResponse(params: GenerateResponseParams): Promis
 
   const ctx          = await buildContext(dealershipId, conversaId, wasenderMsgId)
   const systemPrompt = buildSystemPrompt(ctx, customSystemPrompt, businessHoursStart, businessHoursEnd)
-  const model        = useSmartModel ? 'claude-sonnet-4-6' : 'claude-haiku-4-5-20251001'
+  const model        = useSmartModel ? 'claude-3-5-sonnet-20241022' : 'claude-3-5-haiku-20241022'
 
   const apiMessages: Anthropic.MessageParam[] = ctx.conversationHistory.slice(-10).map(m => ({
     role:    m.role,

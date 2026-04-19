@@ -1,0 +1,11 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "SUPABASE_URL": "https://your-project.supabase.co",
+    "SUPABASE_SERVICE_KEY": "eyJ...",
+    "SUPABASE_ANON_KEY": "eyJ...",
+    "ALLOWED_ORIGINS": "http://localhost:3000,https://your-app.vercel.app"
+  }
+}
