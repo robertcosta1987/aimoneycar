@@ -105,6 +105,8 @@ function parseMDB(buffer: Buffer): MDBData {
     carRenavan: r.carRenavan,
     carCor: r.carCor,
     carMotor: r.carMotor,
+    carSit: r.carSit,       // FK to tbEnumGeral; enummID=192 = Devolvido
+    carStatus: r.carStatus, // fallback alias for same FK field
     _brand: r.fabID !== undefined ? (brandMap[r.fabID] ?? null) : null,
     _fuel: r.gazID !== undefined ? (fuelMap[r.gazID] ?? null) : null,
     _purchase: purchaseMap[r.carID] ?? null,
@@ -159,8 +161,9 @@ function mapVehicleRow(row: Record<string, any>, dealershipId: string): Record<s
   const yearModel = parseYear(row.carAnoModelo ?? null, yearFab)
   const purchaseDate = parseDate(purchase?.date) ?? `${yearFab}-01-01`
   const saleDate = parseDate(sale?.date)
-  // carStatus=192 in tbEnumGeral = "Devolvido" (returned vehicle)
-  const isDevolvido = row.carStatus !== undefined && String(row.carStatus) === '192'
+  // carSit (or carStatus) is a FK to tbEnumGeral; enummID=192 = "Devolvido"
+  const statusEnum = row.carSit ?? row.carStatus
+  const isDevolvido = statusEnum !== undefined && String(statusEnum) === '192'
   const status: 'available' | 'reserved' | 'sold' | 'returned' =
     isDevolvido ? 'returned' : saleDate ? 'sold' : 'available'
   const mileage = parseNum(purchase?.km ?? 0)
@@ -401,8 +404,8 @@ export async function POST(req: NextRequest) {
           category: str(r.opcCategoria),
         })), 'dealership_id,external_id', errors),
       upsertBatch(svc, 'general_enumerations',
-        (rawTables['tbEnumGeral'] ?? []).filter(r => r.enuID).map(r => ({
-          dealership_id: D, external_id: String(r.enuID),
+        (rawTables['tbEnumGeral'] ?? []).filter(r => r.enummID ?? r.enuID).map(r => ({
+          dealership_id: D, external_id: String(r.enummID ?? r.enuID),
           type: str(r.enuTipo) ?? 'GERAL',
           code: str(r.enuCodigo),
           description: str(r.enuDescri) ?? str(r.enuNome) ?? 'Sem descrição',
