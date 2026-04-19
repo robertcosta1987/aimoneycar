@@ -20,9 +20,6 @@ const standaloneTop: NavItem[] = [
   { href: '/dashboard/chat', icon: MessageSquare,   label: 'Chat IA'   },
 ]
 
-const standaloneBottom: NavItem[] = [
-  { href: '/dashboard/importar', icon: Upload, label: 'Importar' },
-]
 
 const groups: NavGroup[] = [
   {
@@ -55,7 +52,8 @@ const groups: NavGroup[] = [
 ]
 
 const bottomItems: NavItem[] = [
-  { href: '/dashboard/config', icon: Settings, label: 'Configurações' },
+  { href: '/dashboard/importar', icon: Upload,   label: 'Importar'       },
+  { href: '/dashboard/config',   icon: Settings, label: 'Configurações'  },
 ]
 
 // Derive which group hrefs belong to, to auto-expand on active route
@@ -187,30 +185,6 @@ export function Sidebar() {
           )
         })}
 
-        {/* Standalone bottom items */}
-        <div className="pt-1">
-          {!collapsed && (
-            <div className="px-3 py-1.5">
-              <span className="text-[16px] font-bold text-foreground-subtle">
-                Dados
-              </span>
-            </div>
-          )}
-          {standaloneBottom.map(item => (
-            <Link
-              key={item.href}
-              href={item.href}
-              title={collapsed ? item.label : undefined}
-              className={cn(
-                'flex items-center gap-3 px-3 py-2 rounded-xl transition-all duration-150',
-                'bg-blue-600 hover:bg-blue-500 text-white',
-              )}
-            >
-              <item.icon className="w-4 h-4 flex-shrink-0" />
-              {!collapsed && <span className="text-[14px] font-bold">{item.label}</span>}
-            </Link>
-          ))}
-        </div>
       </nav>
 
       {/* Bottom */}
