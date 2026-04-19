@@ -55,8 +55,9 @@ export default function RelatoriosPage() {
   const [vehicles, setVehicles]     = useState<any[]>([])
   const [expenses, setExpenses]     = useState<any[]>([])
   const [loading, setLoading]       = useState(true)
-  const [topModelsAI, setTopModelsAI]         = useState<{ model: string; count: number }[]>([])
+  const [topModelsAI, setTopModelsAI]           = useState<{ model: string; count: number }[]>([])
   const [topModelsLoading, setTopModelsLoading] = useState(true)
+  const [topModelsRefreshing, setTopModelsRefreshing] = useState(false)
   const supabase = createClient()
 
   // ── load available months once ──────────────────────────────────────────────
@@ -107,17 +108,21 @@ export default function RelatoriosPage() {
     loadMonths()
   }, [])
 
-  // ── AI top models (once on mount) ───────────────────────────────────────────
-  useEffect(() => {
-    fetch('/api/reports/top-models')
+  // ── AI top models ────────────────────────────────────────────────────────────
+  const fetchTopModels = (refresh = false) => {
+    if (refresh) setTopModelsRefreshing(true)
+    else setTopModelsLoading(true)
+    fetch(`/api/reports/top-models${refresh ? '?refresh=true' : ''}`)
       .then(r => r.json())
       .then(json => {
         console.log('[top-models]', json)
         if (json.models) setTopModelsAI(json.models)
       })
       .catch(err => console.error('[top-models] fetch error:', err))
-      .finally(() => setTopModelsLoading(false))
-  }, [])
+      .finally(() => { setTopModelsLoading(false); setTopModelsRefreshing(false) })
+  }
+
+  useEffect(() => { fetchTopModels() }, [])
 
   // ── load report data ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -614,9 +619,19 @@ export default function RelatoriosPage() {
           {/* AI top models tile */}
           <Card>
             <CardContent className="p-5">
-              <div className="flex items-center gap-2 mb-0.5">
-                <TrendingUp className="w-4 h-4 text-success flex-shrink-0" />
-                <p className="text-sm font-semibold text-foreground">Modelos com Maior Giro</p>
+              <div className="flex items-center justify-between mb-0.5">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-success flex-shrink-0" />
+                  <p className="text-sm font-semibold text-foreground">Modelos com Maior Giro</p>
+                </div>
+                <button
+                  onClick={() => fetchTopModels(true)}
+                  disabled={topModelsRefreshing || topModelsLoading}
+                  className="text-foreground-muted hover:text-foreground disabled:opacity-40 transition-colors"
+                  title="Atualizar agora"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${topModelsRefreshing ? 'animate-spin' : ''}`} />
+                </button>
               </div>
               <p className="text-xs text-foreground-muted mb-4">Top 10 mais vendidos nos últimos 12 meses</p>
               {topModelsLoading ? (

@@ -25,7 +25,7 @@ function isRepasse(raw: string): boolean {
   return /repasse/i.test(raw)
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -43,10 +43,13 @@ export async function GET() {
     }
 
     // ── Cache check ──────────────────────────────────────────────────────────
-    const cached = await getCache<{ models: { model: string; count: number }[] }>(
-      svc, profile.dealership_id, CACHE_KEY,
-    )
-    if (cached?.models?.length) return NextResponse.json(cached)
+    const refresh = new URL(req.url).searchParams.get('refresh') === 'true'
+    if (!refresh) {
+      const cached = await getCache<{ models: { model: string; count: number }[] }>(
+        svc, profile.dealership_id, CACHE_KEY,
+      )
+      if (cached?.models?.length) return NextResponse.json(cached)
+    }
 
     const twelveMonthsAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
