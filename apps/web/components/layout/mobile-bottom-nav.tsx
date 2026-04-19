@@ -22,14 +22,14 @@ type NavGroup = { section: string; items: { href: string; icon: React.ElementTyp
 
 const moreGroups: NavGroup[] = [
   {
-    section: 'Clientes',
+    section: 'CRM / Leads',
     items: [
       { href: '/dashboard/whatsapp',      icon: MessageCircle, label: 'WhatsApp'      },
       { href: '/dashboard/chat-clientes', icon: Users,         label: 'Chat Clientes' },
     ],
   },
   {
-    section: 'Carros',
+    section: 'Veículos',
     items: [
       { href: '/dashboard/envelhecimento', icon: Timer,      label: 'Giro de Estoque' },
       { href: '/dashboard/custos',         icon: DollarSign, label: 'Custos & Margem' },
@@ -38,13 +38,12 @@ const moreGroups: NavGroup[] = [
     ],
   },
   {
-    section: 'Relatórios',
+    section: 'Raio X',
     items: [
-      { href: '/dashboard/relatorios',                    icon: BarChart3,     label: 'Performance'    },
-      { href: '/dashboard/relatorios-executivos',         icon: FileBarChart2, label: 'Rel. Executivo' },
-      { href: '/dashboard/inteligencia',                  icon: BrainCircuit,  label: 'Inteligência'   },
-      { href: '/dashboard/relatorios/roi-valor-agregado', icon: Sparkles,      label: 'ROI & Valor'    },
-      { href: '/dashboard/relatorios/agendar',            icon: CalendarClock, label: 'Email Reports'  },
+      { href: '/dashboard/relatorios',            icon: BarChart3,     label: 'Performance'    },
+      { href: '/dashboard/relatorios-executivos', icon: FileBarChart2, label: 'Rel. Executivo' },
+      { href: '/dashboard/inteligencia',          icon: BrainCircuit,  label: 'Inteligência'   },
+      { href: '/dashboard/relatorios/agendar',    icon: CalendarClock, label: 'Agendar Envios' },
     ],
   },
   {

@@ -1,13 +1,13 @@
 'use client'
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Search, Car, Plus } from 'lucide-react'
+import { Search, Car, LayoutGrid, List } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { fetchAll } from '@/lib/supabase/fetch-all'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, cn } from '@/lib/utils'
 import { AgingBadge } from '@/components/aging/AgingBadge'
 import { useAgingThresholds } from '@/hooks/use-aging-thresholds'
 import { MissingCostBanner } from '@/components/cost/MissingCostBanner'
@@ -23,6 +23,7 @@ export default function VeiculosPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('available')
+  const [viewMode, setViewMode] = useState<'tiles' | 'list'>('tiles')
   const supabase = createClient()
   const { thresholds } = useAgingThresholds()
 
@@ -85,15 +86,28 @@ export default function VeiculosPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Veículos</h1>
+          <h1 className="text-2xl font-bold">Visão Geral</h1>
           <p className="text-foreground-muted text-sm mt-1">
             {stats.total} veículos · {stats.critical} críticos · {stats.avgDays} dias médios
           </p>
         </div>
-        <Button className="gap-2">
-          <Plus className="w-4 h-4" />
-          Adicionar
-        </Button>
+        {/* View toggle */}
+        <div className="flex gap-1 bg-background-elevated rounded-lg p-1">
+          <button
+            onClick={() => setViewMode('tiles')}
+            className={cn('p-1.5 rounded-md transition-all', viewMode === 'tiles' ? 'bg-background-paper text-foreground shadow-sm' : 'text-foreground-muted hover:text-foreground')}
+            title="Visualização em cards"
+          >
+            <LayoutGrid className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setViewMode('list')}
+            className={cn('p-1.5 rounded-md transition-all', viewMode === 'list' ? 'bg-background-paper text-foreground shadow-sm' : 'text-foreground-muted hover:text-foreground')}
+            title="Visualização em lista"
+          >
+            <List className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* Missing cost banner */}
@@ -159,7 +173,7 @@ export default function VeiculosPage() {
         </Select>
       </div>
 
-      {/* Vehicle grid */}
+      {/* Vehicle grid / list */}
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {Array.from({ length: 6 }).map((_, i) => (
@@ -172,15 +186,14 @@ export default function VeiculosPage() {
             <Car className="w-10 h-10 text-foreground-subtle mx-auto mb-3" />
             <p className="text-foreground-muted font-medium">Nenhum veículo encontrado</p>
             <p className="text-xs text-foreground-subtle mt-1">
-              {statusFilter !== 'all' ? 'Tente mudar o filtro de status.' : 'Importe seus dados ou adicione um veículo.'}
+              {statusFilter !== 'all' ? 'Tente mudar o filtro de status.' : 'Importe seus dados para visualizar veículos.'}
             </p>
           </CardContent>
         </Card>
-      ) : (
+      ) : viewMode === 'tiles' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {vehicles.map((v) => {
             const summary = buildCostSummary(v)
-            const marginColor = summary.grossProfit > 0 ? 'text-success' : summary.grossProfit < 0 ? 'text-danger' : 'text-foreground-muted'
 
             return (
               <Card key={v.id} className="hover:border-border-hover transition-all duration-200 hover:-translate-y-0.5 hover:shadow-card-hover">
@@ -260,6 +273,59 @@ export default function VeiculosPage() {
                   </div>
                 </CardContent>
               </Card>
+            )
+          })}
+        </div>
+      ) : (
+        /* List view */
+        <div className="rounded-xl border border-border overflow-hidden">
+          {/* Header row */}
+          <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_auto] gap-3 px-4 py-2 bg-background-elevated text-xs font-semibold text-foreground-subtle uppercase tracking-wide border-b border-border">
+            <span>Veículo</span>
+            <span>Placa / KM</span>
+            <span>Compra</span>
+            <span>Venda</span>
+            <span>Custo Real</span>
+            <span>Estoque</span>
+            <span />
+          </div>
+          {vehicles.map((v) => {
+            const summary = buildCostSummary(v)
+            return (
+              <div
+                key={v.id}
+                className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_auto] gap-3 px-4 py-3 items-center border-b border-border last:border-0 hover:bg-background-elevated transition-colors"
+              >
+                <div className="min-w-0">
+                  <p className="font-semibold text-sm text-foreground truncate">{v.brand} {v.model}</p>
+                  <p className="text-xs text-foreground-muted">{v.version ? `${v.version} · ` : ''}{v.year_model}/{v.year_fab}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-foreground">{v.plate || '—'}</p>
+                  <p className="text-xs text-foreground-subtle">{v.mileage?.toLocaleString('pt-BR') ?? '—'} km</p>
+                </div>
+                <p className={cn('text-sm font-medium', v.purchase_price === 0 ? 'text-danger' : 'text-foreground')}>
+                  {v.purchase_price === 0 ? '⚠️ R$ 0' : formatCurrency(v.purchase_price)}
+                </p>
+                <p className="text-sm font-medium text-foreground">{v.sale_price ? formatCurrency(v.sale_price) : '—'}</p>
+                <div>
+                  <p className="text-sm font-semibold text-foreground">{formatCurrency(summary.trueCost)}</p>
+                  <CostBadge summary={summary} />
+                </div>
+                <AgingBadge
+                  daysInStock={v.days_in_stock}
+                  vehicle={{ id: v.id, purchase_price: v.purchase_price, sale_price: v.sale_price, totalExpenses: summary.totalExpenses }}
+                  thresholds={thresholds}
+                />
+                <div className="flex gap-1">
+                  <Button variant="ghost" size="sm" className="h-7 text-xs px-2" onClick={() => setPanelVehicleId(v.id)}>
+                    Custos
+                  </Button>
+                  <Button variant="ghost" size="sm" className="h-7 text-xs px-2" onClick={() => setEditingVehicleId(v.id)}>
+                    Editar
+                  </Button>
+                </div>
+              </div>
             )
           })}
         </div>

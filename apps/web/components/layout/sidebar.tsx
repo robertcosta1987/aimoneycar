@@ -5,7 +5,7 @@ import {
   LayoutDashboard, MessageSquare, Car, Bell, Receipt,
   BarChart3, Upload, Settings, LogOut, ChevronLeft, ChevronRight,
   CalendarDays, Users, CalendarClock, Timer, DollarSign, FileBarChart2,
-  MessageCircle, Sparkles, ChevronDown, BrainCircuit,
+  MessageCircle, Sparkles, ChevronDown, BrainCircuit, ExternalLink,
 } from 'lucide-react'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
@@ -26,7 +26,7 @@ const standaloneBottom: NavItem[] = [
 
 const groups: NavGroup[] = [
   {
-    label: 'Clientes',
+    label: 'CRM / Leads',
     items: [
       { href: '/dashboard/whatsapp',       icon: MessageCircle, label: 'WhatsApp'      },
       { href: '/dashboard/chat-clientes',  icon: Users,         label: 'Chat Clientes' },
@@ -34,9 +34,9 @@ const groups: NavGroup[] = [
     ],
   },
   {
-    label: 'Carros',
+    label: 'Veículos',
     items: [
-      { href: '/dashboard/veiculos',       icon: Car,           label: 'Veículos'      },
+      { href: '/dashboard/veiculos',       icon: Car,           label: 'Visão Geral'   },
       { href: '/dashboard/envelhecimento', icon: Timer,         label: 'Giro de Estoque' },
       { href: '/dashboard/custos',         icon: DollarSign,    label: 'Custos & Margem' },
       { href: '/dashboard/alertas',        icon: Bell,          label: 'Alertas'       },
@@ -44,13 +44,12 @@ const groups: NavGroup[] = [
     ],
   },
   {
-    label: 'Relatórios',
+    label: 'Raio X',
     items: [
-      { href: '/dashboard/relatorios',                        icon: BarChart3,     label: 'Performance'       },
-      { href: '/dashboard/relatorios-executivos',             icon: FileBarChart2, label: 'Rel. Executivo'    },
-      { href: '/dashboard/inteligencia',                      icon: BrainCircuit,  label: 'Inteligência'      },
-      { href: '/dashboard/relatorios/roi-valor-agregado',     icon: Sparkles,      label: 'ROI & Valor'       },
-      { href: '/dashboard/relatorios/agendar',                icon: CalendarClock, label: 'Email Reports'     },
+      { href: '/dashboard/relatorios',            icon: BarChart3,     label: 'Performance'    },
+      { href: '/dashboard/relatorios-executivos', icon: FileBarChart2, label: 'Rel. Executivo' },
+      { href: '/dashboard/inteligencia',          icon: BrainCircuit,  label: 'Inteligência'   },
+      { href: '/dashboard/relatorios/agendar',    icon: CalendarClock, label: 'Agendar Envios' },
     ],
   },
 ]
@@ -109,11 +108,20 @@ export function Sidebar() {
       collapsed ? 'w-16' : 'w-64'
     )}>
       {/* Logo */}
-      <div className="flex items-center justify-center p-3 h-32 border-b border-border">
+      <div className="flex flex-col items-center justify-center p-3 h-32 border-b border-border gap-1">
         {collapsed ? (
           <span className="font-black text-sm text-primary leading-none">MC</span>
         ) : (
-          <span className="font-black text-[34px] text-primary tracking-tight">Moneycar <span className="text-foreground">IA</span></span>
+          <>
+            <span className="font-black text-[34px] text-primary tracking-tight leading-none">Moneycar <span className="text-foreground">IA</span></span>
+            <Link
+              href="/dashboard/relatorios/roi-valor-agregado"
+              className="flex items-center gap-1 text-[11px] text-foreground-subtle hover:text-primary transition-colors"
+            >
+              <Sparkles className="w-3 h-3" />
+              ROI & Valor
+            </Link>
+          </>
         )}
       </div>
 
