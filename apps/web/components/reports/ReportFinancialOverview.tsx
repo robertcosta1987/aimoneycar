@@ -53,8 +53,8 @@ export function ReportFinancialOverview({ data }: Props) {
                 <YAxis yAxisId="money" tick={{ fontSize: 10, fill: '#8B9EB3' }} tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
                 <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 10, fill: '#8B9EB3' }} tickFormatter={v => `${v.toFixed(0)}%`} domain={[0, 'auto']} />
                 <Tooltip
-                  contentStyle={{ background: '#111820', border: '1px solid #1E2A3A', borderRadius: 10, color: '#E2E8F0' }}
-                  labelStyle={{ color: '#E2E8F0' }}
+                  contentStyle={{ background: '#2563EB', border: 'none', borderRadius: 10, color: '#FFFFFF', fontWeight: 700 }}
+                  labelStyle={{ color: '#FFFFFF', fontWeight: 700 }}
                   formatter={(v: number, name: string) =>
                     name === 'Margem' ? [`${v.toFixed(1)}%`, name] : [formatCurrency(v), name]
                   }

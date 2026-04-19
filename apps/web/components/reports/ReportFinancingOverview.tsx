@@ -72,7 +72,7 @@ export function ReportFinancingOverview({ data }: Props) {
                   <Pie data={paymentSplit} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={40} outerRadius={60} paddingAngle={3}>
                     {paymentSplit.map((d, i) => <Cell key={i} fill={d.color} />)}
                   </Pie>
-                  <Tooltip contentStyle={{ background: '#111820', border: '1px solid #1E2A3A', borderRadius: 10, color: '#E2E8F0' }} labelStyle={{ color: '#E2E8F0' }} />
+                  <Tooltip contentStyle={{ background: '#2563EB', border: 'none', borderRadius: 10, color: '#FFFFFF', fontWeight: 700 }} labelStyle={{ color: '#FFFFFF', fontWeight: 700 }} />
                   <Legend iconType="circle" iconSize={8} formatter={(v) => <span className="text-xs text-foreground-muted">{v}</span>} />
                 </PieChart>
               </ResponsiveContainer>

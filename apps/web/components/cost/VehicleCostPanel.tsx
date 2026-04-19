@@ -247,7 +247,7 @@ export function VehicleCostPanel({ vehicle, onEditCosts }: VehicleCostPanelProps
                         tickLine={false}
                       />
                       <RTooltip
-                        contentStyle={{ background: '#111820', border: '1px solid #1E2A3A', borderRadius: 8, fontSize: 11, color: '#E2E8F0' }}
+                        contentStyle={{ background: '#2563EB', border: 'none', borderRadius: 8, fontSize: 11, color: '#FFFFFF', fontWeight: 700 }}
                         formatter={(value: number) => [formatCurrency(value), 'Valor']}
                       />
                       <Bar dataKey="amount" radius={[0, 3, 3, 0]}>

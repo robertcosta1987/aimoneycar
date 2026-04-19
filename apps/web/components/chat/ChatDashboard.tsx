@@ -18,14 +18,15 @@ const KPI_COLORS: Record<string, string> = {
 
 const TOOLTIP_STYLE = {
   contentStyle: {
-    background: '#111820',
-    border: '1px solid #1E2A3A',
+    background: '#2563EB',
+    border: 'none',
     borderRadius: 12,
     fontSize: 12,
-    color: '#E2E8F0',
+    color: '#FFFFFF',
+    fontWeight: 700,
   },
-  labelStyle: { color: '#94A3B8' },
-  itemStyle:  { color: '#E2E8F0' },
+  labelStyle: { color: '#FFFFFF', fontWeight: 700 },
+  itemStyle:  { color: '#FFFFFF', fontWeight: 700 },
 }
 
 const AXIS_TICK  = { fontSize: 11, fill: '#8B9EB3' }
