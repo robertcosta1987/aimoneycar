@@ -1,9 +1,10 @@
 /**
  * GET /api/reports/top-models
  *
- * Returns top 10 sold configurations (Model Engine Transmission, e.g. "Gol 1.0 AT")
- * from the past 12 months, ranked by sales volume.
- * AI normalizes the display name; falls back to raw aggregation if AI fails.
+ * Returns top 10 models by sales volume over the past 12 months.
+ * Counting is by model name only (all versions combined) so numbers are accurate.
+ * AI produces a clean display label (e.g. "Gol 1.0 MT") using the most-sold version.
+ * Strips "//" artifacts and excludes "Repasse" entries.
  * Cached 36 h. Empty results are never cached.
  */
 import { NextResponse } from 'next/server'
@@ -13,8 +14,16 @@ import { getCache, setCache } from '@/lib/ai/cache'
 
 export const dynamic = 'force-dynamic'
 
-const CACHE_KEY = 'top-models-v8'
+const CACHE_KEY = 'top-models-v9'
 const CACHE_TTL_HOURS = 36
+
+function cleanName(raw: string): string {
+  return raw.replace(/^\/+|\/+$/g, '').trim()
+}
+
+function isRepasse(raw: string): boolean {
+  return /repasse/i.test(raw)
+}
 
 export async function GET() {
   try {
@@ -42,7 +51,7 @@ export async function GET() {
     const twelveMonthsAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
     // Try with sale_date filter; fall back to all sold vehicles if empty
-    let { data: sold } = await svc
+    let { data: raw } = await svc
       .from('vehicles')
       .select('model, version, transmission')
       .eq('dealership_id', profile.dealership_id)
@@ -51,7 +60,7 @@ export async function GET() {
       .gte('sale_date', twelveMonthsAgo)
       .limit(2000)
 
-    if (!sold || sold.length === 0) {
+    if (!raw || raw.length === 0) {
       const fallback = await svc
         .from('vehicles')
         .select('model, version, transmission')
@@ -59,38 +68,56 @@ export async function GET() {
         .eq('status', 'sold')
         .not('model', 'is', null)
         .limit(2000)
-      sold = fallback.data
+      raw = fallback.data
     }
 
-    console.log('[top-models] sold vehicles found:', sold?.length ?? 0)
-    if (!sold || sold.length === 0) return NextResponse.json({ models: [] })
+    // Clean and filter
+    const sold = (raw ?? [])
+      .map(v => ({ ...v, model: cleanName(v.model ?? '') }))
+      .filter(v => v.model && !isRepasse(v.model) && !isRepasse(v.version ?? ''))
 
-    // Pre-aggregate by raw key: "model|version|transmission"
-    const rawCounts: Record<string, { model: string; version: string | null; transmission: string | null; count: number }> = {}
+    console.log('[top-models] sold vehicles after filter:', sold.length)
+    if (!sold.length) return NextResponse.json({ models: [] })
+
+    // ── Count by model name only (all versions combined) ────────────────────
+    // Also track the most common version+transmission per model for display
+    const modelCounts: Record<string, number> = {}
+    const versionCounts: Record<string, Record<string, number>> = {}
+
     for (const v of sold) {
-      const key = `${v.model ?? ''}|${v.version ?? ''}|${v.transmission ?? ''}`
-      if (!rawCounts[key]) rawCounts[key] = { model: v.model, version: v.version, transmission: v.transmission, count: 0 }
-      rawCounts[key].count++
+      const model = v.model.toUpperCase()
+      modelCounts[model] = (modelCounts[model] ?? 0) + 1
+
+      const versionKey = `${v.version ?? ''}|||${v.transmission ?? ''}`
+      if (!versionCounts[model]) versionCounts[model] = {}
+      versionCounts[model][versionKey] = (versionCounts[model][versionKey] ?? 0) + 1
     }
 
-    const top30 = Object.values(rawCounts)
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 30)
+    // Top 20 models by total sales count
+    const top20 = Object.entries(modelCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 20)
+      .map(([model, count]) => {
+        // Pick the most-sold version for this model
+        const bestVersionKey = Object.entries(versionCounts[model] ?? {})
+          .sort((a, b) => b[1] - a[1])[0]?.[0] ?? '|||'
+        const [version, transmission] = bestVersionKey.split('|||')
+        return { model, version: version || null, transmission: transmission || null, count }
+      })
 
-    // Fallback display name: "Model Version" (raw)
-    const fallbackModels = top30.slice(0, 10).map(v => ({
+    // Fallback display name (raw, no AI)
+    const fallbackModels = top20.slice(0, 10).map(v => ({
       model: [v.model, v.version].filter(Boolean).join(' ').trim(),
       count: v.count,
     }))
 
-    // ── Try AI normalization ─────────────────────────────────────────────────
+    // ── Try AI for clean display labels ─────────────────────────────────────
     try {
       const apiKey = process.env.ANTHROPIC_API_KEY
       if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set')
 
-      // Build numbered list: "1. GOL | 1.0 MPI FLEX | manual"
-      const lines = top30
-        .map((v, i) => `${i + 1}. modelo="${v.model ?? ''}" versão="${v.version ?? ''}" câmbio="${v.transmission ?? ''}"`)
+      const lines = top20
+        .map((v, i) => `${i + 1}. modelo="${v.model}" versão="${v.version ?? ''}" câmbio="${v.transmission ?? ''}" vendas=${v.count}`)
         .join('\n')
 
       const ai = new Anthropic({ apiKey })
@@ -100,15 +127,17 @@ export async function GET() {
         messages: [{
           role: 'user',
           content: `Você é especialista em veículos brasileiros.
-Para cada item abaixo, crie um nome de exibição no formato: "Modelo Motor Câmbio"
+Para cada item, crie um nome de exibição curto no formato: "Modelo Motor Câmbio"
 Regras:
-- Modelo: nome comercial curto (ex: Gol, Civic, HB20, City)
-- Motor: apenas a cilindrada (ex: 1.0, 1.8, 2.0)
-- Câmbio: AT (automático/CVT), MT (manual). Se desconhecido, omita.
-Exemplos: "GOL 1.0 MPI FLEX | manual" → "Gol 1.0 MT", "COROLLA XEI 2.0 FLEX | automático" → "Corolla 2.0 AT"
+- Modelo: nome comercial curto (ex: Gol, Civic, HB20, City, Onix)
+- Motor: apenas a cilindrada extraída da versão (ex: 1.0, 1.8, 2.0). Se não houver, omita.
+- Câmbio: AT (automático/CVT/auto), MT (manual). Se desconhecido, omita.
+Exemplos: "GOL | 1.0 MPI FLEX | manual" → "Gol 1.0 MT"
+         "COROLLA | XEI 2.0 FLEX | automático" → "Corolla 2.0 AT"
+         "HB20 | SENSE 1.0 | " → "HB20 1.0"
 
-Retorne SOMENTE um JSON array com os nomes na mesma ordem da lista. Exemplo:
-["Gol 1.0 MT","Corolla 2.0 AT","HB20 1.0 AT"]
+Retorne SOMENTE um JSON array com os nomes na mesma ordem da lista de entrada:
+["Gol 1.0 MT","Corolla 2.0 AT","HB20 1.0"]
 
 Lista:
 ${lines}`,
@@ -122,17 +151,10 @@ ${lines}`,
       if (match) {
         const names: string[] = JSON.parse(match[0])
         if (names.length) {
-          // Re-aggregate by AI-normalized name (merges e.g. same model different raw spelling)
-          const merged: Record<string, number> = {}
-          for (let i = 0; i < top30.length; i++) {
-            const name = (names[i] ?? fallbackModels[i]?.model ?? top30[i].model).trim()
-            merged[name] = (merged[name] ?? 0) + top30[i].count
-          }
-          const aiModels = Object.entries(merged)
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 10)
-            .map(([model, count]) => ({ model, count }))
-
+          const aiModels = top20.slice(0, 10).map((v, i) => ({
+            model: (names[i] ?? fallbackModels[i]?.model ?? v.model).trim(),
+            count: v.count,
+          }))
           console.log('[top-models] using AI result:', aiModels.length, 'models')
           const payload = { models: aiModels }
           await setCache(svc, profile.dealership_id, CACHE_KEY, payload, CACHE_TTL_HOURS)
@@ -143,7 +165,7 @@ ${lines}`,
       console.error('[top-models] AI failed, using fallback:', aiErr?.message)
     }
 
-    // ── Fallback: raw aggregation ────────────────────────────────────────────
+    // ── Fallback ─────────────────────────────────────────────────────────────
     console.log('[top-models] using raw fallback:', fallbackModels.length, 'models')
     const payload = { models: fallbackModels }
     await setCache(svc, profile.dealership_id, CACHE_KEY, payload, CACHE_TTL_HOURS)
