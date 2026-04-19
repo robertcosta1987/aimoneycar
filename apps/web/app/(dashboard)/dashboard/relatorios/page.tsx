@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
-import { BarChart3, TrendingUp, DollarSign, Car, Receipt, Calendar, CalendarClock, ChevronLeft, Sparkles, Bell, RefreshCw, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react'
+import { BarChart3, TrendingUp, DollarSign, Car, Receipt, Calendar, CalendarClock, ChevronLeft, Sparkles, Bell, RefreshCw } from 'lucide-react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { fetchAll } from '@/lib/supabase/fetch-all'
@@ -51,12 +51,12 @@ export default function RelatoriosPage() {
   const [period, setPeriod]               = useState('30')
   const [selectedMonth, setSelectedMonth] = useState<string>('')
   const [availableMonths, setAvailableMonths] = useState<AvailableMonth[]>([])
-  const [fastMoverSort, setFastMoverSort] = useState<'avgDays' | 'avgMargin' | 'count'>('avgDays')
   const [sales, setSales]           = useState<any[]>([])
   const [vehicles, setVehicles]     = useState<any[]>([])
   const [expenses, setExpenses]     = useState<any[]>([])
-  const [salesLast90, setSalesLast90] = useState<any[]>([])
   const [loading, setLoading]       = useState(true)
+  const [topModelsAI, setTopModelsAI]         = useState<{ model: string; count: number }[]>([])
+  const [topModelsLoading, setTopModelsLoading] = useState(true)
   const supabase = createClient()
 
   // ── load available months once ──────────────────────────────────────────────
@@ -107,6 +107,15 @@ export default function RelatoriosPage() {
     loadMonths()
   }, [])
 
+  // ── AI top models (once on mount) ───────────────────────────────────────────
+  useEffect(() => {
+    fetch('/api/reports/top-models')
+      .then(r => r.json())
+      .then(json => { if (json.models) setTopModelsAI(json.models) })
+      .catch(() => {})
+      .finally(() => setTopModelsLoading(false))
+  }, [])
+
   // ── load report data ─────────────────────────────────────────────────────────
   useEffect(() => {
     const load = async () => {
@@ -144,7 +153,7 @@ export default function RelatoriosPage() {
         .gte('date', dateStart)
       if (dateEnd) expQ = expQ.lte('date', dateEnd)
 
-      const [salesData, vehiclesData, expensesData, allSoldData] = await Promise.all([
+      const [salesData, vehiclesData, expensesData] = await Promise.all([
         fetchAll(salesQ),
         fetchAll(supabase
           .from('vehicles')
@@ -153,19 +162,11 @@ export default function RelatoriosPage() {
           .neq('status', 'sold')
           .order('days_in_stock', { ascending: false })),
         fetchAll(expQ),
-        fetchAll(supabase
-          .from('vehicles')
-          .select('brand, model, description, purchase_price, sale_price, days_in_stock')
-          .eq('dealership_id', did)
-          .eq('status', 'sold')
-          .not('days_in_stock', 'is', null)
-          .gt('days_in_stock', 0)),
       ])
 
       setSales(salesData)
       setVehicles(vehiclesData)
       setExpenses(expensesData)
-      setSalesLast90(allSoldData)
       setLoading(false)
     }
     if (mode === 'rolling' || (mode === 'month' && selectedMonth)) load()
@@ -226,35 +227,6 @@ export default function RelatoriosPage() {
     ? fastMovers.reduce((s, v) => s + v.profitPct, 0) / fastMovers.length / 100
     : 0.12 // fallback 12% if no data
 
-  // Top 10 fastest-selling models — all historical sold data, ranked by avg days in stock
-  const fastMoverModels = (() => {
-    const map: Record<string, { brand: string; model: string; count: number; totalDays: number; totalProfit: number; totalRevenue: number }> = {}
-    salesLast90.forEach((v: any) => {
-      if (!v.brand || !v.model) return
-      const days = Math.floor(Number(v.days_in_stock))
-      if (!Number.isFinite(days) || days <= 0) return
-      const desc = (v.description ?? '').toUpperCase()
-      const brand = (v.brand ?? '').toUpperCase()
-      const model = (v.model ?? '').toUpperCase()
-      if (desc.includes('REPASSE') || brand.includes('REPASSE') || model.includes('REPASSE')) return
-      const key = `${v.brand}|${v.model}`
-      if (!map[key]) map[key] = { brand: v.brand, model: v.model, count: 0, totalDays: 0, totalProfit: 0, totalRevenue: 0 }
-      map[key].count++
-      map[key].totalDays += days  // days is guaranteed > 0 here
-      map[key].totalRevenue += v.sale_price ?? 0
-      map[key].totalProfit += v.sale_price != null ? (v.sale_price - (v.purchase_price ?? 0)) : 0
-    })
-    return Object.values(map)
-      .filter(g => g.count >= 2 && g.totalDays > 0)
-      .map(g => ({
-        ...g,
-        avgDays: Math.max(1, Math.round(g.totalDays / g.count)),
-        avgMargin: g.totalRevenue > 0 ? (g.totalProfit / g.totalRevenue) * 100 : 0,
-      }))
-      .filter(g => g.avgDays > 0)
-      .sort((a, b) => a.avgDays - b.avgDays || b.avgMargin - a.avgMargin)
-      .slice(0, 10)
-  })()
 
   // How many full 45-day cycles could have been done with this capital?
   const cyclesLost = avgDaysCritical > 0 ? Math.floor(avgDaysCritical / 45) : 0
@@ -636,70 +608,35 @@ export default function RelatoriosPage() {
             </div>
           )}
 
-          {/* Fast-mover suggestions */}
-          {fastMoverModels.length > 0 && (
-            <Card className="border-success/30 bg-success/5">
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between mb-1 gap-3 flex-wrap">
-                  <div className="flex items-center gap-2">
-                    <TrendingUp className="w-4 h-4 text-success flex-shrink-0" />
-                    <p className="text-xs font-semibold text-success uppercase tracking-wide">Sugestões de Giro Rápido que evitam Capital Parado</p>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    {([
-                      { key: 'avgDays',   label: 'Dias',   icon: fastMoverSort === 'avgDays'   ? ArrowUp : ArrowUpDown },
-                      { key: 'avgMargin', label: 'Margem', icon: fastMoverSort === 'avgMargin' ? ArrowDown : ArrowUpDown },
-                      { key: 'count',     label: 'Vendas', icon: fastMoverSort === 'count'     ? ArrowDown : ArrowUpDown },
-                    ] as const).map(({ key, label, icon: Icon }) => (
-                      <button
-                        key={key}
-                        onClick={() => setFastMoverSort(key)}
-                        className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium transition-colors ${
-                          fastMoverSort === key
-                            ? 'bg-success/20 text-success border border-success/30'
-                            : 'bg-background-elevated text-foreground-muted border border-border hover:border-success/30 hover:text-success'
-                        }`}
-                      >
-                        <Icon className="w-3 h-3" />
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <p className="text-xs text-foreground-subtle mb-3">Top 10 modelos com menor tempo médio em estoque no histórico — mínimo 2 vendas para relevância estatística.</p>
+          {/* AI top models tile */}
+          <Card className="border-success/30 bg-success/5">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-1">
+                <TrendingUp className="w-4 h-4 text-success flex-shrink-0" />
+                <p className="text-xs font-semibold text-success uppercase tracking-wide">Sugestões de Giro Rápido que evitam Capital Parado</p>
+              </div>
+              <p className="text-xs text-foreground-subtle mb-3">Top 10 modelos mais vendidos no último ano, agrupados por IA.</p>
+              {topModelsLoading ? (
+                <p className="text-xs text-foreground-muted py-4 text-center">Analisando histórico de vendas...</p>
+              ) : topModelsAI.length === 0 ? (
+                <p className="text-xs text-foreground-muted py-4 text-center">Nenhum modelo com vendas suficientes no período.</p>
+              ) : (
                 <div className="space-y-0">
-                  {[...fastMoverModels]
-                    .sort((a, b) =>
-                      fastMoverSort === 'avgDays'   ? a.avgDays - b.avgDays :
-                      fastMoverSort === 'avgMargin' ? b.avgMargin - a.avgMargin :
-                      b.count - a.count
-                    )
-                    .map((m, i) => (
-                      <div key={`${m.brand}-${m.model}`} className="flex items-center justify-between py-2 border-b border-border/60 last:border-0">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-[10px] font-bold text-foreground-muted w-5 flex-shrink-0 text-right">#{i + 1}</span>
-                          <span className="text-sm font-medium text-foreground">{m.brand} {m.model}</span>
-                        </div>
-                        <div className="flex items-center gap-4 flex-shrink-0 ml-3">
-                          <div className="text-right">
-                            <p className="text-[10px] text-foreground-muted leading-none mb-0.5">Dias médio</p>
-                            <p className={`text-sm font-bold ${fastMoverSort === 'avgDays' ? 'text-success' : 'text-foreground'}`}>{Math.max(1, m.avgDays)}d</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-[10px] text-foreground-muted leading-none mb-0.5">Margem</p>
-                            <p className={`text-sm font-bold ${fastMoverSort === 'avgMargin' ? 'text-success' : 'text-foreground'}`}>{m.avgMargin.toFixed(1)}%</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-[10px] text-foreground-muted leading-none mb-0.5">Vendas</p>
-                            <p className={`text-sm font-bold ${fastMoverSort === 'count' ? 'text-success' : 'text-foreground'}`}>{m.count}</p>
-                          </div>
-                        </div>
+                  {topModelsAI.map((m, i) => (
+                    <div key={m.model} className="flex items-center justify-between py-2 border-b border-border/60 last:border-0">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-[10px] font-bold text-foreground-muted w-5 flex-shrink-0 text-right">#{i + 1}</span>
+                        <span className="text-sm font-medium text-foreground">{m.model}</span>
                       </div>
-                    ))}
+                      <Badge variant="outline" className="text-xs text-success border-success/30">
+                        {m.count} venda{m.count !== 1 ? 's' : ''}
+                      </Badge>
+                    </div>
+                  ))}
                 </div>
-              </CardContent>
-            </Card>
-          )}
+              )}
+            </CardContent>
+          </Card>
 
           {available.length > 0 && (
             <Card>
