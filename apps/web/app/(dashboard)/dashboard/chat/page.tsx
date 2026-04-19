@@ -13,6 +13,7 @@ interface Message {
   role: 'user' | 'assistant'
   content: string
   dashboard?: DashboardConfig
+  isError?: boolean
 }
 
 const quickActions = [
@@ -202,13 +203,14 @@ export default function ChatPage() {
           role: 'assistant',
           content: data.reply || data.error || 'Erro ao processar.',
           dashboard: data.dashboard,
+          isError: !!data.error && !data.reply,
         },
       ])
     } catch (err: any) {
       console.error('[Chat] send error:', err)
       setMessages(prev => [
         ...prev,
-        { id: (Date.now() + 1).toString(), role: 'assistant', content: `❌ ${err?.message ?? 'Erro de conexão. Tente novamente.'}` },
+        { id: (Date.now() + 1).toString(), role: 'assistant', content: err?.message ?? 'Erro de conexão. Tente novamente.', isError: true },
       ])
     } finally {
       setLoading(false)
@@ -249,17 +251,20 @@ export default function ChatPage() {
               {/* Avatar */}
               <div className={cn(
                 'w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5',
+                msg.isError ? 'bg-danger/20 text-danger' :
                 msg.role === 'assistant' ? 'bg-primary/20 text-primary' : 'bg-background-elevated text-foreground-muted'
               )}>
-                {msg.role === 'assistant' ? '⚡' : 'EU'}
+                {msg.isError ? '!' : msg.role === 'assistant' ? '⚡' : 'EU'}
               </div>
 
               {/* Bubble */}
               <div className={cn(
                 'rounded-2xl px-4 py-3 text-sm',
-                msg.role === 'assistant'
-                  ? 'bg-background-elevated border border-border rounded-bl-md flex-1'
-                  : 'bg-primary/15 border border-primary/25 rounded-br-md max-w-[80%]'
+                msg.isError
+                  ? 'bg-danger/8 border border-danger/30 rounded-bl-md flex-1 text-danger'
+                  : msg.role === 'assistant'
+                    ? 'bg-background-elevated border border-border rounded-bl-md flex-1'
+                    : 'bg-primary/15 border border-primary/25 rounded-br-md max-w-[80%]'
               )}>
                 <MarkdownBlock text={msg.content} />
                 {msg.dashboard && <ChatDashboard dashboard={msg.dashboard} />}
