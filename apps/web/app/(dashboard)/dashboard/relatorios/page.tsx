@@ -609,30 +609,48 @@ export default function RelatoriosPage() {
           )}
 
           {/* AI top models tile */}
-          <Card className="border-success/30 bg-success/5">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 mb-1">
+          <Card>
+            <CardContent className="p-5">
+              <div className="flex items-center gap-2 mb-0.5">
                 <TrendingUp className="w-4 h-4 text-success flex-shrink-0" />
-                <p className="text-xs font-semibold text-success uppercase tracking-wide">Sugestões de Giro Rápido que evitam Capital Parado</p>
+                <p className="text-sm font-semibold text-foreground">Modelos com Maior Giro</p>
               </div>
-              <p className="text-xs text-foreground-subtle mb-3">Top 10 modelos mais vendidos nos últimos 6 meses.</p>
+              <p className="text-xs text-foreground-muted mb-4">Top 10 mais vendidos nos últimos 6 meses</p>
               {topModelsLoading ? (
-                <p className="text-xs text-foreground-muted py-4 text-center">Carregando...</p>
-              ) : topModelsAI.length === 0 ? (
-                <p className="text-xs text-foreground-muted py-4 text-center">Nenhum modelo com vendas suficientes no período.</p>
-              ) : (
-                <div className="space-y-0">
-                  {topModelsAI.map((m, i) => (
-                    <div key={m.model} className="flex items-center justify-between py-2 border-b border-border/60 last:border-0">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-[10px] font-bold text-foreground-muted w-5 flex-shrink-0 text-right">#{i + 1}</span>
-                        <span className="text-sm font-medium text-foreground">{m.model}</span>
-                      </div>
-                      <Badge variant="outline" className="text-xs text-success border-success/30">
-                        {m.count} venda{m.count !== 1 ? 's' : ''}
-                      </Badge>
+                <div className="space-y-3 py-1">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <div key={i} className="flex items-center gap-3">
+                      <div className="w-4 h-3 rounded bg-border animate-pulse" />
+                      <div className="flex-1 h-3 rounded bg-border animate-pulse" />
+                      <div className="w-8 h-3 rounded bg-border animate-pulse" />
                     </div>
                   ))}
+                </div>
+              ) : topModelsAI.length === 0 ? (
+                <p className="text-xs text-foreground-muted py-6 text-center">Nenhuma venda registrada nos últimos 6 meses.</p>
+              ) : (
+                <div className="space-y-2.5">
+                  {topModelsAI.map((m, i) => {
+                    const max = topModelsAI[0].count
+                    const pct = Math.round((m.count / max) * 100)
+                    return (
+                      <div key={m.model} className="flex items-center gap-3">
+                        <span className="text-[10px] font-semibold text-foreground-muted w-4 text-right flex-shrink-0">{i + 1}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-medium text-foreground truncate">{m.model}</span>
+                            <span className="text-xs text-foreground-muted ml-2 flex-shrink-0">{m.count}x</span>
+                          </div>
+                          <div className="h-1 rounded-full bg-border overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-success/60"
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </CardContent>
