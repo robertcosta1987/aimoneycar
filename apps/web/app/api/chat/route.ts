@@ -216,16 +216,22 @@ export async function POST(req: NextRequest) {
         limitType,
       })
       // Surface billing/auth errors clearly to the client (non-sensitive)
-      const msg = err.error?.message ?? err.message ?? 'Anthropic API error'
-      if (err.status === 401) return NextResponse.json({ error: `Anthropic: invalid API key` }, { status: 502 })
-      if (err.status === 403 || msg.includes('credit balance')) return NextResponse.json({ error: `Anthropic: créditos insuficientes — adicione créditos em console.anthropic.com` }, { status: 502 })
+      const msg  = err.error?.message ?? err.message ?? 'Anthropic API error'
+      const type = err.error?.type ?? 'unknown'
+      if (err.status === 401) return NextResponse.json({ error: `Anthropic: chave de API inválida (401)` }, { status: 502 })
+      if (err.status === 403) {
+        const isBilling = msg.toLowerCase().includes('credit') || msg.toLowerCase().includes('billing') || type === 'billing_error'
+        if (isBilling) return NextResponse.json({ error: `Anthropic: créditos insuficientes — adicione créditos em console.anthropic.com` }, { status: 502 })
+        return NextResponse.json({ error: `Anthropic: acesso negado (403) — ${type}: ${msg}` }, { status: 502 })
+      }
+      if (msg.includes('credit balance')) return NextResponse.json({ error: `Anthropic: créditos insuficientes — adicione créditos em console.anthropic.com` }, { status: 502 })
       if (err.status === 429) {
         const waitSec = retryAfter ? parseInt(retryAfter, 10) : null
         const waitMsg = waitSec ? ` Tente novamente em ${waitSec}s.` : ''
         const typeMsg = limitType === 'RPM' ? ' (limite de requisições por minuto)' : ' (limite de tokens por minuto)'
         return NextResponse.json({ error: `Anthropic: rate limit atingido${typeMsg}.${waitMsg}` }, { status: 502 })
       }
-      return NextResponse.json({ error: `Anthropic: ${msg}` }, { status: 502 })
+      return NextResponse.json({ error: `Anthropic [${err.status}] ${type}: ${msg}` }, { status: 502 })
     }
 
     console.error('[Chat] Unexpected error:', err)
