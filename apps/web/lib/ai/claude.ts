@@ -876,7 +876,7 @@ export async function chatWithClaude(
       throw new Error(`Agentic loop exceeded ${MAX_ITERATIONS} iterations — possible tool loop detected`)
     }
     const response = await callWithRetry(() => getAI().messages.create({
-      model: 'claude-sonnet-4-6',
+      model: 'claude-3-5-sonnet-20241022',
       max_tokens: 4096,
       system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
       tools: ALL_TOOLS,

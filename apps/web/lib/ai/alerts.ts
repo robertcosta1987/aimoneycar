@@ -97,7 +97,7 @@ Responda APENAS com um array JSON de exatamente ${candidates.length} objetos:
 [{"type":"critical"|"warning"|"info"|"success","title":"título curto","message":"1-2 frases acionáveis","action":"texto botão ou null"}]`
 
   const response = await callWithRetry(() => getAI().messages.create({
-    model: 'claude-haiku-4-5-20251001',
+    model: 'claude-3-5-haiku-20241022',
     max_tokens: 2048,
     messages: [{ role: 'user', content: prompt }],
   }))
