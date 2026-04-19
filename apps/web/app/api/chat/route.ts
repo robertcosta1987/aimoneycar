@@ -216,15 +216,17 @@ export async function POST(req: NextRequest) {
         limitType,
       })
       // Surface billing/auth errors clearly to the client (non-sensitive)
-      const msg  = err.error?.message ?? err.message ?? 'Anthropic API error'
-      const type = err.error?.type ?? 'unknown'
-      if (err.status === 401) return NextResponse.json({ error: `Anthropic: chave de API inválida (401)` }, { status: 502 })
-      if (err.status === 403) {
-        const isBilling = msg.toLowerCase().includes('credit') || msg.toLowerCase().includes('billing') || type === 'billing_error'
-        if (isBilling) return NextResponse.json({ error: `Anthropic: créditos insuficientes — ${type}: "${msg}"` }, { status: 502 })
-        return NextResponse.json({ error: `Anthropic: acesso negado (403) — ${type}: ${msg}` }, { status: 502 })
+      // err.message may be the raw SDK string e.g. "400 {\"type\":\"error\",...}"
+      const rawMsg  = err.error?.message ?? err.message ?? 'Anthropic API error'
+      const type    = err.error?.type ?? 'unknown'
+      const status  = err.status ?? 0
+      const isLowBalance = rawMsg.toLowerCase().includes('credit') || rawMsg.toLowerCase().includes('billing')
+      if (status === 401) return NextResponse.json({ error: `Anthropic: chave de API inválida (401)` }, { status: 502 })
+      if (status === 403 || (status === 400 && isLowBalance)) {
+        if (isLowBalance) return NextResponse.json({ error: `Anthropic: créditos insuficientes. Verifique se a chave de API pertence ao mesmo workspace onde os créditos foram adicionados em console.anthropic.com` }, { status: 502 })
+        return NextResponse.json({ error: `Anthropic: acesso negado (${status}) — ${type}: ${rawMsg}` }, { status: 502 })
       }
-      if (msg.includes('credit balance')) return NextResponse.json({ error: `Anthropic: créditos insuficientes — ${type}: "${msg}"` }, { status: 502 })
+      const msg = rawMsg
       if (err.status === 429) {
         const waitSec = retryAfter ? parseInt(retryAfter, 10) : null
         const waitMsg = waitSec ? ` Tente novamente em ${waitSec}s.` : ''
