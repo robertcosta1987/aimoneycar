@@ -14,10 +14,11 @@ import { fetchAll } from '@/lib/supabase/fetch-all'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { formatCurrency, formatPercent } from '@/lib/utils'
 import {
   TrendingUp, TrendingDown, Minus, AlertTriangle,
-  ShoppingCart, DollarSign, Clock, BarChart3,
+  ShoppingCart, DollarSign, Clock, BarChart3, Calendar,
 } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid,
@@ -36,66 +37,124 @@ function isoDate(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-function getPeriods() {
-  const now   = new Date()
-  const y     = now.getFullYear()
-  const m     = now.getMonth()
-
-  return {
-    current: {
-      label: now.toLocaleString('pt-BR', { month: 'long', year: 'numeric' }),
-      start: isoDate(new Date(y, m, 1)),
-      end:   isoDate(now),
-    },
-    previous: {
-      label: new Date(y, m - 1, 1).toLocaleString('pt-BR', { month: 'long', year: 'numeric' }),
-      start: isoDate(new Date(y, m - 1, 1)),
-      end:   isoDate(new Date(y, m, 0)),
-    },
-    sameLastYear: {
-      label: new Date(y - 1, m, 1).toLocaleString('pt-BR', { month: 'long', year: 'numeric' }),
-      start: isoDate(new Date(y - 1, m, 1)),
-      end:   isoDate(new Date(y - 1, m + 1, 0)),
-    },
-  }
-}
-
 function calcPeriodStats(vehicles: any[]) {
   if (!vehicles.length) return { units: 0, revenue: 0, profit: 0, margin: 0, avgDays: 0, avgTicket: 0 }
-  const units   = vehicles.length
-  const revenue = vehicles.reduce((s, v) => s + (v.sale_price || 0), 0)
-  const profit  = vehicles.reduce((s, v) => {
+  const units    = vehicles.length
+  const revenue  = vehicles.reduce((s, v) => s + (v.sale_price || 0), 0)
+  const profit   = vehicles.reduce((s, v) => {
     const exp = (v.expenses || []).reduce((e: number, x: any) => e + x.amount, 0)
     return s + (v.sale_price || 0) - v.purchase_price - exp
   }, 0)
-  const margin   = revenue > 0 ? (profit / revenue) * 100 : 0
-  const avgDays  = Math.round(vehicles.reduce((s, v) => s + (v.days_in_stock ?? 0), 0) / units)
+  const margin    = revenue > 0 ? (profit / revenue) * 100 : 0
+  const avgDays   = Math.round(vehicles.reduce((s, v) => s + (v.days_in_stock ?? 0), 0) / units)
   const avgTicket = Math.round(revenue / units)
   return { units, revenue, profit, margin, avgDays, avgTicket }
 }
 
-function Delta({ curr, prev, fmt = 'num' }: { curr: number; prev: number; fmt?: 'num'|'currency'|'percent'|'days' }) {
+function Delta({ curr, prev }: { curr: number; prev: number }) {
   if (prev === 0 && curr === 0) return <span className="text-xs text-foreground-subtle">—</span>
-  const pct = prev === 0 ? 100 : ((curr - prev) / Math.abs(prev)) * 100
-  const up   = curr >= prev
+  const pct     = prev === 0 ? 100 : ((curr - prev) / Math.abs(prev)) * 100
+  const up      = curr >= prev
   const neutral = Math.abs(pct) < 1
-  const color = neutral ? 'text-foreground-muted' : up ? 'text-success' : 'text-danger'
-  const Icon  = neutral ? Minus : up ? TrendingUp : TrendingDown
-  const label = neutral ? '—' : `${pct > 0 ? '+' : ''}${pct.toFixed(1)}%`
+  const color   = neutral ? 'text-foreground-muted' : up ? 'text-success' : 'text-danger'
+  const Icon    = neutral ? Minus : up ? TrendingUp : TrendingDown
   return (
-    <span className={cn('inline-flex items-center gap-0.5 text-xs font-medium', color)}>
-      <Icon className="w-3 h-3" />{label}
+    <span className={cn('inline-flex items-center gap-0.5 text-xs font-semibold', color)}>
+      <Icon className="w-3 h-3" />{neutral ? '—' : `${pct > 0 ? '+' : ''}${pct.toFixed(1)}%`}
     </span>
+  )
+}
+
+type Stats = ReturnType<typeof calcPeriodStats>
+const ROWS: Array<{ label: string; key: keyof Stats; display: (v: number) => string }> = [
+  { label: 'Unidades Vendidas', key: 'units',     display: v => String(v) },
+  { label: 'Receita Total',     key: 'revenue',   display: formatCurrency },
+  { label: 'Lucro Total',       key: 'profit',    display: formatCurrency },
+  { label: 'Margem Média',      key: 'margin',    display: v => formatPercent(v) },
+  { label: 'Dias Médios',       key: 'avgDays',   display: v => `${v}d` },
+  { label: 'Ticket Médio',      key: 'avgTicket', display: formatCurrency },
+]
+
+function CompareTable({ labelA, labelB, a, b }: { labelA: string; labelB: string; a: Stats; b: Stats }) {
+  return (
+    <Card>
+      <CardContent className="p-0 overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border">
+              <th className="text-left px-4 py-3 text-xs text-foreground-muted font-medium w-40">Métrica</th>
+              <th className="text-right px-4 py-3 text-xs text-foreground-muted font-medium">{labelA}</th>
+              <th className="text-right px-4 py-3 text-xs text-primary font-semibold bg-primary/5">{labelB}</th>
+              <th className="text-right px-4 py-3 text-xs text-foreground-muted font-medium w-24">Variação</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ROWS.map(row => (
+              <tr key={row.key} className="border-b border-border last:border-0 hover:bg-background-elevated/30">
+                <td className="px-4 py-3 text-xs text-foreground-muted font-medium">{row.label}</td>
+                <td className="px-4 py-3 text-right font-mono text-sm text-foreground-muted">
+                  {row.display(a[row.key] as number)}
+                </td>
+                <td className="px-4 py-3 text-right font-mono text-sm font-bold text-foreground bg-primary/5">
+                  {row.display(b[row.key] as number)}
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <Delta curr={b[row.key] as number} prev={a[row.key] as number} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </CardContent>
+    </Card>
+  )
+}
+
+function CompareChart({ labelA, labelB, a, b }: { labelA: string; labelB: string; a: Stats; b: Stats }) {
+  const data = [
+    { name: 'Receita',  [labelA]: a.revenue, [labelB]: b.revenue },
+    { name: 'Lucro',    [labelA]: a.profit,  [labelB]: b.profit  },
+  ]
+  return (
+    <Card>
+      <CardContent className="pt-4">
+        <ResponsiveContainer width="100%" height={200}>
+          <BarChart data={data} barGap={6}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#1E2A3A" />
+            <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#8B9EB3' }} />
+            <YAxis tick={{ fontSize: 11, fill: '#8B9EB3' }} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
+            <Tooltip {...TOOLTIP_STYLE} formatter={(v: number) => formatCurrency(v)} />
+            <Bar dataKey={labelA} fill="#4B5563" radius={[4,4,0,0]} />
+            <Bar dataKey={labelB} fill="#3B82F6" radius={[4,4,0,0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </CardContent>
+    </Card>
   )
 }
 
 // ─── Benchmark ────────────────────────────────────────────────────────────────
 
+type BenchmarkMode = 'mes-fechado' | 'mtd' | 'anual'
+
 function BenchmarkTab() {
   const supabase = createClient()
-  const [loading, setLoading]   = useState(true)
-  const [allSold, setAllSold]   = useState<any[]>([])
-  const periods = getPeriods()
+  const [loading, setLoading] = useState(true)
+  const [allSold, setAllSold] = useState<any[]>([])
+  const [mode, setMode]       = useState<BenchmarkMode>('mes-fechado')
+
+  const now = new Date()
+  const y   = now.getFullYear()
+  const m   = now.getMonth()
+  const d   = now.getDate()
+
+  // Year options for annual comparison
+  const yearOptions = [y, y - 1, y - 2].filter((yr, i) => i < 3)
+  const [yearA, setYearA] = useState(String(y - 1))
+  const [yearB, setYearB] = useState(String(y))
+
+  // Fetch 3 years of sold data once
+  const threeYearsAgo = isoDate(new Date(y - 3, 0, 1))
 
   useEffect(() => {
     let cancelled = false
@@ -103,15 +162,14 @@ function BenchmarkTab() {
       const { data: userData } = await supabase.from('users').select('dealership_id').single()
       const did = userData?.dealership_id
       if (!did) { setLoading(false); return }
-
       const data = await fetchAll(
         supabase.from('vehicles')
           .select('sale_price, purchase_price, days_in_stock, sale_date, expenses:expenses(amount)')
           .eq('dealership_id', did)
           .eq('status', 'sold')
-          .gte('sale_date', periods.sameLastYear.start)
+          .gte('sale_date', threeYearsAgo)
           .order('sale_date', { ascending: false })
-          .limit(1000)
+          .limit(2000)
       )
       if (!cancelled) { setAllSold(data); setLoading(false) }
     }
@@ -124,92 +182,109 @@ function BenchmarkTab() {
   const filter = (start: string, end: string) =>
     allSold.filter(v => v.sale_date >= start && v.sale_date <= end)
 
-  const curr  = calcPeriodStats(filter(periods.current.start,      periods.current.end))
-  const prev  = calcPeriodStats(filter(periods.previous.start,     periods.previous.end))
-  const lyear = calcPeriodStats(filter(periods.sameLastYear.start, periods.sameLastYear.end))
+  // ── Mês Fechado: last full month vs same month last year ──────────────────
+  const lastMonthStart  = isoDate(new Date(y, m - 1, 1))
+  const lastMonthEnd    = isoDate(new Date(y, m, 0))
+  const lyMonthStart    = isoDate(new Date(y - 1, m - 1, 1))
+  const lyMonthEnd      = isoDate(new Date(y - 1, m, 0))
+  const lastMonthLabel  = new Date(y, m - 1, 1).toLocaleString('pt-BR', { month: 'long', year: 'numeric' })
+  const lyMonthLabel    = new Date(y - 1, m - 1, 1).toLocaleString('pt-BR', { month: 'long', year: 'numeric' })
+  const statsMF_A       = calcPeriodStats(filter(lyMonthStart, lyMonthEnd))
+  const statsMF_B       = calcPeriodStats(filter(lastMonthStart, lastMonthEnd))
 
-  const rows: Array<{ label: string; key: keyof typeof curr; fmt: 'num'|'currency'|'percent'|'days'; display: (v: number) => string }> = [
-    { label: 'Unidades Vendidas', key: 'units',    fmt: 'num',      display: v => String(v) },
-    { label: 'Receita Total',     key: 'revenue',  fmt: 'currency', display: formatCurrency },
-    { label: 'Lucro Total',       key: 'profit',   fmt: 'currency', display: formatCurrency },
-    { label: 'Margem Média',      key: 'margin',   fmt: 'percent',  display: v => formatPercent(v) },
-    { label: 'Dias Médios',       key: 'avgDays',  fmt: 'days',     display: v => `${v}d` },
-    { label: 'Ticket Médio',      key: 'avgTicket', fmt: 'currency', display: formatCurrency },
-  ]
+  // ── MTD: current month to today vs same period last year ─────────────────
+  const mtdStart     = isoDate(new Date(y, m, 1))
+  const mtdEnd       = isoDate(now)
+  const lyMTDStart   = isoDate(new Date(y - 1, m, 1))
+  const lyMTDEnd     = isoDate(new Date(y - 1, m, d))
+  const mtdLabel     = `${now.toLocaleString('pt-BR', { month: 'long' })} ${y} até dia ${d}`
+  const lyMTDLabel   = `${new Date(y - 1, m, 1).toLocaleString('pt-BR', { month: 'long' })} ${y - 1} até dia ${d}`
+  const statsMTD_A   = calcPeriodStats(filter(lyMTDStart, lyMTDEnd))
+  const statsMTD_B   = calcPeriodStats(filter(mtdStart, mtdEnd))
 
-  const chartData = [
-    { name: periods.sameLastYear.label.split(' ')[0] + ' -1a', revenue: lyear.revenue, profit: lyear.profit },
-    { name: periods.previous.label.split(' ')[0],              revenue: prev.revenue,  profit: prev.profit  },
-    { name: 'Este mês',                                         revenue: curr.revenue,  profit: curr.profit  },
-  ]
+  // ── Anual: full year A vs full year B ─────────────────────────────────────
+  const yA = parseInt(yearA)
+  const yB = parseInt(yearB)
+  const statsYear_A = calcPeriodStats(filter(`${yA}-01-01`, `${yA}-12-31`))
+  const statsYear_B = calcPeriodStats(filter(`${yB}-01-01`, `${yB}-12-31`))
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-bold text-foreground">Benchmark de Período</h2>
-        <p className="text-sm text-foreground-muted mt-0.5">Compare o desempenho entre períodos equivalentes</p>
+    <div className="space-y-5">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h2 className="text-lg font-bold text-foreground">Benchmark de Período</h2>
+          <p className="text-sm text-foreground-muted mt-0.5">Compare períodos equivalentes</p>
+        </div>
+        {/* Mode selector */}
+        <div className="flex gap-1 bg-background-elevated rounded-lg p-1">
+          {([
+            { value: 'mes-fechado', label: 'Mês Fechado' },
+            { value: 'mtd',         label: 'MTD' },
+            { value: 'anual',       label: 'Anual' },
+          ] as { value: BenchmarkMode; label: string }[]).map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => setMode(opt.value)}
+              className={cn(
+                'px-3 py-1.5 rounded-md text-xs font-medium transition-all',
+                mode === opt.value
+                  ? 'bg-background-paper text-foreground shadow-sm'
+                  : 'text-foreground-muted hover:text-foreground'
+              )}
+            >{opt.label}</button>
+          ))}
+        </div>
       </div>
 
-      {/* Period comparison table */}
-      <Card>
-        <CardContent className="p-0 overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border">
-                <th className="text-left px-4 py-3 text-xs text-foreground-muted font-medium w-40">Métrica</th>
-                <th className="text-right px-4 py-3 text-xs text-foreground-muted font-medium">
-                  {periods.sameLastYear.label}
-                </th>
-                <th className="text-right px-4 py-3 text-xs text-foreground-muted font-medium">
-                  {periods.previous.label}
-                </th>
-                <th className="text-right px-4 py-3 text-xs text-primary font-semibold bg-primary/5 rounded-tr-xl">
-                  {periods.current.label}
-                </th>
-                <th className="text-right px-4 py-3 text-xs text-foreground-muted font-medium">vs Mês Ant.</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(row => (
-                <tr key={row.key} className="border-b border-border last:border-0 hover:bg-background-elevated/30">
-                  <td className="px-4 py-3 text-xs text-foreground-muted font-medium">{row.label}</td>
-                  <td className="px-4 py-3 text-right font-mono text-sm text-foreground-muted">
-                    {row.display(lyear[row.key] as number)}
-                  </td>
-                  <td className="px-4 py-3 text-right font-mono text-sm text-foreground-muted">
-                    {row.display(prev[row.key] as number)}
-                  </td>
-                  <td className="px-4 py-3 text-right font-mono text-sm font-bold text-foreground bg-primary/5">
-                    {row.display(curr[row.key] as number)}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <Delta curr={curr[row.key] as number} prev={prev[row.key] as number} fmt={row.fmt} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </CardContent>
-      </Card>
+      {/* ── Mês Fechado ───────────────────────────────────────────────────── */}
+      {mode === 'mes-fechado' && (
+        <>
+          <div className="flex items-center gap-2 text-xs text-foreground-muted">
+            <Calendar className="w-3.5 h-3.5" />
+            <span>Mês completo anterior vs mesmo mês do ano passado</span>
+          </div>
+          <CompareTable labelA={lyMonthLabel} labelB={lastMonthLabel} a={statsMF_A} b={statsMF_B} />
+          <CompareChart labelA={lyMonthLabel} labelB={lastMonthLabel} a={statsMF_A} b={statsMF_B} />
+        </>
+      )}
 
-      {/* Revenue + profit chart */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Receita vs Lucro — 3 Períodos</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={chartData} barGap={4}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1E2A3A" />
-              <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#8B9EB3' }} />
-              <YAxis tick={{ fontSize: 11, fill: '#8B9EB3' }} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
-              <Tooltip {...TOOLTIP_STYLE} formatter={(v: number, name: string) => [formatCurrency(v), name === 'revenue' ? 'Receita' : 'Lucro']} />
-              <Bar dataKey="revenue" name="revenue" fill="#3B82F6" radius={[4,4,0,0]} />
-              <Bar dataKey="profit"  name="profit"  fill="#22C55E" radius={[4,4,0,0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
+      {/* ── MTD ───────────────────────────────────────────────────────────── */}
+      {mode === 'mtd' && (
+        <>
+          <div className="flex items-center gap-2 text-xs text-foreground-muted">
+            <Calendar className="w-3.5 h-3.5" />
+            <span>Vendas até o dia {d} deste mês vs mesmo período do ano passado</span>
+          </div>
+          <CompareTable labelA={lyMTDLabel} labelB={mtdLabel} a={statsMTD_A} b={statsMTD_B} />
+          <CompareChart labelA={lyMTDLabel} labelB={mtdLabel} a={statsMTD_A} b={statsMTD_B} />
+        </>
+      )}
+
+      {/* ── Anual ─────────────────────────────────────────────────────────── */}
+      {mode === 'anual' && (
+        <>
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-xs text-foreground-muted flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5" />Comparar
+            </span>
+            <Select value={yearA} onValueChange={setYearA}>
+              <SelectTrigger className="w-28 h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {yearOptions.map(yr => <SelectItem key={yr} value={String(yr)}>{yr}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <span className="text-xs text-foreground-muted">vs</span>
+            <Select value={yearB} onValueChange={setYearB}>
+              <SelectTrigger className="w-28 h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {yearOptions.map(yr => <SelectItem key={yr} value={String(yr)}>{yr}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <CompareTable labelA={`Ano ${yA}`} labelB={`Ano ${yB}`} a={statsYear_A} b={statsYear_B} />
+          <CompareChart labelA={`Ano ${yA}`} labelB={`Ano ${yB}`} a={statsYear_A} b={statsYear_B} />
+        </>
+      )}
     </div>
   )
 }
