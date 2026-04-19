@@ -405,7 +405,7 @@ export const vehicles: Vehicle[] = [
 // Calculate dashboard stats
 export function getDashboardStats(): DashboardStats {
   const availableVehicles = vehicles.filter((v) => v.status === 'available');
-  const returnedVehicles = vehicles.filter((v) => v.status === 'reserved');
+  const returnedVehicles = vehicles.filter((v) => v.status === 'returned');
   const soldVehicles = vehicles.filter((v) => v.status === 'sold');
 
   // Calculate totals
