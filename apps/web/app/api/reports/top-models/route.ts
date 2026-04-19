@@ -1,18 +1,17 @@
 /**
  * GET /api/reports/top-models
  *
- * Fetches sold vehicles from the past year, sends the raw model list to Claude,
- * and returns the top 10 models (normalized and grouped) with their sale counts.
+ * Returns the top 10 best-selling models in the past 6 months,
+ * grouped directly by the model field (no AI required).
  */
 import { NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
-import Anthropic from '@anthropic-ai/sdk'
 import { getCache, setCache } from '@/lib/ai/cache'
 
 export const dynamic = 'force-dynamic'
 
-const CACHE_KEY = 'top-models'
-const CACHE_TTL_HOURS = 24
+const CACHE_KEY = 'top-models-v2'
+const CACHE_TTL_HOURS = 6
 
 export async function GET() {
   try {
@@ -31,60 +30,41 @@ export async function GET() {
     )
     if (cached) return NextResponse.json(cached)
 
-    const oneYearAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    const sixMonthsAgo = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
-    const { data: sold } = await svc
+    const { data: sold, error } = await svc
       .from('vehicles')
       .select('model')
       .eq('dealership_id', profile.dealership_id)
       .eq('status', 'sold')
       .not('model', 'is', null)
-      .gte('sale_date', oneYearAgo)
-      .limit(1000)
+      .gte('sale_date', sixMonthsAgo)
+      .limit(2000)
+
+    if (error) throw error
 
     if (!sold || sold.length === 0) {
       return NextResponse.json({ models: [] })
     }
 
-    // Pre-group by exact model string to reduce tokens
+    // Group by model name (case-insensitive, trimmed)
     const counts: Record<string, number> = {}
     for (const v of sold) {
-      const m = (v.model ?? '').trim()
-      if (m) counts[m] = (counts[m] ?? 0) + 1
+      const key = (v.model ?? '').trim().toUpperCase()
+      if (key) counts[key] = (counts[key] ?? 0) + 1
     }
 
-    const lines = Object.entries(counts)
+    const models = Object.entries(counts)
       .sort((a, b) => b[1] - a[1])
-      .map(([model, count]) => `${model}: ${count}`)
-      .join('\n')
+      .slice(0, 10)
+      .map(([model, count]) => ({
+        // Capitalize nicely: "GOL" → "Gol"
+        model: model.charAt(0) + model.slice(1).toLowerCase(),
+        count,
+      }))
 
-    const ai = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
+    const payload = { models }
 
-    const message = await ai.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 512,
-      messages: [{
-        role: 'user',
-        content: `Você é um analista de uma revenda de veículos brasileira.
-Abaixo está uma lista de modelos de veículos vendidos no último ano com suas quantidades.
-Agrupe variações do mesmo modelo (ex: "Gol 1.0", "Gol G5", "Gol Trend" → "Gol").
-Retorne os top 10 modelos com maior volume de vendas (somando as variações).
-Responda SOMENTE com um JSON array, sem explicação. Formato:
-[{"model":"Gol","count":15},{"model":"Corolla","count":12}]
-
-Dados:
-${lines}`,
-      }],
-    })
-
-    const text = (message.content[0] as any).text ?? ''
-    const match = text.match(/\[[\s\S]*\]/)
-    if (!match) return NextResponse.json({ models: [] })
-
-    const models = JSON.parse(match[0]) as { model: string; count: number }[]
-    const payload = { models: models.slice(0, 10) }
-
-    // ── Store in cache ───────────────────────────────────────────────────────
     await setCache(svc, profile.dealership_id, CACHE_KEY, payload, CACHE_TTL_HOURS)
 
     return NextResponse.json(payload)

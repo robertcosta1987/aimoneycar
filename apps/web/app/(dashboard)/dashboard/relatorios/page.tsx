@@ -615,9 +615,9 @@ export default function RelatoriosPage() {
                 <TrendingUp className="w-4 h-4 text-success flex-shrink-0" />
                 <p className="text-xs font-semibold text-success uppercase tracking-wide">Sugestões de Giro Rápido que evitam Capital Parado</p>
               </div>
-              <p className="text-xs text-foreground-subtle mb-3">Top 10 modelos mais vendidos no último ano, agrupados por IA.</p>
+              <p className="text-xs text-foreground-subtle mb-3">Top 10 modelos mais vendidos nos últimos 6 meses.</p>
               {topModelsLoading ? (
-                <p className="text-xs text-foreground-muted py-4 text-center">Analisando histórico de vendas...</p>
+                <p className="text-xs text-foreground-muted py-4 text-center">Carregando...</p>
               ) : topModelsAI.length === 0 ? (
                 <p className="text-xs text-foreground-muted py-4 text-center">Nenhum modelo com vendas suficientes no período.</p>
               ) : (
