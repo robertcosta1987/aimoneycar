@@ -11,11 +11,27 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Progress } from '@/components/ui/progress'
 import { formatCurrency, formatPercent } from '@/lib/utils'
-import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { ComposedChart, BarChart, Bar, Cell, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { AlertOctagon, Banknote, TrendingDown, PiggyBank } from 'lucide-react'
 
 type Mode = 'rolling' | 'month'
 interface AvailableMonth { value: string; label: string; salesCount: number }
+
+function VendasTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null
+  const d = payload[0]?.payload
+  if (!d) return null
+  return (
+    <div className="bg-[#0f172a] border border-border rounded-xl px-4 py-3 text-xs text-white space-y-1 shadow-xl">
+      <p className="font-bold text-sm mb-2 text-foreground-muted">{label}</p>
+      <p className="text-foreground-subtle">{d.count} veículo{d.count !== 1 ? 's' : ''} vendido{d.count !== 1 ? 's' : ''}</p>
+      <p>Receita: <span className="font-semibold text-[#00D9FF]">{formatCurrency(d.revenue)}</span></p>
+      <p>Lucro: <span className="font-semibold text-[#00E676]">{formatCurrency(d.profit)}</span></p>
+      <p>Margem média: <span className="font-semibold text-[#FFB800]">{d.avgMargin?.toFixed(1)}%</span></p>
+      <p>Dias médios em estoque: <span className="font-semibold text-white">{d.avgDays}d</span></p>
+    </div>
+  )
+}
 
 export default function RelatoriosPage() {
   const [aiGenerating, setAiGenerating] = useState(false)
@@ -197,14 +213,27 @@ export default function RelatoriosPage() {
       : 0,
   }
 
-  const salesByDay = salesEnriched.reduce((acc: Record<string, { revenue: number; profit: number }>, s) => {
-    const day = s.sale_date?.slice(5) ?? ''
-    if (!acc[day]) acc[day] = { revenue: 0, profit: 0 }
-    acc[day].revenue += s.sale_price || 0
-    acc[day].profit  += s.profit
-    return acc
-  }, {})
-  const salesChartData = Object.entries(salesByDay).map(([day, d]) => ({ day, ...d }))
+  const salesByDay = salesEnriched.reduce(
+    (acc: Record<string, { revenue: number; profit: number; count: number; marginSum: number; daysSum: number }>, s) => {
+      const day = s.sale_date?.slice(5) ?? ''
+      if (!acc[day]) acc[day] = { revenue: 0, profit: 0, count: 0, marginSum: 0, daysSum: 0 }
+      acc[day].revenue   += s.sale_price || 0
+      acc[day].profit    += s.profit
+      acc[day].count     += 1
+      acc[day].marginSum += s.profitPct
+      acc[day].daysSum   += s.days_in_stock || 0
+      return acc
+    }, {})
+  const salesChartData = Object.entries(salesByDay)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([day, d]) => ({
+      day,
+      revenue:   d.revenue,
+      profit:    d.profit,
+      count:     d.count,
+      avgMargin: d.count > 0 ? Math.round((d.marginSum / d.count) * 10) / 10 : 0,
+      avgDays:   d.count > 0 ? Math.round(d.daysSum / d.count) : 0,
+    }))
 
   // ── Estoque ──────────────────────────────────────────────────────────────────
   const available    = vehicles.filter(v => v.status === 'available')
@@ -410,19 +439,42 @@ export default function RelatoriosPage() {
             <Card>
               <CardHeader><CardTitle className="text-base">Faturamento por Dia</CardTitle></CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={240}>
-                  <BarChart data={salesChartData}>
+                <ResponsiveContainer width="100%" height={280}>
+                  <ComposedChart data={salesChartData} margin={{ top: 4, right: 40, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                     <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#8B9EB3' }} />
-                    <YAxis tick={{ fontSize: 11, fill: '#8B9EB3' }} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
-                    <Tooltip
-                      contentStyle={{ background: '#2563EB', border: 'none', borderRadius: 12, color: '#FFFFFF', fontWeight: 700 }}
-                      labelStyle={{ color: '#FFFFFF', fontWeight: 700 }}
-                      formatter={(v: any) => formatCurrency(v)}
+                    <YAxis
+                      yAxisId="left"
+                      tick={{ fontSize: 11, fill: '#8B9EB3' }}
+                      tickFormatter={v => `R$${(v as number / 1000).toFixed(0)}k`}
                     />
-                    <Bar dataKey="revenue" fill="#00D9FF" name="Receita" radius={[4,4,0,0]} />
-                    <Bar dataKey="profit"  fill="#00E676" name="Lucro"   radius={[4,4,0,0]} />
-                  </BarChart>
+                    <YAxis
+                      yAxisId="right"
+                      orientation="right"
+                      tick={{ fontSize: 11, fill: '#FFB800' }}
+                      tickFormatter={v => `${v}%`}
+                      domain={['auto', 'auto']}
+                    />
+                    <Tooltip content={<VendasTooltip />} />
+                    <Legend
+                      wrapperStyle={{ fontSize: 11, paddingTop: 8 }}
+                      formatter={v =>
+                        v === 'revenue' ? 'Receita' :
+                        v === 'profit'  ? 'Lucro'   : 'Margem Média %'}
+                    />
+                    <Bar yAxisId="left" dataKey="revenue" fill="#00D9FF" name="revenue" radius={[4,4,0,0]} />
+                    <Bar yAxisId="left" dataKey="profit"  fill="#00E676" name="profit"  radius={[4,4,0,0]} />
+                    <Line
+                      yAxisId="right"
+                      type="monotone"
+                      dataKey="avgMargin"
+                      name="avgMargin"
+                      stroke="#FFB800"
+                      strokeWidth={2}
+                      dot={{ r: 4, fill: '#FFB800', strokeWidth: 0 }}
+                      activeDot={{ r: 6 }}
+                    />
+                  </ComposedChart>
                 </ResponsiveContainer>
               </CardContent>
             </Card>
