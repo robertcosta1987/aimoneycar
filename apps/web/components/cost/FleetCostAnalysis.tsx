@@ -58,10 +58,9 @@ interface RowData {
 
 interface FleetCostAnalysisProps {
   vehicles: VehicleForCost[]
-  onEditCosts: (vehicleId: string) => void
 }
 
-export function FleetCostAnalysis({ vehicles, onEditCosts }: FleetCostAnalysisProps) {
+export function FleetCostAnalysis({ vehicles }: FleetCostAnalysisProps) {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [marginFilter, setMarginFilter] = useState<string>('all')
@@ -600,7 +599,8 @@ export function FleetCostAnalysis({ vehicles, onEditCosts }: FleetCostAnalysisPr
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => onEditCosts(v.id)}
+                              onClick={() => v.external_id && window.open(`https://www.moneycarweb.com.br/VeiculoGeral.aspx?id=${v.external_id}`, '_blank')}
+                              disabled={!v.external_id}
                               className="h-7 text-xs"
                             >
                               Editar

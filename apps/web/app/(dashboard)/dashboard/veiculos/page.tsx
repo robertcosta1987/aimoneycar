@@ -1,6 +1,6 @@
 'use client'
-import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Search, Car, LayoutGrid, List } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { Search, Car, LayoutGrid, List, ArrowUpDown } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { fetchAll } from '@/lib/supabase/fetch-all'
 import { Input } from '@/components/ui/input'
@@ -12,11 +12,16 @@ import { AgingBadge } from '@/components/aging/AgingBadge'
 import { useAgingThresholds } from '@/hooks/use-aging-thresholds'
 import { MissingCostBanner } from '@/components/cost/MissingCostBanner'
 import { CostBadge } from '@/components/cost/CostBadge'
-import { CostEditModal } from '@/components/cost/CostEditModal'
 import { VehicleCostPanelDialog } from '@/components/cost/VehicleCostPanel'
 import { buildCostSummary } from '@/utils/vehicleCost'
 import type { VehicleForCost } from '@/types/cost'
 import type { Expense } from '@/types/index'
+
+type ListSortKey = 'name' | 'plate' | 'purchase_price' | 'sale_price' | 'true_cost' | 'days_in_stock'
+
+function openEdit(externalId: string | null | undefined) {
+  if (externalId) window.open(`https://www.moneycarweb.com.br/VeiculoGeral.aspx?id=${externalId}`, '_blank')
+}
 
 export default function VeiculosPage() {
   const [vehicles, setVehicles] = useState<VehicleForCost[]>([])
@@ -24,14 +29,12 @@ export default function VeiculosPage() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('available')
   const [viewMode, setViewMode] = useState<'tiles' | 'list'>('tiles')
+  const [sortKey, setSortKey] = useState<ListSortKey>('days_in_stock')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  const [panelVehicleId, setPanelVehicleId] = useState<string | null>(null)
   const supabase = createClient()
   const { thresholds } = useAgingThresholds()
 
-  // Cost modal state
-  const [editingVehicleId, setEditingVehicleId] = useState<string | null>(null)
-  const [panelVehicleId, setPanelVehicleId] = useState<string | null>(null)
-
-  const editingVehicle = vehicles.find(v => v.id === editingVehicleId) ?? null
   const panelVehicle = vehicles.find(v => v.id === panelVehicleId) ?? null
 
   useEffect(() => {
@@ -67,12 +70,25 @@ export default function VeiculosPage() {
     load()
   }, [search, statusFilter])
 
-  const handleSaveVehicle = useCallback((updatedVehicle: VehicleForCost) => {
-    setVehicles(prev =>
-      prev.map(v => (v.id === updatedVehicle.id ? updatedVehicle : v))
-    )
-    setEditingVehicleId(null)
-  }, [])
+  const sortedVehicles = useMemo(() => {
+    return [...vehicles].sort((a, b) => {
+      const dir = sortDir === 'asc' ? 1 : -1
+      switch (sortKey) {
+        case 'name': return dir * `${a.brand} ${a.model}`.localeCompare(`${b.brand} ${b.model}`)
+        case 'plate': return dir * (a.plate || '').localeCompare(b.plate || '')
+        case 'purchase_price': return dir * (a.purchase_price - b.purchase_price)
+        case 'sale_price': return dir * ((a.sale_price ?? 0) - (b.sale_price ?? 0))
+        case 'true_cost': return dir * (buildCostSummary(a).trueCost - buildCostSummary(b).trueCost)
+        case 'days_in_stock': return dir * (a.days_in_stock - b.days_in_stock)
+        default: return 0
+      }
+    })
+  }, [vehicles, sortKey, sortDir])
+
+  function toggleSort(key: ListSortKey) {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortKey(key); setSortDir('asc') }
+  }
 
   const stats = useMemo(() => ({
     total: vehicles.length,
@@ -120,7 +136,7 @@ export default function VeiculosPage() {
             plate: v.plate,
             purchase_price: v.purchase_price,
           }))}
-          onFixVehicle={setEditingVehicleId}
+          onFixVehicle={id => openEdit(vehicles.find(v => v.id === id)?.external_id)}
         />
       )}
 
@@ -264,7 +280,8 @@ export default function VeiculosPage() {
                           variant="ghost"
                           size="sm"
                           className="h-6 text-xs px-2"
-                          onClick={() => setEditingVehicleId(v.id)}
+                          onClick={() => openEdit(v.external_id)}
+                          disabled={!v.external_id}
                         >
                           Editar
                         </Button>
@@ -280,23 +297,34 @@ export default function VeiculosPage() {
         /* List view */
         <div className="rounded-xl border border-border overflow-hidden">
           {/* Header row */}
-          <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_auto] gap-3 px-4 py-2 bg-background-elevated text-xs font-semibold text-foreground-subtle uppercase tracking-wide border-b border-border">
-            <span>Veículo</span>
-            <span>Placa / KM</span>
-            <span>Compra</span>
-            <span>Venda</span>
-            <span>Custo Real</span>
-            <span>Estoque</span>
+          <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_130px] px-4 py-2 bg-background-elevated border-b border-border">
+            {([
+              ['name',           'Veículo'    ],
+              ['plate',          'Placa / KM' ],
+              ['purchase_price', 'Compra'     ],
+              ['sale_price',     'Venda'      ],
+              ['true_cost',      'Custo Real' ],
+              ['days_in_stock',  'Estoque'    ],
+            ] as [ListSortKey, string][]).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => toggleSort(key)}
+                className="flex items-center gap-1 text-xs font-semibold text-foreground-subtle uppercase tracking-wide hover:text-foreground transition-colors text-left"
+              >
+                {label}
+                <ArrowUpDown className={cn('w-3 h-3 flex-shrink-0', sortKey === key && 'text-primary')} />
+              </button>
+            ))}
             <span />
           </div>
-          {vehicles.map((v) => {
+          {sortedVehicles.map((v) => {
             const summary = buildCostSummary(v)
             return (
               <div
                 key={v.id}
-                className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_auto] gap-3 px-4 py-3 items-center border-b border-border last:border-0 hover:bg-background-elevated transition-colors"
+                className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_130px] px-4 py-3 items-center border-b border-border last:border-0 hover:bg-background-elevated transition-colors"
               >
-                <div className="min-w-0">
+                <div className="min-w-0 pr-2">
                   <p className="font-semibold text-sm text-foreground truncate">{v.brand} {v.model}</p>
                   <p className="text-xs text-foreground-muted">{v.version ? `${v.version} · ` : ''}{v.year_model}/{v.year_fab}</p>
                 </div>
@@ -317,11 +345,11 @@ export default function VeiculosPage() {
                   vehicle={{ id: v.id, purchase_price: v.purchase_price, sale_price: v.sale_price, totalExpenses: summary.totalExpenses }}
                   thresholds={thresholds}
                 />
-                <div className="flex gap-1">
+                <div className="flex gap-1 justify-end">
                   <Button variant="ghost" size="sm" className="h-7 text-xs px-2" onClick={() => setPanelVehicleId(v.id)}>
                     Custos
                   </Button>
-                  <Button variant="ghost" size="sm" className="h-7 text-xs px-2" onClick={() => setEditingVehicleId(v.id)}>
+                  <Button variant="ghost" size="sm" className="h-7 text-xs px-2" onClick={() => openEdit(v.external_id)} disabled={!v.external_id}>
                     Editar
                   </Button>
                 </div>
@@ -331,25 +359,10 @@ export default function VeiculosPage() {
         </div>
       )}
 
-      {/* Cost Edit Modal */}
-      {editingVehicle && (
-        <CostEditModal
-          vehicle={editingVehicle}
-          open={editingVehicleId !== null}
-          onClose={() => setEditingVehicleId(null)}
-          onSave={handleSaveVehicle}
-        />
-      )}
-
-      {/* Vehicle Cost Panel Dialog */}
       <VehicleCostPanelDialog
         vehicle={panelVehicle}
         open={panelVehicleId !== null}
         onClose={() => setPanelVehicleId(null)}
-        onEditCosts={id => {
-          setPanelVehicleId(null)
-          setEditingVehicleId(id)
-        }}
       />
     </div>
   )

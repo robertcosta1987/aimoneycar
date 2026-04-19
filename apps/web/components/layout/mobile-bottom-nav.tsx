@@ -47,7 +47,7 @@ const moreGroups: NavGroup[] = [
     ],
   },
   {
-    section: 'Dados',
+    section: 'Configurações',
     items: [
       { href: '/dashboard/importar', icon: Upload,   label: 'Importar'       },
       { href: '/dashboard/config',   icon: Settings, label: 'Configurações'  },

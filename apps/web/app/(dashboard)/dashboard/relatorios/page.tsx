@@ -663,34 +663,6 @@ export default function RelatoriosPage() {
             </CardContent>
           </Card>
 
-          {available.length > 0 && (
-            <Card>
-              <CardHeader><CardTitle className="text-base">Veículos com Maior Tempo em Estoque</CardTitle></CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {available.slice(0, 8).map(v => {
-                    const pct   = Math.min(100, Math.round((v.days_in_stock / 90) * 100))
-                    const color = v.days_in_stock > 90 ? 'text-danger' : v.days_in_stock > 45 ? 'text-warning' : 'text-success'
-                    return (
-                      <div key={v.id} className="space-y-1">
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="font-medium text-foreground">{v.brand} {v.model}</span>
-                          <div className="flex items-center gap-3">
-                            <span className="text-xs text-foreground-muted">{v.plate || '—'}</span>
-                            <span className={`font-semibold ${color}`}>{v.days_in_stock}d</span>
-                          </div>
-                        </div>
-                        <Progress value={pct} className="h-1.5" />
-                        <p className="text-xs text-foreground-subtle">
-                          {v.year_model}/{v.year_fab} · {v.color || '—'} · {formatCurrency(v.sale_price || 0)}
-                        </p>
-                      </div>
-                    )
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          )}
         </TabsContent>
 
         {/* ── DESPESAS ── */}

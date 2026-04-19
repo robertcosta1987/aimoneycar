@@ -7,14 +7,13 @@
  */
 
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { DollarSign } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { fetchAll } from '@/lib/supabase/fetch-all'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { FleetCostAnalysis } from '@/components/cost/FleetCostAnalysis'
 import { MarginTrendChart } from '@/components/cost/MarginTrendChart'
-import { CostEditModal } from '@/components/cost/CostEditModal'
 import type { VehicleForCost } from '@/types/cost'
 import type { Expense } from '@/types/index'
 
@@ -22,10 +21,7 @@ export default function CustosPage() {
   const [vehicles, setVehicles] = useState<VehicleForCost[]>([])
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState('available')
-  const [editingVehicleId, setEditingVehicleId] = useState<string | null>(null)
   const supabase = createClient()
-
-  const editingVehicle = vehicles.find(v => v.id === editingVehicleId) ?? null
 
   useEffect(() => {
     const load = async () => {
@@ -50,7 +46,14 @@ export default function CustosPage() {
         .eq('dealership_id', userData?.dealership_id)
         .order('days_in_stock', { ascending: false })
 
-      if (statusFilter !== 'all') query = query.eq('status', statusFilter)
+      if (statusFilter === 'sold_30' || statusFilter === 'sold_90' || statusFilter === 'sold_12m') {
+        const days = statusFilter === 'sold_30' ? 30 : statusFilter === 'sold_90' ? 90 : 365
+        const cutoff = new Date()
+        cutoff.setDate(cutoff.getDate() - days)
+        query = query.eq('status', 'sold').gte('sale_date', cutoff.toISOString().slice(0, 10))
+      } else if (statusFilter !== 'all') {
+        query = query.eq('status', statusFilter)
+      }
 
       const data = await fetchAll(query)
 
@@ -67,11 +70,6 @@ export default function CustosPage() {
     }
     load()
   }, [statusFilter])
-
-  const handleSave = useCallback((updatedVehicle: VehicleForCost) => {
-    setVehicles(prev => prev.map(v => v.id === updatedVehicle.id ? updatedVehicle : v))
-    setEditingVehicleId(null)
-  }, [])
 
   return (
     <div className="space-y-8">
@@ -92,7 +90,9 @@ export default function CustosPage() {
           <SelectContent>
             <SelectItem value="available">Disponível</SelectItem>
             <SelectItem value="returned">Devolvido</SelectItem>
-            <SelectItem value="sold">Vendido</SelectItem>
+            <SelectItem value="sold_30">Vendido 30 dias</SelectItem>
+            <SelectItem value="sold_90">Vendido 90 dias</SelectItem>
+            <SelectItem value="sold_12m">Vendido 12 meses</SelectItem>
             <SelectItem value="all">Todos</SelectItem>
           </SelectContent>
         </Select>
@@ -106,19 +106,11 @@ export default function CustosPage() {
         </div>
       ) : (
         <>
-          <FleetCostAnalysis vehicles={vehicles} onEditCosts={setEditingVehicleId} />
+          <FleetCostAnalysis vehicles={vehicles} />
           <MarginTrendChart vehicles={vehicles} />
         </>
       )}
 
-      {editingVehicle && (
-        <CostEditModal
-          vehicle={editingVehicle}
-          open={editingVehicleId !== null}
-          onClose={() => setEditingVehicleId(null)}
-          onSave={handleSave}
-        />
-      )}
     </div>
   )
 }

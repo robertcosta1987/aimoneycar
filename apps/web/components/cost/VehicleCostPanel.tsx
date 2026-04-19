@@ -40,10 +40,14 @@ import { cn } from '@/lib/utils'
 
 interface VehicleCostPanelProps {
   vehicle: VehicleForCost
-  onEditCosts: () => void
 }
 
-export function VehicleCostPanel({ vehicle, onEditCosts }: VehicleCostPanelProps) {
+export function VehicleCostPanel({ vehicle }: VehicleCostPanelProps) {
+  const openEdit = () => {
+    if (vehicle.external_id) {
+      window.open(`https://www.moneycarweb.com.br/VeiculoGeral.aspx?id=${vehicle.external_id}`, '_blank')
+    }
+  }
   const [showExpenses, setShowExpenses] = useState(false)
   const [showQuality, setShowQuality] = useState(false)
   const [showPricing, setShowPricing] = useState(true)
@@ -99,7 +103,7 @@ export function VehicleCostPanel({ vehicle, onEditCosts }: VehicleCostPanelProps
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm font-semibold text-foreground">Resumo de Custo</CardTitle>
-            <Button variant="outline" size="sm" onClick={onEditCosts} className="h-7 text-xs gap-1">
+            <Button variant="outline" size="sm" onClick={openEdit} className="h-7 text-xs gap-1">
               <Pencil className="w-3 h-3" />
               Editar
             </Button>
@@ -311,7 +315,7 @@ export function VehicleCostPanel({ vehicle, onEditCosts }: VehicleCostPanelProps
               </>
             )}
 
-            <Button variant="outline" size="sm" onClick={onEditCosts} className="gap-1.5 text-xs w-full">
+            <Button variant="outline" size="sm" onClick={openEdit} className="gap-1.5 text-xs w-full">
               <span>+ Adicionar Despesa</span>
             </Button>
           </CardContent>
@@ -396,7 +400,7 @@ export function VehicleCostPanel({ vehicle, onEditCosts }: VehicleCostPanelProps
             )}
 
             {summary.dataQuality.issues.length > 0 && (
-              <Button variant="outline" size="sm" onClick={onEditCosts} className="gap-1.5 text-xs">
+              <Button variant="outline" size="sm" onClick={openEdit} className="gap-1.5 text-xs">
                 Corrigir Problemas
               </Button>
             )}
@@ -455,11 +459,10 @@ interface VehicleCostPanelDialogProps {
   vehicle: VehicleForCost | null
   open: boolean
   onClose: () => void
-  onEditCosts: (vehicleId: string) => void
 }
 
 export function VehicleCostPanelDialog({
-  vehicle, open, onClose, onEditCosts,
+  vehicle, open, onClose,
 }: VehicleCostPanelDialogProps) {
   if (!vehicle) return null
 
@@ -474,10 +477,7 @@ export function VehicleCostPanelDialog({
             )}
           </DialogTitle>
         </DialogHeader>
-        <VehicleCostPanel
-          vehicle={vehicle}
-          onEditCosts={() => onEditCosts(vehicle.id)}
-        />
+        <VehicleCostPanel vehicle={vehicle} />
       </DialogContent>
     </Dialog>
   )
