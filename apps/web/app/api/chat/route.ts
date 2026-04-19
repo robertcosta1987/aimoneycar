@@ -221,10 +221,10 @@ export async function POST(req: NextRequest) {
       if (err.status === 401) return NextResponse.json({ error: `Anthropic: chave de API inválida (401)` }, { status: 502 })
       if (err.status === 403) {
         const isBilling = msg.toLowerCase().includes('credit') || msg.toLowerCase().includes('billing') || type === 'billing_error'
-        if (isBilling) return NextResponse.json({ error: `Anthropic: créditos insuficientes — adicione créditos em console.anthropic.com` }, { status: 502 })
+        if (isBilling) return NextResponse.json({ error: `Anthropic: créditos insuficientes — ${type}: "${msg}"` }, { status: 502 })
         return NextResponse.json({ error: `Anthropic: acesso negado (403) — ${type}: ${msg}` }, { status: 502 })
       }
-      if (msg.includes('credit balance')) return NextResponse.json({ error: `Anthropic: créditos insuficientes — adicione créditos em console.anthropic.com` }, { status: 502 })
+      if (msg.includes('credit balance')) return NextResponse.json({ error: `Anthropic: créditos insuficientes — ${type}: "${msg}"` }, { status: 502 })
       if (err.status === 429) {
         const waitSec = retryAfter ? parseInt(retryAfter, 10) : null
         const waitMsg = waitSec ? ` Tente novamente em ${waitSec}s.` : ''
