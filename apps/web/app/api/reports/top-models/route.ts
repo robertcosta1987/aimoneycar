@@ -12,7 +12,7 @@ import { getCache, setCache } from '@/lib/ai/cache'
 
 export const dynamic = 'force-dynamic'
 
-const CACHE_KEY = 'top-models-v5'
+const CACHE_KEY = 'top-models-v6'
 const CACHE_TTL_HOURS = 36
 
 export async function GET() {
@@ -30,7 +30,7 @@ export async function GET() {
     const cached = await getCache<{ models: { model: string; count: number }[] }>(
       svc, profile.dealership_id, CACHE_KEY,
     )
-    if (cached) return NextResponse.json(cached)
+    if (cached?.models?.length) return NextResponse.json(cached)
 
     const sixMonthsAgo = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
@@ -55,6 +55,7 @@ export async function GET() {
       sold = fallback.data
     }
 
+    console.log('[top-models] sold vehicles found:', sold?.length ?? 0)
     if (!sold || sold.length === 0) return NextResponse.json({ models: [] })
 
     // Build flat list of model names — one per sale, raw as-is from DB
@@ -87,15 +88,20 @@ ${modelList}`,
     })
 
     const text = (message.content[0] as { type: string; text: string }).text ?? ''
-    const match = text.match(/\[[\s\S]*?\]/)
+    console.log('[top-models] AI response:', text.slice(0, 300))
+
+    const match = text.match(/\[[\s\S]*\]/)
     if (!match) {
-      console.error('[top-models] AI returned no valid JSON:', text)
+      console.error('[top-models] no JSON array in AI response')
       return NextResponse.json({ models: [] })
     }
 
     const models = (JSON.parse(match[0]) as { model: string; count: number }[]).slice(0, 10)
-    const payload = { models }
+    console.log('[top-models] parsed models:', models.length)
 
+    if (!models.length) return NextResponse.json({ models: [] })
+
+    const payload = { models }
     await setCache(svc, profile.dealership_id, CACHE_KEY, payload, CACHE_TTL_HOURS)
     return NextResponse.json(payload)
   } catch (err: any) {
