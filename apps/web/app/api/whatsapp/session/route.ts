@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
       telefone:                   status.phone ?? null,
       nome:                       status.name  ?? null,
       ai_ativo:                   aiEnabled ?? true,
-      modelo_padrao:              modelo ?? 'claude-3-5-haiku-20241022',
+      modelo_padrao:              modelo ?? 'claude-haiku-4-5-20251001',
       prompt_sistema:             systemPrompt ?? null,
       horario_atendimento_inicio: businessHoursStart ?? '08:00',
       horario_atendimento_fim:    businessHoursEnd   ?? '18:00',
