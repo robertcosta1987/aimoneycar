@@ -2,10 +2,11 @@
  * GET /api/reports/top-models
  *
  * Returns top 10 models by sales volume over the past 12 months.
- * Counting is by model name only (all versions combined) so numbers are accurate.
- * AI produces a clean display label (e.g. "Gol 1.0 MT") using the most-sold version.
- * Strips "//" artifacts and excludes "Repasse" entries.
+ * Pre-aggregates by raw model string, then sends all (model → count) pairs to
+ * Claude so it can merge variations ("GOL", "GOL 1.0", "VOLKSWAGEN GOL" → "Gol")
+ * and sum their counts accurately.
  * Cached 36 h. Empty results are never cached.
+ * Pass ?refresh=true to bypass cache.
  */
 import { NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
@@ -14,15 +15,15 @@ import { getCache, setCache } from '@/lib/ai/cache'
 
 export const dynamic = 'force-dynamic'
 
-const CACHE_KEY = 'top-models-v9'
+const CACHE_KEY = 'top-models-v10'
 const CACHE_TTL_HOURS = 36
 
-function cleanName(raw: string): string {
-  return raw.replace(/^\/+|\/+$/g, '').trim()
+function clean(raw: string): string {
+  return raw.replace(/\/\//g, '').replace(/\s+/g, ' ').trim()
 }
 
-function isRepasse(raw: string): boolean {
-  return /repasse/i.test(raw)
+function isRepasse(s: string): boolean {
+  return /repasse/i.test(s)
 }
 
 export async function GET(req: Request) {
@@ -74,54 +75,52 @@ export async function GET(req: Request) {
       raw = fallback.data
     }
 
-    // Clean and filter
+    // Clean names and filter repasse
     const sold = (raw ?? [])
-      .map(v => ({ ...v, model: cleanName(v.model ?? '') }))
-      .filter(v => v.model && !isRepasse(v.model) && !isRepasse(v.version ?? ''))
+      .map(v => ({
+        model: clean(v.model ?? ''),
+        version: clean(v.version ?? ''),
+        transmission: (v.transmission ?? '').trim(),
+      }))
+      .filter(v => v.model && !isRepasse(v.model) && !isRepasse(v.version))
 
     console.log('[top-models] sold vehicles after filter:', sold.length)
     if (!sold.length) return NextResponse.json({ models: [] })
 
-    // ── Count by model name only (all versions combined) ────────────────────
-    // Also track the most common version+transmission per model for display
-    const modelCounts: Record<string, number> = {}
-    const versionCounts: Record<string, Record<string, number>> = {}
-
+    // Pre-aggregate by exact raw model string — AI will merge variations
+    const rawCounts: Record<string, number> = {}
     for (const v of sold) {
-      const model = v.model.toUpperCase()
-      modelCounts[model] = (modelCounts[model] ?? 0) + 1
-
-      const versionKey = `${v.version ?? ''}|||${v.transmission ?? ''}`
-      if (!versionCounts[model]) versionCounts[model] = {}
-      versionCounts[model][versionKey] = (versionCounts[model][versionKey] ?? 0) + 1
+      rawCounts[v.model] = (rawCounts[v.model] ?? 0) + 1
     }
 
-    // Top 20 models by total sales count
-    const top20 = Object.entries(modelCounts)
+    // Also build version info per raw model (for AI context)
+    const modelVersions: Record<string, string> = {}
+    for (const v of sold) {
+      if (!modelVersions[v.model] && (v.version || v.transmission)) {
+        modelVersions[v.model] = [v.version, v.transmission].filter(Boolean).join(' | ')
+      }
+    }
+
+    const lines = Object.entries(rawCounts)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 20)
       .map(([model, count]) => {
-        // Pick the most-sold version for this model
-        const bestVersionKey = Object.entries(versionCounts[model] ?? {})
-          .sort((a, b) => b[1] - a[1])[0]?.[0] ?? '|||'
-        const [version, transmission] = bestVersionKey.split('|||')
-        return { model, version: version || null, transmission: transmission || null, count }
+        const extra = modelVersions[model] ? ` (${modelVersions[model]})` : ''
+        return `"${model}"${extra}: ${count}`
       })
+      .join('\n')
 
-    // Fallback display name (raw, no AI)
-    const fallbackModels = top20.slice(0, 10).map(v => ({
-      model: [v.model, v.version].filter(Boolean).join(' ').trim(),
-      count: v.count,
-    }))
+    console.log('[top-models] unique raw models:', Object.keys(rawCounts).length)
 
-    // ── Try AI for clean display labels ─────────────────────────────────────
+    // Fallback: top 10 by raw name, cleaned
+    const fallbackModels = Object.entries(rawCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([model, count]) => ({ model, count }))
+
+    // ── AI: merge variations, sum counts, return top 10 with clean names ─────
     try {
       const apiKey = process.env.ANTHROPIC_API_KEY
       if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set')
-
-      const lines = top20
-        .map((v, i) => `${i + 1}. modelo="${v.model}" versão="${v.version ?? ''}" câmbio="${v.transmission ?? ''}" vendas=${v.count}`)
-        .join('\n')
 
       const ai = new Anthropic({ apiKey })
       const message = await ai.messages.create({
@@ -130,42 +129,44 @@ export async function GET(req: Request) {
         messages: [{
           role: 'user',
           content: `Você é especialista em veículos brasileiros.
-Para cada item, crie um nome de exibição curto no formato: "Modelo Motor Câmbio"
-Regras:
-- Modelo: nome comercial curto (ex: Gol, Civic, HB20, City, Onix)
-- Motor: apenas a cilindrada extraída da versão (ex: 1.0, 1.8, 2.0). Se não houver, omita.
-- Câmbio: AT (automático/CVT/auto), MT (manual). Se desconhecido, omita.
-Exemplos: "GOL | 1.0 MPI FLEX | manual" → "Gol 1.0 MT"
-         "COROLLA | XEI 2.0 FLEX | automático" → "Corolla 2.0 AT"
-         "HB20 | SENSE 1.0 | " → "HB20 1.0"
 
-Retorne SOMENTE um JSON array com os nomes na mesma ordem da lista de entrada:
-["Gol 1.0 MT","Corolla 2.0 AT","HB20 1.0"]
+Abaixo está uma lista de nomes de modelos de veículos do banco de dados com a quantidade de vendas de cada um.
+Muitos são variações do mesmo modelo com nomes inconsistentes (ex: "GOL", "GOL 1.0 MPI", "VOLKSWAGEN GOL" são todos o mesmo carro).
 
-Lista:
+Sua tarefa:
+1. Agrupe todas as variações do mesmo modelo e SOME as quantidades
+2. Para cada grupo, crie um nome de exibição curto: "Modelo Motor Câmbio" (ex: "Gol 1.0 MT", "Civic 1.8 AT", "HB20 1.0")
+   - Motor: apenas cilindrada (1.0, 1.8, 2.0) se disponível na versão
+   - Câmbio: AT (automático/CVT), MT (manual) — omita se desconhecido
+3. Retorne os 10 grupos com MAIOR total de vendas, em ordem decrescente
+
+Responda SOMENTE com JSON array. Formato:
+[{"model":"Gol 1.0 MT","count":23},{"model":"Civic 1.8 AT","count":17}]
+
+Dados:
 ${lines}`,
         }],
       })
 
       const text = (message.content[0] as { type: string; text: string }).text ?? ''
-      console.log('[top-models] AI response:', text.slice(0, 400))
+      console.log('[top-models] AI raw response:', text.slice(0, 500))
 
       const match = text.match(/\[[\s\S]*\]/)
       if (match) {
-        const names: string[] = JSON.parse(match[0])
-        if (names.length) {
-          const aiModels = top20.slice(0, 10).map((v, i) => ({
-            model: (names[i] ?? fallbackModels[i]?.model ?? v.model).trim(),
-            count: v.count,
-          }))
-          console.log('[top-models] using AI result:', aiModels.length, 'models')
-          const payload = { models: aiModels }
+        const models = (JSON.parse(match[0]) as { model: string; count: number }[])
+          .filter(m => m.model && m.count > 0)
+          .slice(0, 10)
+
+        if (models.length) {
+          console.log('[top-models] AI result:', models)
+          const payload = { models }
           await setCache(svc, profile.dealership_id, CACHE_KEY, payload, CACHE_TTL_HOURS)
           return NextResponse.json(payload)
         }
       }
+      console.error('[top-models] AI returned no usable data, text was:', text)
     } catch (aiErr: any) {
-      console.error('[top-models] AI failed, using fallback:', aiErr?.message)
+      console.error('[top-models] AI failed:', aiErr?.message)
     }
 
     // ── Fallback ─────────────────────────────────────────────────────────────
