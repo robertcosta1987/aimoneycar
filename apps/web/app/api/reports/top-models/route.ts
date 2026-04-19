@@ -1,10 +1,10 @@
 /**
  * GET /api/reports/top-models
  *
- * Returns top 10 sold models from the past 6 months.
- * AI normalizes model names when available; falls back to direct aggregation
- * so the tile always shows data when sold vehicles exist.
- * Cached for 36 hours. Empty results are never cached.
+ * Returns top 10 sold configurations (Model Engine Transmission, e.g. "Gol 1.0 AT")
+ * from the past 12 months, ranked by sales volume.
+ * AI normalizes the display name; falls back to raw aggregation if AI fails.
+ * Cached 36 h. Empty results are never cached.
  */
 import { NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
@@ -13,7 +13,7 @@ import { getCache, setCache } from '@/lib/ai/cache'
 
 export const dynamic = 'force-dynamic'
 
-const CACHE_KEY = 'top-models-v7'
+const CACHE_KEY = 'top-models-v8'
 const CACHE_TTL_HOURS = 36
 
 export async function GET() {
@@ -39,22 +39,22 @@ export async function GET() {
     )
     if (cached?.models?.length) return NextResponse.json(cached)
 
-    const sixMonthsAgo = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    const twelveMonthsAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
     // Try with sale_date filter; fall back to all sold vehicles if empty
     let { data: sold } = await svc
       .from('vehicles')
-      .select('model')
+      .select('model, version, transmission')
       .eq('dealership_id', profile.dealership_id)
       .eq('status', 'sold')
       .not('model', 'is', null)
-      .gte('sale_date', sixMonthsAgo)
+      .gte('sale_date', twelveMonthsAgo)
       .limit(2000)
 
     if (!sold || sold.length === 0) {
       const fallback = await svc
         .from('vehicles')
-        .select('model')
+        .select('model, version, transmission')
         .eq('dealership_id', profile.dealership_id)
         .eq('status', 'sold')
         .not('model', 'is', null)
@@ -65,56 +65,74 @@ export async function GET() {
     console.log('[top-models] sold vehicles found:', sold?.length ?? 0)
     if (!sold || sold.length === 0) return NextResponse.json({ models: [] })
 
-    // Pre-aggregate by raw model — this is the guaranteed fallback result
-    const rawCounts: Record<string, number> = {}
+    // Pre-aggregate by raw key: "model|version|transmission"
+    const rawCounts: Record<string, { model: string; version: string | null; transmission: string | null; count: number }> = {}
     for (const v of sold) {
-      const key = (v.model ?? '').trim()
-      if (key) rawCounts[key] = (rawCounts[key] ?? 0) + 1
+      const key = `${v.model ?? ''}|${v.version ?? ''}|${v.transmission ?? ''}`
+      if (!rawCounts[key]) rawCounts[key] = { model: v.model, version: v.version, transmission: v.transmission, count: 0 }
+      rawCounts[key].count++
     }
 
-    const fallbackModels = Object.entries(rawCounts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10)
-      .map(([model, count]) => ({ model, count }))
+    const top30 = Object.values(rawCounts)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 30)
+
+    // Fallback display name: "Model Version" (raw)
+    const fallbackModels = top30.slice(0, 10).map(v => ({
+      model: [v.model, v.version].filter(Boolean).join(' ').trim(),
+      count: v.count,
+    }))
 
     // ── Try AI normalization ─────────────────────────────────────────────────
     try {
       const apiKey = process.env.ANTHROPIC_API_KEY
       if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set')
 
-      const modelList = sold
-        .map(v => (v.model ?? '').trim())
-        .filter(Boolean)
+      // Build numbered list: "1. GOL | 1.0 MPI FLEX | manual"
+      const lines = top30
+        .map((v, i) => `${i + 1}. modelo="${v.model ?? ''}" versão="${v.version ?? ''}" câmbio="${v.transmission ?? ''}"`)
         .join('\n')
 
       const ai = new Anthropic({ apiKey })
       const message = await ai.messages.create({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 512,
+        max_tokens: 1024,
         messages: [{
           role: 'user',
-          content: `Abaixo está uma lista de modelos de veículos vendidos (um por linha, nome bruto do banco de dados).
+          content: `Você é especialista em veículos brasileiros.
+Para cada item abaixo, crie um nome de exibição no formato: "Modelo Motor Câmbio"
+Regras:
+- Modelo: nome comercial curto (ex: Gol, Civic, HB20, City)
+- Motor: apenas a cilindrada (ex: 1.0, 1.8, 2.0)
+- Câmbio: AT (automático/CVT), MT (manual). Se desconhecido, omita.
+Exemplos: "GOL 1.0 MPI FLEX | manual" → "Gol 1.0 MT", "COROLLA XEI 2.0 FLEX | automático" → "Corolla 2.0 AT"
 
-Sua tarefa:
-1. Agrupe variações do mesmo modelo (ex: "GOL 1.0", "GOL G6", "Gol Trend" → "Gol")
-2. Conte quantas vezes cada modelo aparece na lista
-3. Retorne os 10 modelos com mais vendas, ordenados do maior para o menor
+Retorne SOMENTE um JSON array com os nomes na mesma ordem da lista. Exemplo:
+["Gol 1.0 MT","Corolla 2.0 AT","HB20 1.0 AT"]
 
-Responda SOMENTE com um JSON array. Formato exato:
-[{"model":"Gol","count":18},{"model":"Civic","count":12}]
-
-Lista de modelos:
-${modelList}`,
+Lista:
+${lines}`,
         }],
       })
 
       const text = (message.content[0] as { type: string; text: string }).text ?? ''
-      console.log('[top-models] AI response:', text.slice(0, 300))
+      console.log('[top-models] AI response:', text.slice(0, 400))
 
       const match = text.match(/\[[\s\S]*\]/)
       if (match) {
-        const aiModels = (JSON.parse(match[0]) as { model: string; count: number }[]).slice(0, 10)
-        if (aiModels.length) {
+        const names: string[] = JSON.parse(match[0])
+        if (names.length) {
+          // Re-aggregate by AI-normalized name (merges e.g. same model different raw spelling)
+          const merged: Record<string, number> = {}
+          for (let i = 0; i < top30.length; i++) {
+            const name = (names[i] ?? fallbackModels[i]?.model ?? top30[i].model).trim()
+            merged[name] = (merged[name] ?? 0) + top30[i].count
+          }
+          const aiModels = Object.entries(merged)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 10)
+            .map(([model, count]) => ({ model, count }))
+
           console.log('[top-models] using AI result:', aiModels.length, 'models')
           const payload = { models: aiModels }
           await setCache(svc, profile.dealership_id, CACHE_KEY, payload, CACHE_TTL_HOURS)

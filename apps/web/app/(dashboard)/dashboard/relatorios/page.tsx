@@ -618,42 +618,31 @@ export default function RelatoriosPage() {
                 <TrendingUp className="w-4 h-4 text-success flex-shrink-0" />
                 <p className="text-sm font-semibold text-foreground">Modelos com Maior Giro</p>
               </div>
-              <p className="text-xs text-foreground-muted mb-4">Top 10 mais vendidos nos últimos 6 meses</p>
+              <p className="text-xs text-foreground-muted mb-4">Top 10 mais vendidos nos últimos 12 meses</p>
               {topModelsLoading ? (
-                <div className="space-y-3 py-1">
+                <div className="space-y-2.5 py-1">
                   {Array.from({ length: 5 }).map((_, i) => (
-                    <div key={i} className="flex items-center gap-3">
-                      <div className="w-4 h-3 rounded bg-border animate-pulse" />
-                      <div className="flex-1 h-3 rounded bg-border animate-pulse" />
-                      <div className="w-8 h-3 rounded bg-border animate-pulse" />
+                    <div key={i} className="flex items-center justify-between gap-3">
+                      <div className="w-32 h-3 rounded bg-border animate-pulse" />
+                      <div className="w-20 h-3 rounded bg-border animate-pulse" />
                     </div>
                   ))}
                 </div>
               ) : topModelsAI.length === 0 ? (
-                <p className="text-xs text-foreground-muted py-6 text-center">Nenhuma venda registrada nos últimos 6 meses.</p>
+                <p className="text-xs text-foreground-muted py-6 text-center">Nenhuma venda registrada no período.</p>
               ) : (
-                <div className="space-y-2.5">
-                  {topModelsAI.map((m, i) => {
-                    const max = topModelsAI[0].count
-                    const pct = Math.round((m.count / max) * 100)
-                    return (
-                      <div key={m.model} className="flex items-center gap-3">
-                        <span className="text-[10px] font-semibold text-foreground-muted w-4 text-right flex-shrink-0">{i + 1}</span>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs font-medium text-foreground truncate">{m.model}</span>
-                            <span className="text-xs text-foreground-muted ml-2 flex-shrink-0">{m.count}x</span>
-                          </div>
-                          <div className="h-1 rounded-full bg-border overflow-hidden">
-                            <div
-                              className="h-full rounded-full bg-success/60"
-                              style={{ width: `${pct}%` }}
-                            />
-                          </div>
-                        </div>
+                <div className="divide-y divide-border">
+                  {topModelsAI.map((m, i) => (
+                    <div key={m.model} className="flex items-center justify-between py-2.5 gap-3">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className="text-[10px] font-bold text-foreground-muted w-4 text-right flex-shrink-0">{i + 1}</span>
+                        <span className="text-sm font-medium text-foreground truncate">{m.model}</span>
                       </div>
-                    )
-                  })}
+                      <span className="text-xs text-foreground-muted flex-shrink-0 whitespace-nowrap">
+                        Vendido <span className="font-semibold text-foreground">{m.count}</span> {m.count === 1 ? 'vez' : 'vezes'}
+                      </span>
+                    </div>
+                  ))}
                 </div>
               )}
             </CardContent>
