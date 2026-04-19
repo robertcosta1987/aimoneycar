@@ -159,7 +159,10 @@ function mapVehicleRow(row: Record<string, any>, dealershipId: string): Record<s
   const yearModel = parseYear(row.carAnoModelo ?? null, yearFab)
   const purchaseDate = parseDate(purchase?.date) ?? `${yearFab}-01-01`
   const saleDate = parseDate(sale?.date)
-  const status: 'available' | 'reserved' | 'sold' = saleDate ? 'sold' : 'available'
+  // carStatus=192 in tbEnumGeral = "Devolvido" (returned vehicle)
+  const isDevolvido = row.carStatus !== undefined && String(row.carStatus) === '192'
+  const status: 'available' | 'reserved' | 'sold' | 'returned' =
+    isDevolvido ? 'returned' : saleDate ? 'sold' : 'available'
   const mileage = parseNum(purchase?.km ?? 0)
   const purchasePrice = parseNum(row.carValorCompra)
   const actualSalePrice = saleDate ? parseNum(sale?.valor) : 0
