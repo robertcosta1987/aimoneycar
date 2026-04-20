@@ -47,7 +47,14 @@ export default function VeiculosPage() {
         .select('*, expenses:expenses(id, dealership_id, vehicle_id, category, description, amount, date, vendor_name, payment_method, receipt_url, created_by, external_id, created_at, updated_at)')
         .eq('dealership_id', userData?.dealership_id)
 
-      if (statusFilter !== 'all') query = query.eq('status', statusFilter)
+      if (statusFilter === 'sold_30' || statusFilter === 'sold_90' || statusFilter === 'sold_12m') {
+        const days = statusFilter === 'sold_30' ? 30 : statusFilter === 'sold_90' ? 90 : 365
+        const cutoff = new Date()
+        cutoff.setDate(cutoff.getDate() - days)
+        query = query.eq('status', 'sold').gte('sale_date', cutoff.toISOString().slice(0, 10))
+      } else if (statusFilter !== 'all') {
+        query = query.eq('status', statusFilter)
+      }
       if (search) {
         query = query.or(`brand.ilike.%${search}%,model.ilike.%${search}%,plate.ilike.%${search}%`)
       }
@@ -184,7 +191,9 @@ export default function VeiculosPage() {
             <SelectItem value="all">Todos</SelectItem>
             <SelectItem value="available">Disponível</SelectItem>
             <SelectItem value="returned">Devolvido</SelectItem>
-            <SelectItem value="sold">Vendido</SelectItem>
+            <SelectItem value="sold_30">Vendidos 30 dias</SelectItem>
+            <SelectItem value="sold_90">Vendidos 90 dias</SelectItem>
+            <SelectItem value="sold_12m">Vendidos 12 meses</SelectItem>
           </SelectContent>
         </Select>
       </div>
